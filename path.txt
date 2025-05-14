@@ -1,0 +1,6 @@
+npm install prisma --save-dev
+npm install @prisma/client
+npx prisma init
+npx prisma migrate dev --name init  //will create the db tables and generate the prisma client
+// npx prisma migrate dev // this applies the latest migration to others local db
+npx prisma studio   //to view the tables

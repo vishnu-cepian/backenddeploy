@@ -1,0 +1,333 @@
+import { logger } from "../utils/logger-utils.mjs";
+import { hashPassword, comparePassword } from "../utils/auth-utils.mjs";
+import { prisma } from "../utils/prisma-utils.mjs";
+import { sendError } from "../utils/core-utils.mjs";
+import { Resend } from "resend";
+import jwt from 'jsonwebtoken';
+import { AcCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET } from '../config/auth-config.mjs';
+
+//===================JWT UTILS====================
+
+export const generateAccessToken = (payload) => {
+  return jwt.sign(payload, AcCESS_TOKEN_SECRET, { expiresIn: '1h' });
+};
+
+export const generateRefreshToken = (payload) => {
+  return jwt.sign(payload, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+};
+
+export const verifyAccessToken = (token) => {
+  try {
+    return jwt.verify(token, AcCESS_TOKEN_SECRET);
+  } catch (err) {
+    return null;
+  }
+}
+
+export const verifyRefreshToken = (token) => {
+  try {
+    return jwt.verify(token, REFRESH_TOKEN_SECRET);
+  } catch (err) {
+    return null;
+  }
+};
+
+export const refreshAccessToken = async (refreshToken) => {  //if token is expired, ie., 401, then refresh token will be used to get new access token
+  try {
+    const decoded = verifyRefreshToken(refreshToken);
+    if (!decoded) {
+        throw sendError('Invalid refresh token');
+    }
+    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+    if (!user) {
+        throw sendError('User not found');
+    }
+    if (user.refreshToken !== refreshToken) {
+        throw sendError('Invalid refresh token');
+    }
+    const newAccessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
+    const newRefreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
+    await prisma.user.update({
+        where: { id: user.id },
+        data: { refreshToken: newRefreshToken },
+    });
+    return {
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        message: "Token refreshed successfully",
+    };
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+};
+
+
+//===================AUTH UTILS====================
+
+
+export const signupWithEmail = async (data) => { 
+    try {
+        const { email, password, role } = data;
+        
+        if (!email || !password || !role) {
+            throw sendError('Email, password, and role are required');
+        }
+
+        // // Check if user already exists
+        const existingUser = await prisma.user.findUnique({ where: { email } });
+        if (existingUser) {
+            throw sendError('User already exists with this email');
+        }
+        const refreshToken = generateRefreshToken({ email, role });
+        const hashedPassword = await hashPassword(password);
+        // Save user to database 
+        const newUser = await prisma.user.create({
+            data: {
+                email,
+                password: hashedPassword,
+                   // provider: Default-> Credentials      
+                role,
+                refreshToken, // add refreshToken field to User model
+            },
+        });
+        // const neUser = await prisma.user.update({
+        //     where: { id: newUser.id },
+        //     data: { refreshToken }, // add refreshToken field to User model
+        // });
+        return newUser;
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+};
+
+
+export const loginWithEmail = async (data) => {
+    try {
+        const {email, password} = data;
+    
+        if (!email || !password) {
+            throw sendError('Email and password are required');
+        }
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            throw sendError('User not found');
+        }
+        // Check if password is correct
+        const isPasswordValid = await comparePassword(password, user.password);
+        if (!isPasswordValid) {
+            //throw sendError('Invalid password', 401, { email });  can use data to send error
+            throw sendError('Invalid password');
+        }
+
+        // Generate JWT token
+        const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
+        const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { refreshToken }, // add refreshToken field to User model
+        });
+
+        return {
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+            },
+            accessToken,
+            refreshToken,
+            message: "Login successful",
+        };
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+};
+
+export const checkEmail = async (data) => {
+    try {
+        const { email } = data;
+    
+        if (!email) {
+            throw sendError('Email is required');
+        }
+
+        // Check if user already exists
+        const existingUser = await prisma.user.findUnique({ where: { email } });
+        if (existingUser) {
+            return { status: 200 }; // User exists
+        } else {
+            return { status: 404 }; // User does not exist
+        }
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const loginWithGoogle = async (data) => { };
+
+export const sendOtp = async (data) => {
+    try {
+        const { email } = data;
+    
+        if (!email) {
+            throw sendError('Email is required');
+        }
+        
+        const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
+
+        await prisma.otp.upsert({
+            where: { email },
+            update: {otp: otp.toString(), expiresAt},
+            create: { email, otp: otp.toString(), expiresAt },
+        });
+        
+        const resend = new Resend(process.env.RESEND_API_KEY);  //for testing purpose
+
+        await resend.emails.send({
+            from: 'onboarding@resend.dev',
+            to: email,                      // will only be able to send OTP to www.vishnurpillai@gmail.com
+            subject: 'Your OTP Code',
+            html: `<p>Your OTP code is <strong>${otp}</strong>. It will expire in 10 minutes.</p>`,
+        });
+
+        return ({
+            message: "OTP sent successfully",
+            status: true,
+            statusCode: 200
+        });
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const verifyOtp = async (data) => {
+    try {
+        const { email, otp } = data;
+    
+        if (!email || !otp) {
+            throw sendError('Email and OTP are required');
+        }
+
+        const otpRecord = await prisma.otp.findUnique({ where: { email } });
+        if (!otpRecord) {
+            throw sendError('OTP not found');
+        }
+
+        if (otpRecord.otp !== otp) {
+            throw sendError('Invalid OTP');
+        }
+
+        if (new Date() > otpRecord.expiresAt) {
+            throw sendError('OTP expired');
+        }
+
+        // OTP is valid
+        return ({
+            message: "OTP verified successfully",
+            status: true,
+            statusCode: 200
+        });
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const forgotPassword = async (data) => {
+    try {
+        const { email } = data;
+    
+        if (!email) {
+            throw sendError('Email is required');
+        }
+
+        // Check if user exists
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            throw sendError('User not found');
+        }
+
+        // Generate OTP and send email
+        const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
+
+        await prisma.otp.upsert({
+            where: { email },
+            update: { otp: otp.toString(), expiresAt },
+            create: { email, otp: otp.toString(), expiresAt },
+        });
+
+        const resend = new Resend(process.env.RESEND_API_KEY);
+
+        await resend.emails.send({
+            from: 'onboarding@resend.dev',
+            to: email,
+            subject: 'Your OTP Code for Password Reset',
+            html: `<p>Your OTP code for password reset is <strong>${otp}</strong>. It will expire in 10 minutes.</p>`,
+        });
+        return ({
+            message: "OTP sent successfully",
+            status: true,
+            statusCode: 200
+        });
+    }
+    catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const resetPassword = async (data) => {
+    try {
+        const { email, otp, newPassword } = data;
+    
+        if (!email || !otp || !newPassword) {
+            throw sendError('Email, OTP, and new password are required');
+        }
+
+        // Check if user exists
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+            throw sendError('User not found');
+        }
+
+        // Verify OTP
+        const otpRecord = await prisma.otp.findUnique({ where: { email } });
+        if (!otpRecord) {
+            throw sendError('OTP not found');
+        }
+
+        if (otpRecord.otp !== otp) {
+            throw sendError('Invalid OTP');
+        }
+
+        if (new Date() > otpRecord.expiresAt) {
+            throw sendError('OTP expired');
+        }
+
+        // Hash the new password
+        const hashedPassword = await hashPassword(newPassword);
+
+        // Update user's password
+        await prisma.user.update({
+            where: { email },
+            data: { password: hashedPassword },
+        });
+
+        return ({
+            message: "Password reset successfully",
+            status: true,
+            statusCode: 200
+        });
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
