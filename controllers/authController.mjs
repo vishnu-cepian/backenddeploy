@@ -5,26 +5,11 @@ import { logger } from "../utils/logger-utils.mjs";
 import { controllerWrapper } from "../controllers/index.mjs";
 // import { authenticateAccessToken } from "../services/authService.mjs";
 
-export const signupCustomer = controllerWrapper(async (req, res, next) => {
+export const signup = controllerWrapper(async (req, res, next) => {
   try {
     const data = { ...req.body, authorization: req.headers['authorization']?.split(' ')[1] };  //get custom token from client 
 
-    const response = await authService.signupCustomer(data);
-    if (!response) {
-      throw new Error(formatError("Authentication Failed!", response));
-    }
-    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
-  } catch (err) {
-    logger.error(err);
-    next(err);
-  }
-});
-
-export const signupVendor = controllerWrapper(async (req, res, next) => {
-  try {
-    const data = { ...req.body, authorization: req.headers['authorization']?.split(' ')[1] };  //get custom token from client
-
-    const response = await authService.signupVendor(data);
+    const response = await authService.signup(data);
     if (!response) {
       throw new Error(formatError("Authentication Failed!", response));
     }
@@ -79,10 +64,10 @@ export const checkEmail = controllerWrapper(async (req, res, next) => {
   }
 });
 
-export const sendOtp = controllerWrapper(async (req, res, next) => {
+export const sendEmailOtp = controllerWrapper(async (req, res, next) => {
   try {
     const data = req.body;
-    const response = await authService.sendOtp(data);
+    const response = await authService.sendEmailOtp(data);
     if (!response) {
       throw new Error(formatError("Authentication Failed!", response));
     }
@@ -93,10 +78,38 @@ export const sendOtp = controllerWrapper(async (req, res, next) => {
   }
 });
 
-export const verifyOtp = controllerWrapper(async (req, res, next) => {
+export const verifyEmailOtp = controllerWrapper(async (req, res, next) => {
   try {
     const data = req.body;
-    const response = await authService.verifyOtp(data);
+    const response = await authService.verifyEmailOtp(data);
+    if (!response) {
+      throw new Error(formatError("Authentication Failed!", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+});
+
+export const sendPhoneOtp = controllerWrapper(async (req, res, next) => {
+  try {
+    const data = req.body;
+    const response = await authService.sendPhoneOtp(data);
+    if (!response) {
+      throw new Error(formatError("Authentication Failed!", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+});
+
+export const verifyPhoneOtp = controllerWrapper(async (req, res, next) => {
+  try {
+    const data = req.body;
+    const response = await authService.verifyPhoneOtp(data);
     if (!response) {
       throw new Error(formatError("Authentication Failed!", response));
     }

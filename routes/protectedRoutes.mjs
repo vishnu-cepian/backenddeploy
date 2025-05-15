@@ -1,6 +1,6 @@
 // server/routes/protectedRoute.mjs
 import { Router } from 'express';
-import { verifyJwtToken } from '../middlewares/auth.mjs';
+import { verifyAccessToken } from '../middlewares/auth.mjs';
 import { getProtectedData } from '../controllers/protectedController.mjs'; 
 
 // export const protectedRoute = (app) => {
@@ -17,6 +17,6 @@ import { getProtectedData } from '../controllers/protectedController.mjs';
 
 const router = Router();
 
-router.get('/protected-data', verifyJwtToken, getProtectedData); // Use the controller function to handle the request
+router.get('/protected-data', verifyAccessToken, getProtectedData); // Use the controller function to handle the request
 
 export default router;

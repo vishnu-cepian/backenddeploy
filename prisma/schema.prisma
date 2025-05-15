@@ -1,13 +1,9 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
-  //output   = "../generated/prisma"
 }
 
 datasource db {
-  provider = "postgres"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -18,22 +14,48 @@ model User {
   role         String
   refreshToken String?
   name         String?
-  provider     String?
-  providerId   String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  newCol       String?
+  vendor       Vendor?
 }
 
-model Otp {
+model OtpEmail {
   id        String   @id @default(uuid())
   email     String   @unique
   otp       String
   expiresAt DateTime
 }
 
-model Token {
-id        String   @id @default(uuid())
-name      String
+model OtpPhone {
+  id             String   @id @default(uuid())
+  phone          String   @unique
+  verificationSid String   // Stores Twilio verification SID
+  attempts       Int      @default(0)
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+}
+
+model Vendor {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  fullName            String
+  email               String   @unique
+  phoneNumber         String
+  profilePictureUrl   String
+  aadhaarUrl          String
+  aadhaarNumber       String   @unique
+  bankPassbookUrl     String
+  accountNumber       String
+  ifscCode            String
+  accountHolderName   String
+  serviceType         String   
+  latitude            String
+  longitude           String
+  isVerified          Boolean  @default(false)
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 

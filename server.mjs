@@ -8,6 +8,7 @@ import { MESSAGE } from "./types/enums/index.mjs";
 import { logger } from "./utils/logger-utils.mjs";
 import { formatResponse } from "./utils/core-utils.mjs";
 import protectedRoutes from "./routes/protectedRoutes.mjs";
+import vendorRoutes from "./routes/vendorRoutes.mjs";
 
 dotenv.config();
 
@@ -29,7 +30,7 @@ app.use(cors(corsOptions));
 app.use("/api/auth", authRoutes);
 // protectedRoute(app); // Use the protected route middleware
 app.use('/api/protected', protectedRoutes);
-
+app.use("/api/vendor", vendorRoutes);
 app.use((err, req, res, next) => {
   logger.error(err.stack);
 

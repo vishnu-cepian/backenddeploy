@@ -1,21 +1,23 @@
 import { Router } from "express";
 import * as authController from "../controllers/authController.mjs";
-import { controllerWrapper } from "../controllers/index.mjs";
-// import { authenticateAccessToken } from "../services/authService.mjs";
+import { verifyAccessToken } from "../middlewares/auth.mjs";
 
 const router = Router();
 
 // REFER authContoller.mjs TO DETERMINE WHICH CALLS NEED AUTHORIZATION TOKEN
 
-router.post("/signup-customer",authController.signupCustomer);  //response will be in the format of {message: "success", status: true, data: {}}
-router.post("/signup-vendor",authController.signupVendor);  //response will be in the format of {message: "success", status: true, data: {}}
+router.post("/signup",authController.signup);  //response will be in the format of {message: "success", status: true, data: {}}
 
 router.post("/login",authController.loginWithEmail);
 router.post("/google-signin",authController.loginWithGoogle);
 
 router.post("/checkEmail",authController.checkEmail);
-router.post("/sendOtp",authController.sendOtp);
-router.post("/verifyOtp",authController.verifyOtp);
+
+router.post("/sendEmailOtp",authController.sendEmailOtp);
+router.post("/verifyEmailOtp",authController.verifyEmailOtp);
+router.post("/sendPhoneOtp",verifyAccessToken,authController.sendPhoneOtp);            //vendor otp route
+router.post("/verifyPhoneOtp",verifyAccessToken,authController.verifyPhoneOtp);        //vendor otp route
+
 
 router.post("/forgotPassword",authController.forgotPassword);
 router.post("/resetPassword",authController.resetPassword);

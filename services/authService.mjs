@@ -6,7 +6,9 @@ import { Resend } from "resend";
 import jwt from 'jsonwebtoken';
 import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET } from '../config/auth-config.mjs';
 import { OAuth2Client } from "google-auth-library";
-
+// import pkg from "twilio";
+// const { Twilio } = pkg;
+import twilio from "twilio";
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
@@ -67,7 +69,7 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
 //===================AUTH UTILS====================
 
 
-export const signupCustomer = async (data) => { 
+export const signup = async (data) => { 
     try {
         if (data.authorization === process.env.SIGNUP_TOKEN) {
             const { email, name, password, role } = data;
@@ -92,17 +94,6 @@ export const signupCustomer = async (data) => {
                 },
             });
             return newUser;
-        }
-    } catch (err) {
-        logger.error(err);
-        throw err;
-    }
-};
-
-export const signupVendor = async (data) => {
-    try {
-        if (data.authorization === process.env.SIGNUP_TOKEN) {
-
         }
     } catch (err) {
         logger.error(err);
@@ -192,7 +183,13 @@ export const loginWithGoogle = async (data) => {
             idToken,
             audience: process.env.GOOGLE_CLIENT_ID,
         });
+
         const payload = ticket.getPayload();
+
+        const now = Math.floor(Date.now() / 1000);
+        if (payload.exp < now) {
+            throw sendError('ID token has expired');
+        }
 
         const { email } = payload;
 
@@ -239,7 +236,7 @@ export const loginWithGoogle = async (data) => {
     }
 };
 
-export const sendOtp = async (data) => {
+export const sendEmailOtp = async (data) => {
     try {
         const { email } = data;
     
@@ -250,7 +247,7 @@ export const sendOtp = async (data) => {
         const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
 
-        await prisma.otp.upsert({
+        await prisma.otpEmail.upsert({
             where: { email },
             update: {otp: otp.toString(), expiresAt},
             create: { email, otp: otp.toString(), expiresAt },
@@ -275,7 +272,7 @@ export const sendOtp = async (data) => {
     }
 }
 
-export const verifyOtp = async (data) => {
+export const verifyEmailOtp = async (data) => {
     try {
         const { email, otp } = data;
     
@@ -283,7 +280,7 @@ export const verifyOtp = async (data) => {
             throw sendError('Email and OTP are required');
         }
 
-        const otpRecord = await prisma.otp.findUnique({ where: { email } });
+        const otpRecord = await prisma.otpEmail.findUnique({ where: { email } });
         if (!otpRecord) {
             throw sendError('OTP not found');
         }
@@ -296,11 +293,113 @@ export const verifyOtp = async (data) => {
             throw sendError('OTP expired');
         }
 
+        if(otpRecord.otp === otp) {
+            await prisma.otpEmail.delete({ where: { email } });
+        }
         // OTP is valid
         return ({
             message: "OTP verified successfully",
             status: true
         });
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+export const sendPhoneOtp = async (data) => {
+    try {
+        const { phone } = data;
+    
+        if (!phone) {
+            throw sendError('Phone number is required');
+        }
+
+        const normalizedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
+       
+        const client = twilio(
+            process.env.TWILIO_ACCOUNT_SID, 
+            process.env.TWILIO_AUTH_TOKEN
+        );
+
+        // Rate limiting check
+        const existingOtp = await prisma.otpPhone.findUnique({
+            where: { phone: normalizedPhone }
+        });
+
+        if (existingOtp && existingOtp.createdAt > new Date(Date.now() - 60 * 1000)) {
+            throw sendError('OTP already sent. Please wait before requesting another.', 429);
+        }
+
+        // Send OTP via Twilio Verify (Twilio generates the OTP)
+        const verification = await client.verify.v2
+            .services(process.env.TWILIO_SERVICE_SID)
+            .verifications.create({
+                to: normalizedPhone,
+                channel: "sms",
+                locale: "en"
+            });
+
+        // Store verification SID (not OTP) in database
+        await prisma.otpPhone.upsert({
+            where: { phone: normalizedPhone },
+            update: { 
+                verificationSid: verification.sid,
+                expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes expiry
+                attempts: 0,
+                createdAt: new Date()
+            },
+            create: { 
+                phone: normalizedPhone,
+                verificationSid: verification.sid,
+                expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+                attempts: 0
+            },
+        });
+
+        logger.info(`OTP verification started for ${normalizedPhone} (SID: ${verification.sid})`);
+
+        return {
+            success: true,
+            message: "OTP sent successfully",
+            verificationSid: verification.sid // Optional: For tracking
+        };
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const verifyPhoneOtp = async(data) => {
+    try {
+        const  { phone, otp } = data;
+        const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+    
+        const normalizedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
+
+        const record = await prisma.otpPhone.findUnique({
+            where: { phone: normalizedPhone }
+        });
+
+        if (!record) throw sendError('No OTP requested for this number', 400);
+
+        const verificationCheck = await client.verify.v2
+            .services(process.env.TWILIO_SERVICE_SID)
+            .verificationChecks
+            .create({
+            to: normalizedPhone,
+            code: otp
+            });
+
+        if (verificationCheck.status === 'approved') {
+            await prisma.otpPhone.delete({ where: { phone: normalizedPhone } });
+            return { success: true };
+        } else {
+            await prisma.otpPhone.update({
+            where: { phone: normalizedPhone },
+            data: { attempts: { increment: 1 } }
+            });
+            throw sendError('Invalid OTP', 400);
+        }
     } catch (err) {
         logger.error(err);
         throw err;
@@ -325,7 +424,7 @@ export const forgotPassword = async (data) => {
         const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
 
-        await prisma.otp.upsert({
+        await prisma.otpEmail.upsert({
             where: { email },
             update: { otp: otp.toString(), expiresAt },
             create: { email, otp: otp.toString(), expiresAt },
@@ -365,7 +464,7 @@ export const resetPassword = async (data) => {
         }
 
         // Verify OTP
-        const otpRecord = await prisma.otp.findUnique({ where: { email } });
+        const otpRecord = await prisma.otpEmail.findUnique({ where: { email } });
         if (!otpRecord) {
             throw sendError('OTP not found');
         }
