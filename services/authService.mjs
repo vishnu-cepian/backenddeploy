@@ -168,9 +168,9 @@ export const checkEmail = async (data) => {
             // Check if user already exists
             const existingUser = await prisma.user.findUnique({ where: { email } });
             if (existingUser) {
-                return { status: 200 }; // User exists
+                return { exist: true }; // User exists
             } else {
-                return { status: 404 }; // User does not exist
+                return { exist: false }; // User does not exist
             }
         }
     } catch (err) {
@@ -209,8 +209,7 @@ export const loginWithGoogle = async (data) => {
         //     });
             return ({
                 message: "User not found",
-                status: false,
-                statusCode: 404
+                status: false
             });
         }
 
@@ -268,8 +267,7 @@ export const sendOtp = async (data) => {
 
         return ({
             message: "OTP sent successfully",
-            status: true,
-            statusCode: 200
+            status: true
         });
     } catch (err) {
         logger.error(err);
@@ -301,8 +299,7 @@ export const verifyOtp = async (data) => {
         // OTP is valid
         return ({
             message: "OTP verified successfully",
-            status: true,
-            statusCode: 200
+            status: true
         });
     } catch (err) {
         logger.error(err);
@@ -344,8 +341,7 @@ export const forgotPassword = async (data) => {
         });
         return ({
             message: "OTP sent successfully",
-            status: true,
-            statusCode: 200
+            status: true
         });
     }
     catch (err) {
@@ -393,8 +389,7 @@ export const resetPassword = async (data) => {
 
         return ({
             message: "Password reset successfully",
-            status: true,
-            statusCode: 200
+            status: true
         });
     } catch (err) {
         logger.error(err);
@@ -424,8 +419,7 @@ export const logout = async (data) => {
 
         return ({
             message: "Logout successful",
-            status: true,
-            statusCode: 200
+            status: true
         });
     } catch (err) {
         logger.error(err);
