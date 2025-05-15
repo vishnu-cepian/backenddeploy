@@ -4,12 +4,13 @@ import { prisma } from "../utils/prisma-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
 import { Resend } from "resend";
 import jwt from 'jsonwebtoken';
-import { AcCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET } from '../config/auth-config.mjs';
+import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET } from '../config/auth-config.mjs';
+import { OAuth2Client } from "google-auth-library";
 
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
-  return jwt.sign(payload, AcCESS_TOKEN_SECRET, { expiresIn: '1h' });
+  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
 };
 
 export const generateRefreshToken = (payload) => {
@@ -18,7 +19,7 @@ export const generateRefreshToken = (payload) => {
 
 export const verifyAccessToken = (token) => {
   try {
-    return jwt.verify(token, AcCESS_TOKEN_SECRET);
+    return jwt.verify(token, ACCESS_TOKEN_SECRET);
   } catch (err) {
     return null;
   }
@@ -66,60 +67,151 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
 //===================AUTH UTILS====================
 
 
-export const signupWithEmail = async (data) => { 
+export const signupCustomer = async (data) => { 
     try {
-        const { email, password, role } = data;
+        if (data.authorization === process.env.SIGNUP_TOKEN) {
+            const { email, name, password, role } = data;
+            if (!email || !name || !password || !role) {
+                throw sendError('Email, name, password, and role are required');
+            }
+            // // Check if user already exists
+            const existingUser = await prisma.user.findUnique({ where: { email } });
+            if (existingUser) {
+                throw sendError('User already exists with this email');
+            }
+            
+            const hashedPassword = await hashPassword(password);
+            // Save user to database 
+            const newUser = await prisma.user.create({
+                data: {
+                    email,
+                    name,
+                    password: hashedPassword,
+                    role,
         
-        if (!email || !password || !role) {
-            throw sendError('Email, password, and role are required');
+                },
+            });
+            return newUser;
         }
-
-        // // Check if user already exists
-        const existingUser = await prisma.user.findUnique({ where: { email } });
-        if (existingUser) {
-            throw sendError('User already exists with this email');
-        }
-        const refreshToken = generateRefreshToken({ email, role });
-        const hashedPassword = await hashPassword(password);
-        // Save user to database 
-        const newUser = await prisma.user.create({
-            data: {
-                email,
-                password: hashedPassword,
-                   // provider: Default-> Credentials      
-                role,
-                refreshToken, // add refreshToken field to User model
-            },
-        });
-        // const neUser = await prisma.user.update({
-        //     where: { id: newUser.id },
-        //     data: { refreshToken }, // add refreshToken field to User model
-        // });
-        return newUser;
     } catch (err) {
         logger.error(err);
         throw err;
     }
 };
 
+export const signupVendor = async (data) => {
+    try {
+        if (data.authorization === process.env.SIGNUP_TOKEN) {
+
+        }
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+};
 
 export const loginWithEmail = async (data) => {
     try {
-        const {email, password} = data;
-    
-        if (!email || !password) {
-            throw sendError('Email and password are required');
+        if (data.authorization === process.env.SIGNUP_TOKEN) {
+            const {email, password} = data;
+        
+            if (!email || !password) {
+                throw sendError('Email and password are required');
+            }
+
+            const user = await prisma.user.findUnique({ where: { email } });
+            if (!user) {
+                throw sendError('User not found');
+            }
+            // Check if password is correct
+            const isPasswordValid = await comparePassword(password, user.password);
+            if (!isPasswordValid) {
+                //throw sendError('Invalid password', 401, { email });  can use data to send error
+                throw sendError('Invalid password');
+            }
+
+            // Generate JWT token
+            const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
+            const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
+
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { refreshToken }, // add refreshToken field to User model
+            });
+
+            return {
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    role: user.role,
+                },
+                accessToken,
+                refreshToken,
+                message: "Login successful",
+            };
+        }
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+};
+
+export const checkEmail = async (data) => {
+    try {
+        if (data.authorization === process.env.SIGNUP_TOKEN) {
+            const { email } = data;
+        
+            if (!email) {
+                throw sendError('Email is required');
+            }
+
+            // Check if user already exists
+            const existingUser = await prisma.user.findUnique({ where: { email } });
+            if (existingUser) {
+                return { status: 200 }; // User exists
+            } else {
+                return { status: 404 }; // User does not exist
+            }
+        }
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const loginWithGoogle = async (data) => { 
+    try {
+        const idToken  = data;
+       
+        if (!idToken) {
+            throw sendError('ID token is required');
         }
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) {
-            throw sendError('User not found');
-        }
-        // Check if password is correct
-        const isPasswordValid = await comparePassword(password, user.password);
-        if (!isPasswordValid) {
-            //throw sendError('Invalid password', 401, { email });  can use data to send error
-            throw sendError('Invalid password');
+        const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+        const ticket = await client.verifyIdToken({
+            idToken,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
+        const payload = ticket.getPayload();
+
+        const { email } = payload;
+
+        // Check if user already exists
+        let user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {        /// IF THERE IS NO USER THEN THE NEW USER IS NOT CREATED INSTEAD signup ROUTE WILL HANDLE IT /// IT IS USED FOR GIVING USERS FLEXBILITY TO ACCESS WITH NORMAL EMAIL PASSWORD LOGIN WITH THE SAME EMAIL ID EXTRACTED FROM GOOGLE PAYLOAD
+        //     // Create new user
+        //     user = await prisma.user.create({
+        //         data: {
+        //             email,
+        //             name,
+        //             provider: 'google',
+        //         },
+        //     });
+            return ({
+                message: "User not found",
+                status: false,
+                statusCode: 404
+            });
         }
 
         // Generate JWT token
@@ -128,7 +220,7 @@ export const loginWithEmail = async (data) => {
 
         await prisma.user.update({
             where: { id: user.id },
-            data: { refreshToken }, // add refreshToken field to User model
+            data: { refreshToken }, 
         });
 
         return {
@@ -141,34 +233,12 @@ export const loginWithEmail = async (data) => {
             refreshToken,
             message: "Login successful",
         };
+
     } catch (err) {
         logger.error(err);
         throw err;
     }
 };
-
-export const checkEmail = async (data) => {
-    try {
-        const { email } = data;
-    
-        if (!email) {
-            throw sendError('Email is required');
-        }
-
-        // Check if user already exists
-        const existingUser = await prisma.user.findUnique({ where: { email } });
-        if (existingUser) {
-            return { status: 200 }; // User exists
-        } else {
-            return { status: 404 }; // User does not exist
-        }
-    } catch (err) {
-        logger.error(err);
-        throw err;
-    }
-}
-
-export const loginWithGoogle = async (data) => { };
 
 export const sendOtp = async (data) => {
     try {
@@ -323,6 +393,37 @@ export const resetPassword = async (data) => {
 
         return ({
             message: "Password reset successfully",
+            status: true,
+            statusCode: 200
+        });
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const logout = async (data) => {
+    try {
+        const { refreshToken } = data;
+    
+        if (!refreshToken) {
+            throw sendError('Refresh token is required');
+        }
+
+        // Check if user exists
+        const user = await prisma.user.findUnique({ where: { refreshToken } });
+        if (!user) {
+            throw sendError('User not found');
+        }
+
+        // Invalidate the refresh token
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { refreshToken: null },
+        });
+
+        return ({
+            message: "Logout successful",
             status: true,
             statusCode: 200
         });

@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken'; // Import JWT library
-import { AcCESS_TOKEN_SECRET } from '../config/auth-config.mjs';
+import { ACCESS_TOKEN_SECRET } from '../config/auth-config.mjs';
 import { sendError } from '../utils/core-utils.mjs';
 
 // Middleware to verify JWT token
