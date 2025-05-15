@@ -20,12 +20,12 @@ exports.Prisma = Prisma
 exports.$Enums = {}
 
 /**
- * Prisma Client JS version: 6.7.0
- * Query Engine version: 3cff47a7f5d65c3ea74883f1d736e41d68ce91ed
+ * Prisma Client JS version: 6.8.0
+ * Query Engine version: 2060c79ba17c6bb9f5823312b6f6b7f4a845738e
  */
 Prisma.prismaVersion = {
-  client: "6.7.0",
-  engine: "3cff47a7f5d65c3ea74883f1d736e41d68ce91ed"
+  client: "6.8.0",
+  engine: "2060c79ba17c6bb9f5823312b6f6b7f4a845738e"
 }
 
 Prisma.PrismaClientKnownRequestError = () => {
@@ -127,17 +127,45 @@ exports.Prisma.UserScalarFieldEnum = {
   role: 'role',
   refreshToken: 'refreshToken',
   name: 'name',
-  provider: 'provider',
-  providerId: 'providerId',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
 
-exports.Prisma.OtpScalarFieldEnum = {
+exports.Prisma.OtpEmailScalarFieldEnum = {
   id: 'id',
   email: 'email',
   otp: 'otp',
   expiresAt: 'expiresAt'
+};
+
+exports.Prisma.OtpPhoneScalarFieldEnum = {
+  id: 'id',
+  phone: 'phone',
+  verificationSid: 'verificationSid',
+  attempts: 'attempts',
+  expiresAt: 'expiresAt',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.VendorScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  fullName: 'fullName',
+  email: 'email',
+  phoneNumber: 'phoneNumber',
+  profilePictureUrl: 'profilePictureUrl',
+  aadhaarUrl: 'aadhaarUrl',
+  aadhaarNumber: 'aadhaarNumber',
+  bankPassbookUrl: 'bankPassbookUrl',
+  accountNumber: 'accountNumber',
+  ifscCode: 'ifscCode',
+  accountHolderName: 'accountHolderName',
+  serviceType: 'serviceType',
+  latitude: 'latitude',
+  longitude: 'longitude',
+  isVerified: 'isVerified',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
 };
 
 exports.Prisma.SortOrder = {
@@ -158,7 +186,9 @@ exports.Prisma.NullsOrder = {
 
 exports.Prisma.ModelName = {
   User: 'User',
-  Otp: 'Otp'
+  OtpEmail: 'OtpEmail',
+  OtpPhone: 'OtpPhone',
+  Vendor: 'Vendor'
 };
 
 /**
