@@ -9,6 +9,9 @@ import { OAuth2Client } from "google-auth-library";
 // import pkg from "twilio";
 // const { Twilio } = pkg;
 import twilio from "twilio";
+import { AppDataSource } from "../utils/data-source.mjs";
+import { User } from "../entities/User.mjs";
+
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
@@ -110,7 +113,8 @@ export const loginWithEmail = async (data) => {
                 throw sendError('Email and password are required');
             }
 
-            const user = await prisma.user.findUnique({ where: { email } });
+            const userRepository = AppDataSource.getRepository(User);
+            const user = await userRepository.findOne({ where: { email } });
             if (!user) {
                 throw sendError('User not found');
             }
@@ -125,10 +129,10 @@ export const loginWithEmail = async (data) => {
             const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
             const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
 
-            await prisma.user.update({
-                where: { id: user.id },
-                data: { refreshToken }, // add refreshToken field to User model
-            });
+            await userRepository.update(
+                { id: user.id },
+                { refreshToken } // add refreshToken field to User entity
+            );
 
             return {
                 user: {

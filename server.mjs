@@ -3,12 +3,14 @@ import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import cors from "cors";
 // Import routes
+import { AppDataSource } from "./utils/data-source.mjs";
 import authRoutes from "./routes/authRoutes.mjs";
 import { MESSAGE } from "./types/enums/index.mjs";
 import { logger } from "./utils/logger-utils.mjs";
 import { formatResponse } from "./utils/core-utils.mjs";
 import protectedRoutes from "./routes/protectedRoutes.mjs";
 import vendorRoutes from "./routes/vendorRoutes.mjs";
+
 
 dotenv.config();
 
@@ -53,6 +55,14 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
+AppDataSource.initialize()
+  .then(() => {
+    console.log("Data Source has been initialized!");
+  })
+  .catch((err) => {
+    console.error("Error during Data Source initialization", err);
+  });
+  
 app.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
