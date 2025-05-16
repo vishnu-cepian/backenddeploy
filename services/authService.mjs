@@ -80,22 +80,21 @@ export const signup = async (data) => {
                 throw sendError('Email, name, password, and role are required');
             }
             // // Check if user already exists
-            const existingUser = await prisma.user.findUnique({ where: { email } });
+            const userRepository = AppDataSource.getRepository(User);
+            const existingUser = await userRepository.findOne({ where: { email } });
             if (existingUser) {
                 throw sendError('User already exists with this email');
             }
             
             const hashedPassword = await hashPassword(password);
             // Save user to database 
-            const newUser = await prisma.user.create({
-                data: {
-                    email,
-                    name,
-                    password: hashedPassword,
-                    role,
-        
-                },
+            const newUser = userRepository.create({
+                email,
+                name,
+                password: hashedPassword,
+                role,
             });
+            await userRepository.save(newUser);
             return newUser;
         }
     } catch (err) {
