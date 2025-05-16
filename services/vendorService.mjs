@@ -1,95 +1,96 @@
 import { logger } from "../utils/logger-utils.mjs";
-import { prisma } from "../utils/prisma-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
-import e from "express";
+import { User } from "../entities/User.mjs";
+import { Vendor } from "../entities/Vendor.mjs";
+import { AppDataSource } from "../utils/data-source.mjs";
+
+const userRepo = AppDataSource.getRepository(User);
+const vendorRepo = AppDataSource.getRepository(Vendor);
 
 export const checkProfile = async (data) => {
   try {
     const { userId } = data;
-    
-    const vendor = await prisma.vendor.findUnique({
-      where: {
-        userId: userId,
-      },
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
     });
     if (!vendor) {
-      return ({
+      return {
         exists: false,
         message: "Vendor profile not complete => redirect to vendor profile",
-      });
+      };
     }
 
-    if(vendor.isVerified === false) {
-      return ({
+    if (vendor.isVerified === false) {
+      return {
         exists: true,
         isVerified: false,
         message: "Vendor profile not verified => redirect to vendor verification pending status page",
-      });
+      };
     }
 
-    return ({
+    return {
       exists: true,
       isVerified: true,
       message: "Vendor profile complete => redirect to vendor dashboard",
-    });
+    };
 
   } catch (error) {
     logger.error(error);
     sendError(error);
   }
-}
+};
 
 export const completeProfile = async (data) => {
   try {
     const { userId, ...profileData } = data;
-    const { email } = await prisma.user.findUnique({
-      where: {
-      id: userId,
-      },
-      select: {
-      email: true,
-      },
+
+    const user = await userRepo.findOne({
+      where: { id: userId },
+      select: ["email"],
     });
-    if (!email) {
-      return ({
+
+    if (!user || !user.email) {
+      return {
         isProfileCompleted: false,
         message: "User not found",
-      });
+      };
     }
-    const vendor = await prisma.vendor.findUnique({
-      where: {
-        userId: userId,
-      },
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
     });
 
     if (vendor) {
-      return ({
+      return {
         exists: true,
         message: "Vendor profile already exists",
-      });
+      };
     }
 
-    const newVendor = await prisma.vendor.create({
-      data: {
-        userId: userId,
-        ...profileData,
-        email: email,
-        isVerified: false,
-      },
+    const newVendor = vendorRepo.create({
+      userId: userId,
+      ...profileData,
+      email: user.email,
+      isVerified: false,
     });
+
+    await vendorRepo.save(newVendor);
+
     if (!newVendor) {
-      return ({
+      return {
         isProfileCompleted: false,
         message: "Vendor profile creation failed",
-      });
+      };
     }
-    return ({
+
+    return {
       isProfileCompleted: true,
       message: "Vendor profile created successfully",
-    });
+    };
 
   } catch (error) {
     logger.error(error);
     sendError(error);
   }
-}
+};

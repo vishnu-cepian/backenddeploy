@@ -1,13 +1,10 @@
 import { logger } from "../utils/logger-utils.mjs";
 import { hashPassword, comparePassword } from "../utils/auth-utils.mjs";
-import { prisma } from "../utils/prisma-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
 import { Resend } from "resend";
 import jwt from 'jsonwebtoken';
 import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET } from '../config/auth-config.mjs';
 import { OAuth2Client } from "google-auth-library";
-// import pkg from "twilio";
-// const { Twilio } = pkg;
 import twilio from "twilio";
 import { AppDataSource } from "../utils/data-source.mjs";
 import { User } from "../entities/User.mjs";
@@ -44,7 +41,8 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
     if (!decoded) {
         throw sendError('Invalid refresh token');
     }
-    const user = await prisma.user.findUnique({ where: { id: decoded.id } });
+    const userRepository = AppDataSource.getRepository(User);
+    const user = await userRepository.findOne({ where: { id: decoded.id } });
     if (!user) {
         throw sendError('User not found');
     }
@@ -53,10 +51,10 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
     }
     const newAccessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
     const newRefreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
-    await prisma.user.update({
-        where: { id: user.id },
-        data: { refreshToken: newRefreshToken },
-    });
+    await userRepository.update(
+        { id: user.id },
+        { refreshToken: newRefreshToken }
+    );
     return {
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
@@ -160,7 +158,8 @@ export const checkEmail = async (data) => {
             }
 
             // Check if user already exists
-            const existingUser = await prisma.user.findUnique({ where: { email } });
+            const userRepository = AppDataSource.getRepository(User);
+            const existingUser = await userRepository.findOne({ where: { email } });
             if (existingUser) {
                 return { exist: true }; // User exists
             } else {
@@ -197,7 +196,8 @@ export const loginWithGoogle = async (data) => {
         const { email } = payload;
 
         // Check if user already exists
-        let user = await prisma.user.findUnique({ where: { email } });
+        const userRepository = AppDataSource.getRepository(User);
+        let user = await userRepository.findOne({ where: { email } });
         if (!user) {        /// IF THERE IS NO USER THEN THE NEW USER IS NOT CREATED INSTEAD signup ROUTE WILL HANDLE IT /// IT IS USED FOR GIVING USERS FLEXBILITY TO ACCESS WITH NORMAL EMAIL PASSWORD LOGIN WITH THE SAME EMAIL ID EXTRACTED FROM GOOGLE PAYLOAD
         //     // Create new user
         //     user = await prisma.user.create({
@@ -217,10 +217,10 @@ export const loginWithGoogle = async (data) => {
         const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
         const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
 
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { refreshToken }, 
-        });
+        await userRepository.update(
+            { id: user.id },
+            { refreshToken }
+        );
 
         return {
             user: {
@@ -250,11 +250,20 @@ export const sendEmailOtp = async (data) => {
         const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
 
-        await prisma.otpEmail.upsert({
-            where: { email },
-            update: {otp: otp.toString(), expiresAt},
-            create: { email, otp: otp.toString(), expiresAt },
-        });
+        // Use TypeORM to upsert OTP for email
+        const otpEmailRepository = AppDataSource.getRepository('OtpEmail');
+        let otpRecord = await otpEmailRepository.findOne({ where: { email } });
+        if (otpRecord) {
+            otpRecord.otp = otp.toString();
+            otpRecord.expiresAt = expiresAt;
+            await otpEmailRepository.save(otpRecord);
+        } else {
+            await otpEmailRepository.save({
+            email,
+            otp: otp.toString(),
+            expiresAt
+            });
+        }
         
         const resend = new Resend(process.env.RESEND_API_KEY);  //for testing purpose
 
@@ -283,7 +292,8 @@ export const verifyEmailOtp = async (data) => {
             throw sendError('Email and OTP are required');
         }
 
-        const otpRecord = await prisma.otpEmail.findUnique({ where: { email } });
+        const otpEmailRepository = AppDataSource.getRepository('OtpEmail');
+        const otpRecord = await otpEmailRepository.findOne({ where: { email } });
         if (!otpRecord) {
             throw sendError('OTP not found');
         }
@@ -297,7 +307,7 @@ export const verifyEmailOtp = async (data) => {
         }
 
         if(otpRecord.otp === otp) {
-            await prisma.otpEmail.delete({ where: { email } });
+            await otpEmailRepository.delete({ email });
         }
         // OTP is valid
         return ({
@@ -325,9 +335,8 @@ export const sendPhoneOtp = async (data) => {
         );
 
         // Rate limiting check
-        const existingOtp = await prisma.otpPhone.findUnique({
-            where: { phone: normalizedPhone }
-        });
+        const otpPhoneRepository = AppDataSource.getRepository('OtpPhone');
+        const existingOtp = await otpPhoneRepository.findOne({ where: { phone: normalizedPhone } });
 
         if (existingOtp && existingOtp.createdAt > new Date(Date.now() - 60 * 1000)) {
             throw sendError('OTP already sent. Please wait before requesting another.', 429);
@@ -343,21 +352,24 @@ export const sendPhoneOtp = async (data) => {
             });
 
         // Store verification SID (not OTP) in database
-        await prisma.otpPhone.upsert({
-            where: { phone: normalizedPhone },
-            update: { 
-                verificationSid: verification.sid,
-                expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes expiry
-                attempts: 0,
-                createdAt: new Date()
-            },
-            create: { 
-                phone: normalizedPhone,
-                verificationSid: verification.sid,
-                expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-                attempts: 0
-            },
-        });
+        // Upsert OTP phone record using TypeORM
+        let otpPhoneRecord = await otpPhoneRepository.findOne({ where: { phone: normalizedPhone } });
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+        if (otpPhoneRecord) {
+            otpPhoneRecord.verificationSid = verification.sid;
+            otpPhoneRecord.expiresAt = expiresAt;
+            otpPhoneRecord.attempts = 0;
+            otpPhoneRecord.createdAt = new Date();
+            await otpPhoneRepository.save(otpPhoneRecord);
+        } else {
+            await otpPhoneRepository.save({
+            phone: normalizedPhone,
+            verificationSid: verification.sid,
+            expiresAt,
+            attempts: 0,
+            createdAt: new Date()
+            });
+        }
 
         logger.info(`OTP verification started for ${normalizedPhone} (SID: ${verification.sid})`);
 
@@ -379,9 +391,8 @@ export const verifyPhoneOtp = async(data) => {
     
         const normalizedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
 
-        const record = await prisma.otpPhone.findUnique({
-            where: { phone: normalizedPhone }
-        });
+        const otpPhoneRepository = AppDataSource.getRepository('OtpPhone');
+        const record = await otpPhoneRepository.findOne({ where: { phone: normalizedPhone } });
 
         if (!record) throw sendError('No OTP requested for this number', 400);
 
@@ -394,13 +405,14 @@ export const verifyPhoneOtp = async(data) => {
             });
 
         if (verificationCheck.status === 'approved') {
-            await prisma.otpPhone.delete({ where: { phone: normalizedPhone } });
+            await otpPhoneRepository.delete({ phone: normalizedPhone });
             return { success: true };
         } else {
-            await prisma.otpPhone.update({
-            where: { phone: normalizedPhone },
-            data: { attempts: { increment: 1 } }
-            });
+            await otpPhoneRepository.increment(
+                { phone: normalizedPhone },
+                "attempts",
+                1
+            );
             throw sendError('Invalid OTP', 400);
         }
     } catch (err) {
@@ -418,7 +430,8 @@ export const forgotPassword = async (data) => {
         }
 
         // Check if user exists
-        const user = await prisma.user.findUnique({ where: { email } });
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOne({ where: { email } });
         if (!user) {
             throw sendError('User not found');
         }
@@ -427,11 +440,20 @@ export const forgotPassword = async (data) => {
         const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
 
-        await prisma.otpEmail.upsert({
-            where: { email },
-            update: { otp: otp.toString(), expiresAt },
-            create: { email, otp: otp.toString(), expiresAt },
-        });
+        // Use TypeORM to upsert OTP for email
+        const otpEmailRepository = AppDataSource.getRepository('OtpEmail');
+        let otpRecord = await otpEmailRepository.findOne({ where: { email } });
+        if (otpRecord) {
+            otpRecord.otp = otp.toString();
+            otpRecord.expiresAt = expiresAt;
+            await otpEmailRepository.save(otpRecord);
+        } else {
+            await otpEmailRepository.save({
+            email,
+            otp: otp.toString(),
+            expiresAt
+            });
+        }
 
         const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -461,13 +483,15 @@ export const resetPassword = async (data) => {
         }
 
         // Check if user exists
-        const user = await prisma.user.findUnique({ where: { email } });
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOne({ where: { email } });
         if (!user) {
             throw sendError('User not found');
         }
 
         // Verify OTP
-        const otpRecord = await prisma.otpEmail.findUnique({ where: { email } });
+        const otpEmailRepository = AppDataSource.getRepository('OtpEmail');
+        const otpRecord = await otpEmailRepository.findOne({ where: { email } });
         if (!otpRecord) {
             throw sendError('OTP not found');
         }
@@ -484,10 +508,10 @@ export const resetPassword = async (data) => {
         const hashedPassword = await hashPassword(newPassword);
 
         // Update user's password
-        await prisma.user.update({
-            where: { email },
-            data: { password: hashedPassword },
-        });
+        await userRepository.update(
+            { email },
+            { password: hashedPassword }
+        );
 
         return ({
             message: "Password reset successfully",
@@ -508,16 +532,17 @@ export const logout = async (data) => {
         }
 
         // Check if user exists
-        const user = await prisma.user.findUnique({ where: { refreshToken } });
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOne({ where: { refreshToken } });
         if (!user) {
             throw sendError('User not found');
         }
 
         // Invalidate the refresh token
-        await prisma.user.update({
-            where: { id: user.id },
-            data: { refreshToken: null },
-        });
+        await userRepository.update(
+            { id: user.id },
+            { refreshToken: null }
+        );
 
         return ({
             message: "Logout successful",
