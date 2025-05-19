@@ -4,6 +4,10 @@ import { Vendor } from "./Vendor.mjs";
 export const User = new EntitySchema({
     name: "User",
     tableName: "user",
+    indices: [
+        { name: "user_role_idx", columns: ["role"] },
+        { name: "user_refreshtoken_idx", columns: ["refreshToken"] }
+    ],
     columns: {
         id: {
             primary: true,
@@ -16,14 +20,12 @@ export const User = new EntitySchema({
         },
         password: {
             type: "varchar",
-            nullable: true
         },
         role: {
             type: "varchar"
         },
         name: {
             type: "varchar",
-            nullable: true
         },
         refreshToken: {
             type: "varchar",

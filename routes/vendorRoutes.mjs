@@ -6,5 +6,4 @@ const router = Router();
 
 router.get("/checkProfile", verifyAccessToken, vendorController.checkProfile); // Check if the user is a vendor
 router.post("/completeProfile", verifyAccessToken, vendorController.completeProfile); // Complete vendor profile
-
 export default router;

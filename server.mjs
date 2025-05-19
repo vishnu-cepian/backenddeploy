@@ -3,14 +3,13 @@ import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import cors from "cors";
 // Import routes
-import { AppDataSource } from "./utils/data-source.mjs";
+import { AppDataSource } from "./config/data-source.mjs";
 import authRoutes from "./routes/authRoutes.mjs";
 import { MESSAGE } from "./types/enums/index.mjs";
 import { logger } from "./utils/logger-utils.mjs";
 import { formatResponse } from "./utils/core-utils.mjs";
-import protectedRoutes from "./routes/protectedRoutes.mjs";
 import vendorRoutes from "./routes/vendorRoutes.mjs";
-
+import searchRoutes from "./routes/searchRoutes.mjs";
 
 dotenv.config();
 
@@ -30,9 +29,9 @@ app.use(cors(corsOptions));
 
 // API Routes
 app.use("/api/auth", authRoutes);
-// protectedRoute(app); // Use the protected route middleware
-app.use('/api/protected', protectedRoutes);
 app.use("/api/vendor", vendorRoutes);
+app.use("/api/search", searchRoutes);
+
 app.use((err, req, res, next) => {
   logger.error(err.stack);
 

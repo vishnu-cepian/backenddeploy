@@ -28,7 +28,7 @@ router.post("/resetPassword",authController.resetPassword);
 // router.post("/updateUser",authController.updateUser);
 // router.post("/deleteUser",authController.deleteUser);
 // router.post("/logout",authController.logout);
-router.post("/refreshToken",authController.refreshToken);
+router.post("/refreshToken",authController.refreshToken);   // If refresh token expired. redirect user to login
 // router.post("/verifyToken",authController.verifyToken);
 // router.post("/verifyAccessToken",authController.verifyAccessToken);
 // router.post("/verifyRefreshToken",authController.verifyRefreshToken);

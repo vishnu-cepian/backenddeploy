@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET } from '../config/auth-config.mjs';
 import { OAuth2Client } from "google-auth-library";
 import twilio from "twilio";
-import { AppDataSource } from "../utils/data-source.mjs";
+import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
 
 //===================JWT UTILS====================

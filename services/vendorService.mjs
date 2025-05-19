@@ -2,7 +2,8 @@ import { logger } from "../utils/logger-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
 import { User } from "../entities/User.mjs";
 import { Vendor } from "../entities/Vendor.mjs";
-import { AppDataSource } from "../utils/data-source.mjs";
+import { AppDataSource } from "../config/data-source.mjs";
+
 
 const userRepo = AppDataSource.getRepository(User);
 const vendorRepo = AppDataSource.getRepository(Vendor);
@@ -43,52 +44,69 @@ export const checkProfile = async (data) => {
 
 export const completeProfile = async (data) => {
   try {
-    const { userId, ...profileData } = data;
+    // const { userId, ...profileData } = data;
 
-    const user = await userRepo.findOne({
-      where: { id: userId },
-      select: ["email"],
-    });
+    // const user = await userRepo.findOne({
+    //   where: { id: userId },
+    //   select: ["email"],
+    // });
 
-    if (!user || !user.email) {
-      return {
-        isProfileCompleted: false,
-        message: "User not found",
-      };
-    }
+    // if (!user || !user.email) {
+    //   return {
+    //     isProfileCompleted: false,
+    //     message: "User not found",
+    //   };
+    // }
 
-    const vendor = await vendorRepo.findOne({
-      where: { userId: userId },
-    });
+    // const vendor = await vendorRepo.findOne({
+    //   where: { userId: userId },
+    // });
 
-    if (vendor) {
-      return {
-        exists: true,
-        message: "Vendor profile already exists",
-      };
-    }
+    // if (vendor) {
+    //   return {
+    //     exists: true,
+    //     message: "Vendor profile already exists",
+    //   };
+    // }
+
+    // const newVendor = vendorRepo.create({
+    //   userId: userId,
+    //   ...profileData,
+    //   email: user.email,
+    //   isVerified: false,
+    // });
+
+    // await vendorRepo.save(newVendor);
+
+    // if (!newVendor) {
+    //   return {
+    //     isProfileCompleted: false,
+    //     message: "Vendor profile creation failed",
+    //   };
+    // }
+    // return {data}
+    // return {
+    //   isProfileCompleted: true,
+    //   message: "Vendor profile created successfully",
+    // };
+
+    const {userId, latitude, longitude, ...profileData} = data
 
     const newVendor = vendorRepo.create({
       userId: userId,
       ...profileData,
-      email: user.email,
-      isVerified: false,
+      location: {
+        type: "Point",
+        coordinates: [longitude, latitude],
+      },
     });
 
     await vendorRepo.save(newVendor);
-
-    if (!newVendor) {
-      return {
-        isProfileCompleted: false,
-        message: "Vendor profile creation failed",
-      };
-    }
 
     return {
       isProfileCompleted: true,
       message: "Vendor profile created successfully",
     };
-
   } catch (error) {
     logger.error(error);
     sendError(error);
