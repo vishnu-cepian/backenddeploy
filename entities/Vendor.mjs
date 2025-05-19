@@ -1,5 +1,4 @@
 import { EntitySchema } from "typeorm";
-// import { User } from "./User.mjs";
 
 export const Vendor = new EntitySchema({
     name: "Vendor",
@@ -120,7 +119,7 @@ export const Vendor = new EntitySchema({
             type: "int",
             default: 0,
         },
-        popularityScore: {
+        popularityScore: {              // FOR FUTURE USE  
             type: "numeric", 
             precision: 6,
             scale: 2,

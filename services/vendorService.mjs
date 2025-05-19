@@ -44,53 +44,30 @@ export const checkProfile = async (data) => {
 
 export const completeProfile = async (data) => {
   try {
-    // const { userId, ...profileData } = data;
-
-    // const user = await userRepo.findOne({
-    //   where: { id: userId },
-    //   select: ["email"],
-    // });
-
-    // if (!user || !user.email) {
-    //   return {
-    //     isProfileCompleted: false,
-    //     message: "User not found",
-    //   };
-    // }
-
-    // const vendor = await vendorRepo.findOne({
-    //   where: { userId: userId },
-    // });
-
-    // if (vendor) {
-    //   return {
-    //     exists: true,
-    //     message: "Vendor profile already exists",
-    //   };
-    // }
-
-    // const newVendor = vendorRepo.create({
-    //   userId: userId,
-    //   ...profileData,
-    //   email: user.email,
-    //   isVerified: false,
-    // });
-
-    // await vendorRepo.save(newVendor);
-
-    // if (!newVendor) {
-    //   return {
-    //     isProfileCompleted: false,
-    //     message: "Vendor profile creation failed",
-    //   };
-    // }
-    // return {data}
-    // return {
-    //   isProfileCompleted: true,
-    //   message: "Vendor profile created successfully",
-    // };
-
     const {userId, latitude, longitude, ...profileData} = data
+
+    const user = await userRepo.findOne({
+      where: { id: userId },
+      select: ["email"],
+    });
+
+    if (!user || !user.email) {
+      return {
+        isProfileCompleted: false,
+        message: "User not found",
+      };
+    }
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
+    });
+
+    if (vendor) {
+      return {
+        exists: true,
+        message: "Vendor profile already exists",
+      };
+    }
 
     const newVendor = vendorRepo.create({
       userId: userId,
@@ -99,9 +76,18 @@ export const completeProfile = async (data) => {
         type: "Point",
         coordinates: [longitude, latitude],
       },
+      isVerified: false,
+      isActive: true,
     });
 
     await vendorRepo.save(newVendor);
+
+    if (!newVendor) {
+      return {
+        isProfileCompleted: false,
+        message: "Vendor profile creation failed",
+      };
+    }
 
     return {
       isProfileCompleted: true,

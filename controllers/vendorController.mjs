@@ -24,7 +24,6 @@ export const completeProfile = controllerWrapper(async (req, res, next) => {
       userId: req.user.id,
       ...req.body,
     };
-console.log(req.user.id)
     const response = await vendorService.completeProfile(data);
     res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
   } catch (err) {
