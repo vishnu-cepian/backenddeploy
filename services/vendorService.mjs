@@ -98,3 +98,26 @@ export const completeProfile = async (data) => {
     sendError(error);
   }
 };
+
+export const getVendorDetails = async (data) => {
+  try {
+    const { vendorId } = data;
+
+    const vendor = await vendorRepo.findOne({
+      where: { id: vendorId },
+    });
+
+    if (!vendor) {
+      return {
+        message: "Vendor not found",
+      };
+    }
+    return {
+      message: "Vendor details fetched successfully",
+      vendor,
+    };
+  } catch (error) {
+    logger.error(error);
+    sendError(error);
+  }
+}

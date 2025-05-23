@@ -31,3 +31,16 @@ export const completeProfile = controllerWrapper(async (req, res, next) => {
     next(err);
   }
 });
+
+export const getVendorDetails = controllerWrapper(async (req, res, next) => {
+  try {
+    const data = {
+      vendorId: req.params.vendorId,
+    };
+    const response = await vendorService.getVendorDetails(data);
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+});
