@@ -9,7 +9,7 @@ export const Vendor = new EntitySchema({
         { name: "vendor_name_idx", columns: ["fullName"] },
         { name: "vendor_shopname_idx", columns: ["shopName"] },
         { name: "vendor_servicetype_idx", columns: ["serviceType"] },
-        { name: "vendor_rating_idx", columns: ["rating"] }
+        { name: "vendor_status_idx", columns: ["isVerified", "isActive"] }
     ],
     columns: {
         id: {

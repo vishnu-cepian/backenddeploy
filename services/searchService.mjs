@@ -6,7 +6,7 @@ import { ILike } from "typeorm";
 
 // --------------------------------------------SEARCH HELPER FUNCTIONS----------------------------------------------------------------------------------------------
 
-export const searchResults = async (lng, lat, radiusKm, searchType, searchValue) => {
+export const searchResults = async (lng, lat, radiusKm, searchType, searchValue, limit = 10, offset = 0) => {
     
     // USE POSTGIS EXTENSION
     // CREATE EXTENSION IF NOT EXISTS postgis;  (IN pgAdmin or any other tool)
@@ -29,7 +29,7 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue)
     let params = [lng, lat, radiusKm * 1000];
     let orderClause = "";
 
-    switch(searchType) {
+    switch(searchType) {  
         case "ratingAndLocation":
             orderClause = "ORDER BY hybrid_score DESC, distance ASC";
             break;
@@ -71,7 +71,8 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue)
     if(conditions.length > 0) {
         baseQuery += " AND " + conditions.join(" AND ");
     }
-    const finalQuery = `${baseQuery} ${orderClause}`;
+    const finalQuery = `${baseQuery} ${orderClause} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(limit, offset);
     
     const results = await vendorRepo.query(finalQuery, params);
     return results;
@@ -80,9 +81,9 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue)
 
 
 // --------------------------------------------SEARCH SERVICES ----------------------------------------------------------------------------------------------
-export const searchVendorsByRating = async () => {
+export const searchVendorsByRating = async (limit = 10, offset = 0) => {
     try {
-        const result = await searchResults(0, 0, 0, "rating","");
+        const result = await searchResults(0, 0, 0, "rating", "", limit, offset);
         if(result.length !== 0) 
             return result;
         return {"message": "no Vendors found"};
@@ -94,8 +95,8 @@ export const searchVendorsByRating = async () => {
 
 export const searchVendorsByRatingAndLocation = async (params) => {
     try {
-        const { lat, lng, radiusKm } = params;
-        const result = await searchResults(parseFloat(lat), parseFloat(lng), parseFloat(radiusKm), "ratingAndLocation", "");
+        const { lat, lng, radiusKm, limit = 10, offset = 0 } = params;
+        const result = await searchResults(parseFloat(lat), parseFloat(lng), parseFloat(radiusKm), "ratingAndLocation", "", limit, offset);
         if(result.length !== 0) 
             return result;
         return {"message": "no Vendors found"};
@@ -107,7 +108,7 @@ export const searchVendorsByRatingAndLocation = async (params) => {
 
 export const searchVendorsByQuery = async (params) => {
     try {
-        const { query, lat, lng, radiusKm } = params;
+        const { query, lat, lng, radiusKm, limit = 10, offset = 0 } = params;
 
         const vendorRepo = AppDataSource.getRepository(Vendor);
         
@@ -118,8 +119,7 @@ export const searchVendorsByQuery = async (params) => {
         });
 
         if(vendors.length !== 0) {
-            console.log("name wise search")
-            const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "fullName", query);
+            const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "fullName", query, limit, offset);
             return results;
         }
         else if(vendors.length === 0) {         // Shop name wise search
@@ -129,7 +129,7 @@ export const searchVendorsByQuery = async (params) => {
                 },
             });
             if(vendors.length !== 0) {
-                const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query);
+                const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit, offset);
                 return results;
             } else {
                 vendors = await vendorRepo.find({   // serviceType wise search
@@ -139,7 +139,7 @@ export const searchVendorsByQuery = async (params) => {
                 });
 
                 if(vendors.length !== 0) {
-                    const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "serviceType", query);
+                    const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "serviceType", query, limit, offset);
                     return results;
                 }
             }
