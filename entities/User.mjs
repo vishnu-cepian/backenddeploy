@@ -6,7 +6,8 @@ export const User = new EntitySchema({
     tableName: "user",
     indices: [
         { name: "user_role_idx", columns: ["role"] },
-        { name: "user_refreshtoken_idx", columns: ["refreshToken"] }
+        { name: "user_refreshtoken_idx", columns: ["refreshToken"] },
+        { name: "user_fullname_idx", columns: ["name"] }
     ],
     columns: {
         id: {
@@ -26,6 +27,10 @@ export const User = new EntitySchema({
         },
         name: {
             type: "varchar",
+        },
+        phoneNumber: {
+            type: "varchar",
+            nullable: true
         },
         refreshToken: {
             type: "varchar",

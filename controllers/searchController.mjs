@@ -6,7 +6,8 @@ import * as searchService from '../services/searchService.mjs';
 
 export const searchVendorsByRating = controllerWrapper(async (req, res, next) => {
     try {
-        const response = await searchService.searchVendorsByRating();
+        const params = req.params;
+        const response = await searchService.searchVendorsByRating(params);
         res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
     } catch (err) {
         logger.error(err);

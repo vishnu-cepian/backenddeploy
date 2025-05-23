@@ -8,6 +8,7 @@ import { OAuth2Client } from "google-auth-library";
 import twilio from "twilio";
 import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
+import { Customers } from "../entities/Customers.mjs";
 
 //===================JWT UTILS====================
 
@@ -73,9 +74,9 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
 export const signup = async (data) => { 
     try {
         if (data.authorization === process.env.SIGNUP_TOKEN) {
-            const { email, name, password, role } = data;
-            if (!email || !name || !password || !role) {
-                throw sendError('Email, name, password, and role are required');
+            const { email, name, password, role, phoneNumber } = data;
+            if (!email || !name || !password || !role || !phoneNumber) {
+                throw sendError('Email, name, password, role, and phoneNumber are required');
             }
             // // Check if user already exists
             const userRepository = AppDataSource.getRepository(User);
@@ -91,9 +92,26 @@ export const signup = async (data) => {
                 name,
                 password: hashedPassword,
                 role,
+                phoneNumber,
             });
             await userRepository.save(newUser);
-            return newUser;
+
+            if (role.toUpperCase() === "CUSTOMER") {
+                const customerRepo = AppDataSource.getRepository(Customers);
+                const newCustomer = customerRepo.create({
+                    userId: newUser.id,
+                });
+                await customerRepo.save(newCustomer);
+
+                if (!newCustomer) {
+                    throw sendError("Customer profile creation failed");
+                }
+            }
+            return {
+                message: "User created successfully",
+                status: true,
+                data: newUser,
+            };
         }
     } catch (err) {
         logger.error(err);

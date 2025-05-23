@@ -6,7 +6,6 @@ export const Vendor = new EntitySchema({
     indices: [
         { name: "vendor_location_gix", columns: ["location"], spatial: true },
         { name: "vendor_rating_idx", columns: ["rating"] },
-        { name: "vendor_name_idx", columns: ["fullName"] },
         { name: "vendor_shopname_idx", columns: ["shopName"] },
         { name: "vendor_servicetype_idx", columns: ["serviceType"] },
         { name: "vendor_status_idx", columns: ["isVerified", "isActive"] }
@@ -20,19 +19,6 @@ export const Vendor = new EntitySchema({
         userId: {
             type: "uuid",
             unique: true
-        },
-        fullName: {
-            type: "varchar",
-            nullable: false 
-        },
-        email: {
-            type: "varchar",
-            unique: true,
-            nullable: false 
-        },
-        phoneNumber: {
-            type: "varchar",
-            nullable: false 
         },
         profilePictureUrl: {
             type: "varchar",

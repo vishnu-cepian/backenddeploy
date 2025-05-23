@@ -14,15 +14,16 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
     const vendorRepo = AppDataSource.getRepository(Vendor);
 
     let baseQuery = `
-            SELECT id,"fullName", "serviceType", "shopName", "shopType", city, "shopImageUrl", rating, "ratingCount",
-            ST_Distance(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)/1000 AS distance,
-            (0.6 * (rating/5.0)) +
-            (0.4 * (1 - LEAST(ST_Distance(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / ($3), 1.0))) AS hybrid_score
+            SELECT vendor.id, "user".name, vendor."serviceType", vendor."shopName", vendor."shopType", vendor.city, vendor."shopImageUrl", vendor.rating, vendor."ratingCount",
+            ST_Distance(vendor.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)/1000 AS distance,
+            (0.6 * (vendor.rating/5.0)) +
+            (0.4 * (1 - LEAST(ST_Distance(vendor.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / ($3), 1.0))) AS hybrid_score
             FROM vendor 
+            JOIN "user" ON vendor."userId" = "user".id
             WHERE 
-            location IS NOT NULL
-            AND "isActive" = true
-            AND "isVerified" = true
+            vendor.location IS NOT NULL
+            AND vendor."isActive" = true
+            AND vendor."isVerified" = true
         `
 
     let conditions = [];
@@ -36,18 +37,19 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
 
         case "rating":
             baseQuery = `
-                SELECT * FROM vendor
-                WHERE 
-                location IS NOT NULL
-                AND "isActive" = true
-                AND "isVerified" = true
+            SELECT vendor.id, "user".name, vendor."serviceType", vendor."shopName", vendor."shopType", vendor.city, vendor."shopImageUrl", vendor.rating, vendor."ratingCount"
+            FROM vendor
+            INNER JOIN "user" ON vendor."userId" = "user".id
+            WHERE vendor.location IS NOT NULL
+              AND vendor."isActive" = true
+              AND vendor."isVerified" = true
             `;
             orderClause = ` ORDER BY rating DESC`;
             params = [];
             break;
 
-        case "fullName":
-            conditions.push(`"fullName" ILIKE $4`);
+        case "name":
+            conditions.push(`"user".name ILIKE $4`);
             orderClause = "ORDER BY hybrid_score DESC, distance ASC";
             params.push(`%${searchValue}%`);
             break;
@@ -81,8 +83,9 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
 
 
 // --------------------------------------------SEARCH SERVICES ----------------------------------------------------------------------------------------------
-export const searchVendorsByRating = async (limit = 10, offset = 0) => {
+export const searchVendorsByRating = async (params) => {
     try {
+        const { limit = 10, offset = 0 } = params;
         const result = await searchResults(0, 0, 0, "rating", "", limit, offset);
         if(result.length !== 0) 
             return result;
@@ -112,14 +115,14 @@ export const searchVendorsByQuery = async (params) => {
 
         const vendorRepo = AppDataSource.getRepository(Vendor);
         
-        let vendors = await vendorRepo.find({       // Name wise search
-            where: {
-                fullName: ILike(`%${query}%`),      // ILIKE is case insensitive
-            },
-        });
+        let vendors = await vendorRepo                      // Name wise search
+            .createQueryBuilder("vendor")
+            .leftJoinAndSelect("user", "user", "vendor.userId = user.id")
+            .where("user.name ILIKE :query", { query: `%${query}%` })
+            .getMany();
 
         if(vendors.length !== 0) {
-            const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "fullName", query, limit, offset);
+            const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "name", query, limit, offset);
             return results;
         }
         else if(vendors.length === 0) {         // Shop name wise search
