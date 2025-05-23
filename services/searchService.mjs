@@ -14,7 +14,7 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
     const vendorRepo = AppDataSource.getRepository(Vendor);
 
     let baseQuery = `
-            SELECT *,
+            SELECT "fullName", "serviceType", "shopName", "shopType", city, "shopImageUrl", rating, "ratingCount",
             ST_Distance(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)/1000 AS distance,
             (0.6 * (rating/5.0)) +
             (0.4 * (1 - LEAST(ST_Distance(location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / ($3), 1.0))) AS hybrid_score
