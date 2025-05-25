@@ -1,7 +1,6 @@
 import { AppDataSource } from "../config/data-source.mjs";
-import { Vendor } from "../entities/Vendor.mjs";
+import { Vendors } from "../entities/Vendors.mjs";
 import { logger } from "../utils/logger-utils.mjs";
-import { sendError } from "../utils/core-utils.mjs";
 import { ILike } from "typeorm";
 
 // --------------------------------------------SEARCH HELPER FUNCTIONS----------------------------------------------------------------------------------------------
@@ -11,19 +10,19 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
     // USE POSTGIS EXTENSION
     // CREATE EXTENSION IF NOT EXISTS postgis;  (IN pgAdmin or any other tool)
 
-    const vendorRepo = AppDataSource.getRepository(Vendor);
+    const vendorRepo = AppDataSource.getRepository(Vendors);
 
     let baseQuery = `
-            SELECT vendor.id, "user".name, vendor."serviceType", vendor."shopName", vendor."shopType", vendor.city, vendor."shopImageUrl", vendor.rating, vendor."ratingCount",
-            ST_Distance(vendor.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)/1000 AS distance,
-            (0.6 * (vendor.rating/5.0)) +
-            (0.4 * (1 - LEAST(ST_Distance(vendor.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / ($3), 1.0))) AS hybrid_score
-            FROM vendor 
-            JOIN "user" ON vendor."userId" = "user".id
+            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors."shopImageUrl", vendors.rating, vendors."ratingCount",
+            ST_Distance(vendors.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)/1000 AS distance,
+            (0.6 * (vendors.rating/5.0)) +
+            (0.4 * (1 - LEAST(ST_Distance(vendors.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / ($3), 1.0))) AS hybrid_score
+            FROM vendors 
+            JOIN "user" ON vendors."userId" = "user".id
             WHERE 
-            vendor.location IS NOT NULL
-            AND vendor."isActive" = true
-            AND vendor."isVerified" = true
+            vendors.location IS NOT NULL
+            AND vendors."isActive" = true
+            AND vendors."isVerified" = true
         `
 
     let conditions = [];
@@ -37,12 +36,12 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
 
         case "rating":
             baseQuery = `
-            SELECT vendor.id, "user".name, vendor."serviceType", vendor."shopName", vendor."shopType", vendor.city, vendor."shopImageUrl", vendor.rating, vendor."ratingCount"
-            FROM vendor
-            INNER JOIN "user" ON vendor."userId" = "user".id
-            WHERE vendor.location IS NOT NULL
-              AND vendor."isActive" = true
-              AND vendor."isVerified" = true
+            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors."shopImageUrl", vendors.rating, vendors."ratingCount"
+            FROM vendors
+            INNER JOIN "user" ON vendors."userId" = "user".id
+            WHERE vendors.location IS NOT NULL
+              AND vendors."isActive" = true
+              AND vendors."isVerified" = true
             `;
             orderClause = ` ORDER BY rating DESC`;
             params = [];
@@ -92,7 +91,7 @@ export const searchVendorsByRating = async (params) => {
         return {"message": "no Vendors found"};
     } catch (err) {
         logger.error(err);
-        sendError(err);
+        throw err;
     }
 };
 
@@ -105,7 +104,7 @@ export const searchVendorsByRatingAndLocation = async (params) => {
         return {"message": "no Vendors found"};
     } catch (err) {
         logger.error(err);
-        sendError(err);
+        throw err;
     }
 };
 
@@ -113,11 +112,11 @@ export const searchVendorsByQuery = async (params) => {
     try {
         const { query, lat, lng, radiusKm, limit = 10, offset = 0 } = params;
 
-        const vendorRepo = AppDataSource.getRepository(Vendor);
+        const vendorRepo = AppDataSource.getRepository(Vendors);
         
         let vendors = await vendorRepo                      // Name wise search
-            .createQueryBuilder("vendor")
-            .leftJoinAndSelect("user", "user", "vendor.userId = user.id")
+            .createQueryBuilder("vendors")
+            .leftJoinAndSelect("user", "user", "vendors.userId = user.id")
             .where("user.name ILIKE :query", { query: `%${query}%` })
             .getMany();
 
@@ -150,6 +149,6 @@ export const searchVendorsByQuery = async (params) => {
         return {"message": "No vendors found"};
     } catch (err) {
         logger.error(err);
-        sendError(err);
+        throw err;
     }
 };  

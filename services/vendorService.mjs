@@ -1,12 +1,12 @@
 import { logger } from "../utils/logger-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
 import { User } from "../entities/User.mjs";
-import { Vendor } from "../entities/Vendor.mjs";
+import { Vendors } from "../entities/Vendors.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
 
 
 const userRepo = AppDataSource.getRepository(User);
-const vendorRepo = AppDataSource.getRepository(Vendor);
+const vendorRepo = AppDataSource.getRepository(Vendors);
 
 export const checkProfile = async (data) => {
   try {
@@ -38,7 +38,7 @@ export const checkProfile = async (data) => {
 
   } catch (error) {
     logger.error(error);
-    sendError(error);
+    throw error;
   }
 };
 
@@ -95,7 +95,7 @@ export const completeProfile = async (data) => {
     };
   } catch (error) {
     logger.error(error);
-    sendError(error);
+    throw error;
   }
 };
 
@@ -118,6 +118,6 @@ export const getVendorDetails = async (data) => {
     };
   } catch (error) {
     logger.error(error);
-    sendError(error);
+    throw error;
   }
 }

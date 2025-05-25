@@ -1,10 +1,14 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { User } from '../entities/User.mjs';
-import { Vendor } from '../entities/Vendor.mjs';
+import { Vendors } from '../entities/Vendors.mjs';
 import { OtpPhone } from '../entities/OtpPhone.mjs';
 import { OtpEmail } from '../entities/OtpEmail.mjs';
 import { Customers } from '../entities/Customers.mjs';
+import { Orders } from '../entities/Orders.mjs';
+import { OrderItems } from '../entities/OrderItems.mjs';
+import { OrderVendors } from '../entities/OrderVendors.mjs';
+import { OrderItemMeasurementByVendor } from '../entities/OrderItemMeasurementByVendor.mjs';
 import 'dotenv/config'
 
 export const AppDataSource = new DataSource({
@@ -17,7 +21,7 @@ export const AppDataSource = new DataSource({
     // database: process.env.DB_DATABASE,
     schema: "public",
     synchronize: true,
-    entities: [User, Vendor, OtpPhone, OtpEmail, Customers],
+    entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, OrderVendors, OrderItemMeasurementByVendor],
 
 //     ssl: true,
 //     extra: {

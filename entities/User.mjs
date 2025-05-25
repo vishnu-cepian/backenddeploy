@@ -1,5 +1,5 @@
 import { EntitySchema } from "typeorm";
-import { Vendor } from "./Vendor.mjs";
+
 
 export const User = new EntitySchema({
     name: "User",

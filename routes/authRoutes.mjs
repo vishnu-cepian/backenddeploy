@@ -1,36 +1,40 @@
 import { Router } from "express";
 import * as authController from "../controllers/authController.mjs";
 import { verifyAccessToken } from "../middlewares/auth.mjs";
+import { controllerWrapper } from "../controllers/index.mjs";
 
 const router = Router();
 
 // REFER authContoller.mjs TO DETERMINE WHICH CALLS NEED AUTHORIZATION TOKEN
 
-router.post("/signup",authController.signup);  //response will be in the format of {message: "success", status: true, data: {}}
+const logRequest = false;       // Making it true leads to credentials being logged in the console
+const logResponse = false;
 
-router.post("/login",authController.loginWithEmail);
-router.post("/google-signin",authController.loginWithGoogle);
+router.post("/signup",controllerWrapper(authController.signup, { logRequest, logResponse }));  //response will be in the format of {message: "success", status: true, data: {}}
 
-router.post("/checkEmail",authController.checkEmail);
+router.post("/login",controllerWrapper(authController.loginWithEmail, { logRequest, logResponse }));
+router.post("/google-signin",controllerWrapper(authController.loginWithGoogle, { logRequest, logResponse }));
 
-router.post("/sendEmailOtp",authController.sendEmailOtp);
-router.post("/verifyEmailOtp",authController.verifyEmailOtp);
-router.post("/sendPhoneOtp",verifyAccessToken,authController.sendPhoneOtp);            //vendor otp route
-router.post("/verifyPhoneOtp",verifyAccessToken,authController.verifyPhoneOtp);        //vendor otp route
+router.post("/checkEmail",controllerWrapper(authController.checkEmail, { logRequest, logResponse }));
+
+router.post("/sendEmailOtp",controllerWrapper(authController.sendEmailOtp, { logRequest, logResponse }));
+router.post("/verifyEmailOtp",controllerWrapper(authController.verifyEmailOtp, { logRequest, logResponse }));
+router.post("/sendPhoneOtp",verifyAccessToken,controllerWrapper(authController.sendPhoneOtp, { logRequest, logResponse }));            //vendor otp route
+router.post("/verifyPhoneOtp",verifyAccessToken,controllerWrapper(authController.verifyPhoneOtp, { logRequest, logResponse }));        //vendor otp route
 
 
-router.post("/forgotPassword",authController.forgotPassword);
-router.post("/resetPassword",authController.resetPassword);
+router.post("/forgotPassword",controllerWrapper(authController.forgotPassword, { logRequest, logResponse }));
+router.post("/resetPassword",controllerWrapper(authController.resetPassword, { logRequest, logResponse }));     // use PUT request
 
-// router.post("/updatePassword",authController.updatePassword);
-// router.post("/updateProfile",authController.updateProfile);
-// router.post("/updateProfilePic",authController.updateProfilePic);
-// router.post("/updateUser",authController.updateUser);
-// router.post("/deleteUser",authController.deleteUser);
-// router.post("/logout",authController.logout);
-router.post("/refreshToken",authController.refreshToken);   // If refresh token expired. redirect user to login
-// router.post("/verifyToken",authController.verifyToken);
-// router.post("/verifyAccessToken",authController.verifyAccessToken);
-// router.post("/verifyRefreshToken",authController.verifyRefreshToken);
-router.post("/logout",authController.logout);   //REFRESH TOKEN IS NEEDED FOR LOGOUT
+// router.post("/updatePassword",controllerWrapper(authController.updatePassword, { logRequest, logResponse }));
+// router.post("/updateProfile",controllerWrapper(authController.updateProfile, { logRequest, logResponse }));
+// router.post("/updateProfilePic",controllerWrapper(authController.updateProfilePic, { logRequest, logResponse }));
+// router.post("/updateUser",controllerWrapper(authController.updateUser, { logRequest, logResponse }));
+// router.post("/deleteUser",controllerWrapper(authController.deleteUser, { logRequest, logResponse }));
+// router.post("/logout",controllerWrapper(authController.logout, { logRequest, logResponse }));
+router.post("/refreshToken",controllerWrapper(authController.refreshToken, { logRequest, logResponse }));   // If refresh token expired. redirect user to login
+// router.post("/verifyToken",controllerWrapper(authController.verifyToken, { logRequest, logResponse }));
+// router.post("/verifyAccessToken",controllerWrapper(authController.verifyAccessToken, { logRequest, logResponse }));
+// router.post("/verifyRefreshToken",controllerWrapper(authController.verifyRefreshToken, { logRequest, logResponse }));
+router.post("/logout",controllerWrapper(authController.logout, { logRequest, logResponse }));   //REFRESH TOKEN IS NEEDED FOR LOGOUT
 export default router;

@@ -10,6 +10,7 @@ import { logger } from "./utils/logger-utils.mjs";
 import { formatResponse } from "./utils/core-utils.mjs";
 import vendorRoutes from "./routes/vendorRoutes.mjs";
 import searchRoutes from "./routes/searchRoutes.mjs";
+import orderRoutes from "./routes/orderRoutes.mjs";
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ app.use(cors(corsOptions));
 app.use("/api/auth", authRoutes);
 app.use("/api/vendor", vendorRoutes);
 app.use("/api/search", searchRoutes);
+app.use("/api/order", orderRoutes);
 
 app.use((err, req, res, next) => {
   logger.error(err.stack);
