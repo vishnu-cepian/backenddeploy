@@ -45,3 +45,14 @@ export const getOrderById = async (req, res, next) => {
         next(error);
     }
 };
+
+export const deleteOrder = async (req, res, next) => {
+    try {
+        const data = { orderId: req.params.orderId };
+        const response = await orderService.deleteOrder(data);
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};

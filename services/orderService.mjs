@@ -67,7 +67,13 @@ export const getOrders = async (data) => {
     try {
         const { userId } = data;
         const customer = await customerRepo.findOne({ where: { userId: userId } });
+        if (!customer) {
+            throw sendError("Customer not found");
+        }
         const orders = await orderRepo.find({ where: { customerId: customer.id } });
+        if (!orders) {
+            throw sendError("Orders not found");
+        }
         return orders;
     } catch (err) {
         logger.error(err);
@@ -79,7 +85,27 @@ export const getOrderById = async (data) => {
     try {
         const { orderId } = data;
         const orderItems = await orderItemRepo.find({ where: { orderId: orderId } });
+        if (!orderItems) {
+            throw sendError("Order items not found");
+        }
         return orderItems;
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const deleteOrder = async (data) => {
+    try {
+        const { orderId } = data;
+        const order = await orderRepo.findOne({ where: { id: orderId } });
+        if (!order) {
+            throw sendError("Order not found");
+        }
+        await orderRepo.remove(order);
+        return {
+            message: "Order deleted successfully"
+        }
     } catch (err) {
         logger.error(err);
         throw err;
