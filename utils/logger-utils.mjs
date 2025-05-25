@@ -40,6 +40,6 @@ if (["production", "staging"].includes(process.env.NODE_ENV || "")) {
     format: formatter(),
     level: "warn",
   });
-
+  logger.clear();
   logger.add(prodConfig);
 }
