@@ -24,8 +24,8 @@ export const Orders = new EntitySchema({
         },
         orderStatus: {
             type: "varchar",
-            enum: ["pending", "accepted", "in_progress", "completed", "cancelled"],
-            default: "pending",
+            enum: ["PENDING", "ACCEPTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
+            default: "PENDING",
             nullable: false
         },
         createdAt: {

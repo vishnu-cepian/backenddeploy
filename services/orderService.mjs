@@ -7,6 +7,7 @@ import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { OrderItemMeasurementByVendor } from "../entities/OrderItemMeasurementByVendor.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
+import { In } from "typeorm";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderItemRepo = AppDataSource.getRepository(OrderItems);
@@ -109,5 +110,244 @@ export const deleteOrder = async (data) => {
     } catch (err) {
         logger.error(err);
         throw err;
+    }
+}
+
+export const sendOrderToVendor = async (data) => {
+    try {
+        const { orderId, customerId, vendorIds } = data;
+
+        // Validating Order existance and status
+
+        const order = await orderRepo.findOne({ where: { id: orderId, customerId: customerId } });
+        if (!order) {
+            throw sendError("Order not found or doesn't belong to the customer");
+        }
+
+        if (order.orderStatus !== "PENDING") {
+            throw sendError("Order cannot be sent. Status is not valid");
+        }
+
+        // Validating Vendor ids
+
+        if(!Array.isArray(vendorIds) || vendorIds.length === 0) {
+            throw sendError("Vendor ids are required");
+        }
+
+        if (vendorIds.length > 10) {
+            throw sendError("Vendor ids cannot be greater than 10");
+        }
+
+        const uniqueVendorIds = [...new Set(vendorIds)];
+
+        // Validating Vendor existance and status
+
+        const vendors = await vendorRepo.find({
+            where: {
+                id: In(uniqueVendorIds),
+                isActive: true,
+                isVerified: true
+            }
+        });
+
+        if (vendors.length !== uniqueVendorIds.length) {
+            throw sendError("One or more vendors are invalid.");
+        }
+
+       // checking already assigned vendors
+
+       const existingEntries = await orderVendorRepo.find({ where: { orderId: orderId } });
+      
+       const alreadySentVendorIds = existingEntries.map((entry) => entry.vendorId);
+       const newVendorIds = uniqueVendorIds.filter((id) => !alreadySentVendorIds.includes(id));
+   
+       if (alreadySentVendorIds.length + newVendorIds.length > 10) {
+        throw sendError(`Order already sent orders to ${alreadySentVendorIds.length} vendor(s) + ${newVendorIds.length} new vendor(s) exceeds maximum limit of 10`);
+       }
+
+       if (newVendorIds.length === 0) {
+        throw sendError("All vendors are already assigned to this order");
+       }
+
+       // creating new order vendors
+
+        const newEntries = newVendorIds.map((vendorId) => {
+        const entry = orderVendorRepo.create({
+            orderId: orderId,
+            vendorId: vendorId,
+        });
+
+        return entry;
+        });
+
+        await orderVendorRepo.save(newEntries);
+
+        /*
+        //
+        //
+        //
+        //  send notification to vendors
+        //
+        //
+        //
+        //
+        //
+        //
+        */
+
+        return {
+            message: `Order sent to ${newVendorIds.length} vendor(s) successfully.`,
+            sentVendorIds: newVendorIds
+        }
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const viewOrderVendorStatus = async (data) => {
+    try {
+        const { orderId } = data;
+        // Find order by ID
+        const order = await orderRepo.findOne({ where: { id: orderId } });
+        if (!order) {
+            throw sendError("Order not found");
+        }
+        
+        // Get all vendors associated with this order
+        const orderVendors = await orderVendorRepo.find({ where: { orderId: orderId } });
+        
+        for (const vendor of orderVendors) {
+            if (vendor.status === "PENDING") {
+                // Calculate hours elapsed since vendor was assigned (adjusted for timezone)
+                const hoursElapsed = (new Date() - new Date(vendor.createdAt)) / (1000 * 60 * 60) - 5.5;
+                const hour = Math.floor(hoursElapsed);
+                const minute = Math.floor((hoursElapsed - hour) * 60);
+             
+                console.log(hour+" hr "+ minute +" min");
+                
+                // If more than 24 hours have passed, mark vendor status as EXPIRED
+                if (hour >= 24) {
+                    vendor.status = "EXPIRED";
+                    await orderVendorRepo.save(vendor);
+                }
+            }
+        }
+        
+        if (!orderVendors) {
+            throw sendError("Order vendors not found");
+        }
+
+        return orderVendors;
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const viewAcceptedOrderDetails = async (data) => {
+    try {
+        const { orderId, vendorId } = data;
+        const order = await orderRepo.findOne({ where: { id: orderId } });
+        if (!order) {
+            throw sendError("Order not found");
+        }
+
+        const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
+        if (!orderVendor) {
+            throw sendError("Order vendor not found");
+        }
+
+        if (orderVendor.status !== "ACCEPTED") {
+            throw sendError("Order vendor status is not ACCEPTED");
+        }
+        
+        return orderVendor;
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const viewReceivedOrderDetails = async (data) => {
+    try {
+        const { vendorId } = data;
+        const orderVendor = await orderVendorRepo.find({ where: { vendorId: vendorId } });
+        if (!orderVendor) {
+            throw sendError("Order vendor not found");
+        }
+
+        return orderVendor;
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const vendorOrderResponse = async (data) => {
+    try {
+        const { orderId, vendorId, status, quotedPrice, quotedDays } = data;
+
+        const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
+        if (!orderVendor) {
+            throw sendError("Order vendor not found");
+        }
+
+        // Check if order is in PENDING status and handle expiry
+        if (orderVendor.status === "PENDING") {
+            // Calculate hours elapsed since vendor was assigned (adjusted for timezone)
+            const hoursElapsed = (new Date() - new Date(orderVendor.createdAt)) / (1000 * 60 * 60) - 5.5;
+            const hour = Math.floor(hoursElapsed);
+            const minute = Math.floor((hoursElapsed - hour) * 60);
+         
+            console.log(hour+" hr "+ minute +" min");
+            
+            // If more than 24 hours have passed, mark vendor status as EXPIRED
+            if (hour >= 24) {
+                orderVendor.status = "EXPIRED";
+                await orderVendorRepo.save(orderVendor);
+                throw sendError("Response window expired. Order automatically marked as expired.")
+            }
+        }
+
+        // Verify order is still in PENDING status
+        if (orderVendor.status !== "PENDING") {
+            throw sendError(`Order is in ${orderVendor.status} status`);
+        }
+
+        // Handle vendor response based on status
+        if (status === "ACCEPTED" && orderVendor.status === "PENDING") {
+            if (!quotedPrice || !quotedDays) {
+                throw sendError("Quoted price and quoted days are required");
+            }
+
+            // Update order status to ACCEPTED and save quote details 
+            orderVendor.status = "ACCEPTED";
+            orderVendor.quotedPrice = quotedPrice;
+            orderVendor.quotedDays = quotedDays;
+            orderVendor.lockedAt = new Date();
+            await orderVendorRepo.save(orderVendor);
+        } else if (status === "REJECTED" && orderVendor.status === "PENDING") {
+            // Update order status to REJECTED
+            orderVendor.status = "REJECTED";
+            await orderVendorRepo.save(orderVendor);
+        } else {
+            throw sendError("Invalid Action: choose between ACCEPTED or REJECTED");
+        }
+        /*
+        //
+        //
+        //
+        //  send notification to customer
+        //
+        //
+        */
+        return {
+            message: "Order vendor response set successfully",
+        }
+
+    } catch (error) {
+        logger.error(error);
+        throw error;
     }
 }
