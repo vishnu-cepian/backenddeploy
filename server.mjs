@@ -2,6 +2,7 @@ import express from "express";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import cors from "cors";
+import admin from "firebase-admin";
 // Import routes
 import { AppDataSource } from "./config/data-source.mjs";
 import authRoutes from "./routes/authRoutes.mjs";
@@ -13,15 +14,24 @@ import searchRoutes from "./routes/searchRoutes.mjs";
 import orderRoutes from "./routes/orderRoutes.mjs";
 import s3Routes from "./routes/s3routes.mjs";
 
-import admin from "firebase-admin";
-import serviceAccount from "./serviceaccountkey.json" assert { type: "json" };
+dotenv.config();
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
+  credential: admin.credential.cert({
+    "type": process.env.FIREBASE_TYPE,
+    "project_id": process.env.FIREBASE_PROJECT_ID,
+    "private_key_id": process.env.FIREBASE_PRIVATE_KEY_ID,
+    "private_key": process.env.FIREBASE_PRIVATE_KEY,
+    "client_email": process.env.FIREBASE_CLIENT_EMAIL,
+    "client_id": process.env.FIREBASE_CLIENT_ID,
+    "auth_uri": process.env.FIREBASE_AUTH_URL,
+    "token_uri": process.env.FIREBASE_TOKEN_URL,
+    "auth_provider_x509_cert_url": process.env.FIREBASE_AUTH_PROVIDER_X509_CERT_URL,
+    "client_x509_cert_url": process.env.FIREBASE_CLIENT_X509_CERT_URL,
+    "universe_domain": process.env.FIREBASE_UNIVERSE_DOMAIN
+
+}),
 });
-
-
-dotenv.config();
 
 const app = express();
 
