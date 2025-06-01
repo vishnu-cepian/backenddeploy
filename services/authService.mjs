@@ -193,7 +193,7 @@ export const loginWithEmail = async (data) => {
                 INTEGRATE PUSHTOKEN IN THE USER TABLE
 
 
-
+                IF LOGIN == "SUCCESS" CALL SAVE-TOKEN FROM PUSHNOTIFICATION ROUTE
 
 
 
@@ -309,7 +309,7 @@ export const loginWithGoogle = async (data) => {
 
                INTEGRATE PUSHTOKEN IN THE USER TABLE
 
-
+            IF LOGIN == "SUCCESS" CALL SAVE-TOKEN FROM PUSHNOTIFICATION ROUTE
 
 
 

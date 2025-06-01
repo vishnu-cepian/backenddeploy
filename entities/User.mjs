@@ -36,6 +36,10 @@ export const User = new EntitySchema({
             type: "varchar",
             nullable: true
         },
+        pushToken: {
+            type: "varchar",
+            nullable: true      // make it false in prod
+        },
         createdAt: {
             type: "timestamp",
             createDate: true
