@@ -30,7 +30,7 @@ export const Orders = new EntitySchema({
         },
         createdAt: {
             type: "timestamp",
-            default: () => "CURRENT_TIMESTAMP"
+            createDate: true
         },
     },
     relations: {

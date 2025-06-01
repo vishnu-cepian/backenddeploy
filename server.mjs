@@ -11,6 +11,15 @@ import { formatResponse } from "./utils/core-utils.mjs";
 import vendorRoutes from "./routes/vendorRoutes.mjs";
 import searchRoutes from "./routes/searchRoutes.mjs";
 import orderRoutes from "./routes/orderRoutes.mjs";
+import s3Routes from "./routes/s3routes.mjs";
+
+import admin from "firebase-admin";
+import serviceAccount from "./serviceaccountkey.json" assert { type: "json" };
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
 
 dotenv.config();
 
@@ -33,6 +42,29 @@ app.use("/api/auth", authRoutes);
 app.use("/api/vendor", vendorRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/order", orderRoutes);
+app.use("/api/s3", s3Routes);
+
+app.post("/api/send-notification", async (req, res) => {
+  try {
+    const { token, title, message } = req.body;
+    if (!token || !title || !message) {
+      throw new Error(formatError("Token, title, and message are required"));
+    }
+    const payload = {
+      notification: {
+      title,
+      body: message,
+    },
+    token,
+  };
+    const response = await admin.messaging().send(payload);
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json(formatResponse(MESSAGE.INTERNAL_SERVER_ERROR, false, error));
+  }
+});
+
 
 app.use((err, req, res, next) => {
   logger.error(err.stack);

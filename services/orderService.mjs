@@ -7,6 +7,7 @@ import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { OrderItemMeasurementByVendor } from "../entities/OrderItemMeasurementByVendor.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
+import { Payments } from "../entities/Payments.mjs";
 import { In } from "typeorm";
 
 const orderRepo = AppDataSource.getRepository(Orders);
@@ -15,6 +16,7 @@ const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
 const orderItemMeasurementByVendorRepo = AppDataSource.getRepository(OrderItemMeasurementByVendor);
 const customerRepo = AppDataSource.getRepository(Customers);
 const vendorRepo = AppDataSource.getRepository(Vendors);
+const paymentRepo = AppDataSource.getRepository(Payments);
 
 export const createOrder = async (data) => {
     try {
@@ -224,7 +226,7 @@ export const viewOrderVendorStatus = async (data) => {
                 const hour = Math.floor(hoursElapsed);
                 const minute = Math.floor((hoursElapsed - hour) * 60);
              
-                console.log(hour+" hr "+ minute +" min");
+                // console.log(hour+" hr "+ minute +" min");
                 
                 // If more than 24 hours have passed, mark vendor status as EXPIRED
                 if (hour >= 24) {
@@ -300,7 +302,7 @@ export const vendorOrderResponse = async (data) => {
             const hour = Math.floor(hoursElapsed);
             const minute = Math.floor((hoursElapsed - hour) * 60);
          
-            console.log(hour+" hr "+ minute +" min");
+            // console.log(hour+" hr "+ minute +" min");
             
             // If more than 24 hours have passed, mark vendor status as EXPIRED
             if (hour >= 24) {
@@ -346,6 +348,118 @@ export const vendorOrderResponse = async (data) => {
             message: "Order vendor response set successfully",
         }
 
+    } catch (error) {
+        logger.error(error);
+        throw error;
+    }
+}
+
+export const initiateVendorPayment = async (data) => {
+    try {
+        const {customerId, orderId, vendorId } = data;
+
+        const order = await orderRepo.findOne({ where: { id: orderId, customerId: customerId } });
+        if (!order) {
+            throw sendError("Order not found or doesn't belong to the customer");
+        }
+
+        if (order.orderStatus !== "PENDING") {
+            throw sendError("Order is not in PENDING status");
+        }
+
+        const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
+        if (!orderVendor) {
+            throw sendError("No accepted quote found for this vendor");
+        }
+
+        if (orderVendor.status !== "ACCEPTED") {
+            throw sendError("Vendor quote is not accepted");
+        }
+
+        // check for existing payment in payments table
+
+        const existingPayment = await paymentRepo.findOne({ where: { orderId: orderId, vendorId: vendorId, customerId: customerId } });
+        if ( existingPayment.status === "PENDING" || existingPayment.status === "PAID") {
+            throw sendError("Payment already exists");
+        }
+
+        // create new payment
+
+        const payment = paymentRepo.create({
+            orderId: orderId,
+            vendorId: vendorId,
+            customerId: customerId,
+            amount: orderVendor.quotedPrice,
+            status: "PENDING"
+        });
+
+        await paymentRepo.save(payment);
+
+        return {
+            message: "Payment initiated successfully",
+            paymentId: payment.id,
+            amount: orderVendor.quotedPrice
+        }
+
+    } catch (error) {
+        logger.error(error);
+        throw error;
+    }
+}
+
+export const confirmVendorPayment = async (data) => {
+    try {
+        const { paymentId } = data;
+
+        const payment = await paymentRepo.findOne({ where: { id: paymentId } });
+        if (!payment || payment.status === "PAID") {
+            throw sendError("Payment not found or already confirmed");
+        }
+
+        payment.status = "PAID";
+        payment.paidAt = new Date();
+        await paymentRepo.save(payment);
+
+        const orderVendor = await orderVendorRepo.findOne({ where: { orderId: payment.orderId, vendorId: payment.vendorId } });
+        if (!orderVendor) {
+            throw sendError("Order vendor not found");
+        }
+
+        const order = await orderRepo.findOne({ where: { id: payment.orderId } });
+        if (!order) {
+            throw sendError("Order not found");
+        }
+        // UPDATE ORDER STATUS TO IN-PROGRESS
+        order.orderStatus = "IN-PROGRESS";
+        await orderRepo.save(order);
+
+        // UPDATE ORDER VENDOR STATUS TO FINALIZED
+        orderVendor.status = "FINALIZED";
+        await orderVendorRepo.save(orderVendor);
+
+        // FREEZE OTHER VENDOR QUOTES
+
+        const otherVendors = await orderVendorRepo.find({ where: { orderId: payment.orderId, vendorId: Not(payment.vendorId), status: "ACCEPTED" } });
+        if (otherVendors.length > 0) {
+            for (const vendor of otherVendors) {
+                vendor.status = "FROZEN";
+                await orderVendorRepo.save(vendor);
+            }
+        }
+
+        /*
+        //
+        //
+        //  unlock measurements table
+        //  send notification to customer
+        //
+        //
+        */
+        return {
+            message: "Payment confirmed successfully",
+            paymentId: payment.id,
+            amount: payment.amount
+        }
     } catch (error) {
         logger.error(error);
         throw error;

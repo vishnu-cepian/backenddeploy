@@ -19,11 +19,11 @@ export const Customers = new EntitySchema({
         },
         createdAt: {
             type: "timestamp",
-            default: () => "CURRENT_TIMESTAMP"
+            createDate: true
         },
         updatedAt: {
             type: "timestamp",
-            default: () => "CURRENT_TIMESTAMP"  
+            updateDate: true
         }
     },
     relations: {

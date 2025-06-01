@@ -5,27 +5,22 @@ export const OtpPhone = new EntitySchema({
     tableName: "otp_phone",
     columns: {
         id: {
-            primary: true,
             type: "uuid",
-            generated: "uuid"
+            primary: true,
+            generated: "uuid",
         },
         phone: {
-            type: String,
-            unique: true
+            type: "varchar",
+            unique: true,
+            nullable: false,
         },
-        verificationSid: {
-            type: String
-        },
-        attempts: {
-            type: Number,
-            default: 0
+        otp: {
+            type: "varchar",
+            nullable: false,
         },
         expiresAt: {
-            type: Date
-        },
-        createdAt: {
             type: "timestamp",
-            createDate: true
-        }
-    }
+            nullable: false,
+        },
+    },
 });

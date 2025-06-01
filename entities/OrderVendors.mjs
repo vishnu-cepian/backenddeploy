@@ -19,7 +19,7 @@ export const OrderVendors = new EntitySchema({
         },
         status: {
             type: "varchar",
-            enum: ["PENDING", "ACCEPTED", "REJECTED", "EXPIRED", "FROZEN"],
+            enum: ["PENDING", "ACCEPTED", "REJECTED", "EXPIRED", "FINALIZED", "FROZEN"],
             default: "PENDING",
             nullable: false
         },
@@ -41,11 +41,11 @@ export const OrderVendors = new EntitySchema({
         },
         createdAt: {
             type: "timestamp",
-            default: () => "CURRENT_TIMESTAMP"
+            createDate: true
         },
         updatedAt: {
             type: "timestamp",
-            default: () => "CURRENT_TIMESTAMP"
+            updateDate: true
         }
     },
     relations: {

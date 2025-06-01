@@ -22,4 +22,9 @@ router.get("/viewAcceptedOrderDetails/:orderId/:vendorId", verifyAccessToken, co
 router.get("/viewReceivedOrderDetails/:vendorId", verifyAccessToken, controllerWrapper(orderController.viewReceivedOrderDetails, { logRequest: true, logResponse: true }));
 router.post("/vendorOrderResponse/:orderId/:vendorId", verifyAccessToken, controllerWrapper(orderController.vendorOrderResponse, { logRequest: true, logResponse: true }));
 
+// PAYMENT ROUTES
+
+router.post("/initiateVendorPayment/:orderId/:vendorId/:customerId", verifyAccessToken, controllerWrapper(orderController.initiateVendorPayment, { logRequest: true, logResponse: true }));
+router.post("/confirmVendorPayment/:paymentId", verifyAccessToken, controllerWrapper(orderController.confirmVendorPayment, { logRequest: true, logResponse: true }));
+
 export default router;

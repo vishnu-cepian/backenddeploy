@@ -131,3 +131,31 @@ export const viewReceivedOrderDetails = async (req, res, next) => {
         next(error);
     }
 };
+
+export const initiateVendorPayment = async (req, res, next) => {
+    try {
+        const data = { orderId: req.params.orderId, vendorId: req.params.vendorId, customerId: req.params.customerId };
+        const response = await orderService.initiateVendorPayment(data);
+        if (!response) {
+            throw new Error(formatError("Payment not initiated", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const confirmVendorPayment = async (req, res, next) => {
+    try {
+        const data = { paymentId: req.params.paymentId };
+        const response = await orderService.confirmVendorPayment(data);
+        if (!response) {
+            throw new Error(formatError("Payment not confirmed", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
