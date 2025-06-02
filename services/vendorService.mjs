@@ -3,10 +3,13 @@ import { sendError } from "../utils/core-utils.mjs";
 import { User } from "../entities/User.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
-
+import { VendorAudit } from "../entities/vendorAudit.mjs";
+import { OtpPhone } from "../entities/OtpPhone.mjs";
 
 const userRepo = AppDataSource.getRepository(User);
 const vendorRepo = AppDataSource.getRepository(Vendors);
+const vendorAuditRepo = AppDataSource.getRepository(VendorAudit);
+
 
 export const checkProfile = async (data) => {
   try {
@@ -42,9 +45,10 @@ export const checkProfile = async (data) => {
   }
 };
 
-export const completeProfile = async (data) => {
+export const completeProfile = async (data, deviceInfo) => {
   try {
-    const {userId, latitude, longitude, ...profileData} = data
+    const {userId, phone, otp, latitude, longitude, ...profileData} = data
+    const { ip, ...deviceData } = deviceInfo;
 
     const user = await userRepo.findOne({
       where: { id: userId },
@@ -67,6 +71,37 @@ export const completeProfile = async (data) => {
         exists: true,
         message: "Vendor profile already exists",
       };
+    }
+
+    const otpPhoneRepository = AppDataSource.getRepository(OtpPhone);
+    const otpRecord = await otpPhoneRepository.findOne({ where: { phone } });
+    if (!otpRecord) {
+        throw sendError('OTP not found',400);
+    }
+
+    if (otpRecord.otp !== otp) {
+        throw sendError('Invalid OTP',400);
+    }
+
+    if (new Date() > otpRecord.expiresAt) {
+        throw sendError('OTP expired',400);
+    }
+
+    if(otpRecord.otp === otp) {
+        await otpPhoneRepository.delete({ phone });
+    }
+
+    const vendorAudit = vendorAuditRepo.create({
+      vendorId: userId,
+      otpVerifiedAt: new Date(),
+      toc: true,
+      ip: ip,
+      deviceInfo: deviceData,
+    });
+    await vendorAuditRepo.save(vendorAudit);
+
+    if (!vendorAudit) {
+      throw sendError('Vendor audit creation failed',400);
     }
 
     const newVendor = vendorRepo.create({
