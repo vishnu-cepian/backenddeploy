@@ -8,6 +8,9 @@ import { Not, IsNull } from "typeorm";
 export const savePushToken = async (data) => {
     try {
       const { token, userId } = data;
+      if(!token) {
+        throw sendError("pushToken required");
+      }
       const userRepository = AppDataSource.getRepository(User);
       const user = await userRepository.findOne({
             where: {

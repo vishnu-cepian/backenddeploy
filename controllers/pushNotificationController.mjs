@@ -5,7 +5,11 @@ import * as pushService from "../services/pushService.mjs";
 
 export const savePushToken = async (req, res, next) => {
     try {
-        const data = req.body;
+        const data = {
+            token : req.body.token,
+            userId : req.user.id
+        }
+        
         const response = await pushService.savePushToken(data);
         if (!response) {
             throw new Error(formatError("Error in response",response));
