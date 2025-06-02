@@ -10,7 +10,7 @@ const router = Router();
 const logRequest = false;       // Making it true leads to credentials being logged in the console
 const logResponse = false;
 
-router.post("/signup",controllerWrapper(authController.signup, { logRequest, logResponse }));  //response will be in the format of {message: "success", status: true, data: {}}
+router.post("/signup",verifyAccessToken,controllerWrapper(authController.signup, { logRequest, logResponse }));  //response will be in the format of {message: "success", status: true, data: {}}
 
 router.post("/login",controllerWrapper(authController.loginWithEmail, { logRequest, logResponse }));
 router.post("/google-signin",controllerWrapper(authController.loginWithGoogle, { logRequest, logResponse }));

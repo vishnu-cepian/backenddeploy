@@ -21,9 +21,19 @@ export const savePushToken = async (req, res, next) => {
     }
 }
 
+export const getUserFcmToken = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const response = await pushService.getUserFcmToken(userId);
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+}
+
 export const sendNotification = async (req, res, next) => {
     try {
-        const { token, title, message } = req.body;
         if (!token || !title || !message) {
             throw new Error(formatError("Token, title, and message are required"));
           }

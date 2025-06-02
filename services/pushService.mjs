@@ -29,6 +29,22 @@ export const savePushToken = async (data) => {
     }
 }
 
+export const getUserFcmToken = async (userId) => {
+    try {
+        
+        const userRepository = AppDataSource.getRepository(User);
+        const user = await userRepository.findOne({
+            where: {
+                id: userId
+            }
+        });
+        return user.pushToken;
+    } catch (error) {
+        logger.error(error);
+        throw error;
+    }
+}
+
 export const sendNotifciation =  async (token, title, message) => {
     try {
       const payload = {
