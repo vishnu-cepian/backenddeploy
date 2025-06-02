@@ -103,13 +103,13 @@ export const signup = async (data) => {
         if (data.authorization === process.env.SIGNUP_TOKEN) {
             const { email, name, password, role, phoneNumber } = data;
             if (!email || !name || !password || !role || !phoneNumber) {
-                throw sendError('Email, name, password, role, and phoneNumber are required');
+                throw sendError('Email, name, password, role, and phoneNumber are required', 400);
             }
             // // Check if user already exists
             const userRepository = AppDataSource.getRepository(User);
             const existingUser = await userRepository.findOne({ where: { email } });
             if (existingUser) {
-                throw sendError('User already exists with this email');
+                throw sendError('User already exists with this email',400);
             }
             
             const hashedPassword = await hashPassword(password);
@@ -161,7 +161,7 @@ export const loginWithEmail = async (data) => {
             const {email, password} = data;
         
             if (!email || !password) {
-                throw sendError('Email and password are required');
+                throw sendError('Email and password are required',400);
             }
 
             const userRepository = AppDataSource.getRepository(User);
@@ -173,7 +173,7 @@ export const loginWithEmail = async (data) => {
             const isPasswordValid = await comparePassword(password, user.password);
             if (!isPasswordValid) {
                 //throw sendError('Invalid password', 401, { email });  can use data to send error
-                throw sendError('Invalid password');
+                throw sendError('Invalid password',401);
             }
 
             // Generate JWT token
@@ -229,19 +229,19 @@ export const checkEmail = async (data) => {
             const { email } = data;
         
             if (!email) {
-                throw sendError('Email is required');
+                throw sendError('Email is required',400);
             }
 
             // Check if user already exists
             const userRepository = AppDataSource.getRepository(User);
             const existingUser = await userRepository.findOne({ where: { email } });
             if (!existingUser) {
-              throw sendError('NO USER FOUND',404);
+                throw sendError('NO USER FOUND',404);
             }
 
             return {
-                message: "USER EXISTS"
-                
+                message: "USER EXISTS",
+                status: true
             }
             
         }
@@ -276,7 +276,7 @@ export const loginWithGoogle = async (data) => {
 
         const now = Math.floor(Date.now() / 1000);
         if (payload.exp < now) {
-            throw sendError('ID token has expired');
+            throw sendError('ID token has expired',401);
         }
 
         const { email } = payload;
@@ -336,7 +336,7 @@ export const loginWithGoogle = async (data) => {
 export const sendEmailOtp = async (data) => {
         /*
       input:- email
-      ouput:- message
+      ouput:- message, statusCode
 
         - A 6 digit OTP will be generated and sent to the user's email and also the OTP will be saved in OtpEmail table with an expiration time of 10 minutes
         - If the OTP is send mutliple times then the last send otp will remain in database
@@ -347,7 +347,7 @@ export const sendEmailOtp = async (data) => {
         const { email } = data;
     
         if (!email) {
-            throw sendError('Email is required');
+            throw sendError('Email is required',400);
         }
         
         const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
@@ -403,7 +403,7 @@ export const sendEmailOtp = async (data) => {
 export const verifyEmailOtp = async (data) => {
         /*
       input:- email,otp
-      ouput:- message
+      ouput:- message, statusCode
 
         - The last send otp will be verified against the user input
 
@@ -412,7 +412,7 @@ export const verifyEmailOtp = async (data) => {
         const { email, otp } = data;
     
         if (!email || !otp) {
-            throw sendError('Email and OTP are required');
+            throw sendError('Email and OTP are required',400);
         }
 
         const otpEmailRepository = AppDataSource.getRepository('OtpEmail');
@@ -422,7 +422,7 @@ export const verifyEmailOtp = async (data) => {
         }
 
         if (otpRecord.otp !== otp) {
-            throw sendError('Invalid OTP');
+            throw sendError('Invalid OTP',400);
         }
 
         if (new Date() > otpRecord.expiresAt) {
@@ -445,7 +445,7 @@ export const verifyEmailOtp = async (data) => {
 export const sendPhoneOtp = async (data) => {
          /*
       input:- phone
-      ouput:- message
+      ouput:- message, status code
 
         - A 6 digit OTP will be generated and sent to the user's email and also the OTP will be saved in OtpPhone table with an expiration time of 10 minutes
         - If the OTP is send mutliple times then the last send otp will remain in database
@@ -455,7 +455,7 @@ export const sendPhoneOtp = async (data) => {
         const { phone } = data;
     
         if (!phone) {
-            throw sendError('Phone number is required');
+            throw sendError('Phone number is required',400);
         }
 
         const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
@@ -552,7 +552,7 @@ export const sendPhoneOtp = async (data) => {
 export const verifyPhoneOtp = async(data) => {
         /*
       input:- phone,otp
-      ouput:- message
+      ouput:- message, statusCode
 
         - The last send otp will be verified against the user input
 
@@ -567,15 +567,15 @@ export const verifyPhoneOtp = async(data) => {
         const otpPhoneRepository = AppDataSource.getRepository('OtpPhone');
         const otpRecord = await otpPhoneRepository.findOne({ where: { phone } });
         if (!otpRecord) {
-            throw sendError('OTP not found');
+            throw sendError('OTP not found',400);
         }
 
         if (otpRecord.otp !== otp) {
-            throw sendError('Invalid OTP');
+            throw sendError('Invalid OTP',400);
         }
 
         if (new Date() > otpRecord.expiresAt) {
-            throw sendError('OTP expired');
+            throw sendError('OTP expired',400);
         }
 
         if(otpRecord.otp === otp) {
@@ -626,14 +626,14 @@ export const forgotPassword = async (data) => {
         const { email } = data;
     
         if (!email) {
-            throw sendError('Email is required');
+            throw sendError('Email is required',400);
         }
 
         // Check if user exists
         const userRepository = AppDataSource.getRepository(User);
         const user = await userRepository.findOne({ where: { email } });
         if (!user) {
-            throw sendError('User not found');
+            throw sendError('User not found',404);
         }
 
         // Generate OTP and send email
@@ -679,29 +679,29 @@ export const resetPassword = async (data) => {
         const { email, otp, newPassword } = data;
     
         if (!email || !otp || !newPassword) {
-            throw sendError('Email, OTP, and new password are required');
+            throw sendError('Email, OTP, and new password are required',400);
         }
 
         // Check if user exists
         const userRepository = AppDataSource.getRepository(User);
         const user = await userRepository.findOne({ where: { email } });
         if (!user) {
-            throw sendError('User not found');
+            throw sendError('User not found',404);
         }
 
         // Verify OTP
         const otpEmailRepository = AppDataSource.getRepository('OtpEmail');
         const otpRecord = await otpEmailRepository.findOne({ where: { email } });
         if (!otpRecord) {
-            throw sendError('OTP not found');
+            throw sendError('OTP not found',400);
         }
 
         if (otpRecord.otp !== otp) {
-            throw sendError('Invalid OTP');
+            throw sendError('Invalid OTP',400);
         }
 
         if (new Date() > otpRecord.expiresAt) {
-            throw sendError('OTP expired');
+            throw sendError('OTP expired',400);
         }
 
         // Hash the new password
@@ -728,14 +728,14 @@ export const logout = async (data) => {
         const { refreshToken } = data;
     
         if (!refreshToken) {
-            throw sendError('Refresh token is required');
+            throw sendError('Refresh token is required',400);
         }
 
         // Check if user exists
         const userRepository = AppDataSource.getRepository(User);
         const user = await userRepository.findOne({ where: { refreshToken } });
         if (!user) {
-            throw sendError('User not found');
+            throw sendError('User not found',404);
         }
 
         // Invalidate the refresh token

@@ -19,8 +19,8 @@ router.post("/checkEmail",controllerWrapper(authController.checkEmail, { logRequ
 
 router.post("/sendEmailOtp",controllerWrapper(authController.sendEmailOtp, { logRequest, logResponse }));
 router.post("/verifyEmailOtp",controllerWrapper(authController.verifyEmailOtp, { logRequest, logResponse }));
-router.post("/sendPhoneOtp",verifyAccessToken,controllerWrapper(authController.sendPhoneOtp, { logRequest, logResponse }));            //vendor otp route
-router.post("/verifyPhoneOtp",verifyAccessToken,controllerWrapper(authController.verifyPhoneOtp, { logRequest, logResponse }));        //vendor otp route
+router.post("/sendPhoneOtp",controllerWrapper(authController.sendPhoneOtp, { logRequest, logResponse }));           
+router.post("/verifyPhoneOtp",controllerWrapper(authController.verifyPhoneOtp, { logRequest, logResponse }));        
 
 
 router.post("/forgotPassword",controllerWrapper(authController.forgotPassword, { logRequest, logResponse }));
