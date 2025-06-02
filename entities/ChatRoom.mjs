@@ -9,16 +9,20 @@ export const ChatRoom = new EntitySchema({
             type: "uuid",
             generated: "uuid"
         },
-        customerUserId: {
+        customerId: {
             type: "uuid",
             nullable: false
         },
-        vendorUserId: {
+        vendorId: {
             type: "uuid",
             nullable: false
         },
         lastMessage: {
             type: "text",
+            nullable: true
+        },
+        lastMessageAt : {
+            type: "timestamp",
             nullable: true
         },
         createdAt: {
@@ -33,18 +37,18 @@ export const ChatRoom = new EntitySchema({
     relations: {
         customer: {
             type: "many-to-one",
-            target: "User",
+            target: "Customers",
             joinColumn: {
-                name: "customerUserId"
+                name: "customerId"
             },
             cascade: true,
             onDelete: "CASCADE"
         },
         vendor: {
             type: "many-to-one",
-            target: "User",
+            target: "Vendors",
             joinColumn: {
-                name: "vendorUserId"
+                name: "vendorId"
             },
             cascade: true,
             onDelete: "CASCADE"

@@ -2,6 +2,7 @@ import { MESSAGE } from "../types/enums/index.mjs";
 import { formatError, formatResponse } from "../utils/core-utils.mjs";
 import { logger } from "../utils/logger-utils.mjs";
 import * as vendorService from "../services/vendorService.mjs";
+import {UAParser} from "ua-parser-js";
 
 export const checkProfile = async (req, res, next) => {
   try {
@@ -22,11 +23,22 @@ export const checkProfile = async (req, res, next) => {
 
 export const completeProfile = async (req, res, next) => {
   try {
+    const parser = new UAParser();
+    parser.setUA(req.headers['user-agent']);
+    const dI = parser.getResult();
+    const deviceInfo = {
+      ip : req.headers['x-forwarded-for'] || req.ip || req.connection.remoteAddress,
+      device: dI.device.type,
+      browser: dI.browser.name,
+      version: dI.browser.version,
+      platform: dI.os.name,
+    }
+
     const data = {
       userId: req.user.id,
       ...req.body,
     };
-    const response = await vendorService.completeProfile(data);
+    const response = await vendorService.completeProfile(data, deviceInfo);
     if (!response) {
       throw new Error(formatError("Vendor profile not found", response));
     }

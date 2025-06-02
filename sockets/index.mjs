@@ -1,9 +1,7 @@
 import jwt from "jsonwebtoken";
-import { AppDataSource } from "../config/data-source.mjs";
-import { ChatRoom } from "../entities/ChatRoom.mjs";
-import { ChatMessage } from "../entities/ChatMessage.mjs";
-import { User } from "../entities/User.mjs";
-
+import { sendMessage, markAsRead, getChatRoom, getUser } from "../services/chatService.mjs";
+import { sendNotifciation } from "../services/pushService.mjs";
+import { ACCESS_TOKEN_SECRET } from '../config/auth-config.mjs';
 /*
 
     for postman testing do-> file->new->websocket
@@ -24,7 +22,7 @@ export const initializeSocket = (io) => {
             return next(new Error("Authentication error: No token"))
         }
         try {
-            const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+            const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET);
             // const user = await AppDataSource.getRepository(User).findOne({
             //     where: {
             //         id: payload.id
@@ -45,36 +43,54 @@ export const initializeSocket = (io) => {
         console.log("Connection error", error);
     });
     io.on("connection", (Socket) => {
-        console.log(Socket)
-        // const {id, role} = Socket.user;
-        // console.log("New client connected", id, role);
 
-        // Socket.on("joinRoom", async (roomId) => {
-        //     const room = await AppDataSource.getRepository(ChatRoom).findOne({
-        //         where: {
-        //             id: roomId
-        //         }
-        //     });
-        //     if (!room) {
-        //         Socket.emit("error", "Room not found");
-        //         return;
-        //     }
-        //     Socket.join(roomId);
-        //     Socket.roomId = roomId;
-        // }); 
+        Socket.on("joinRoom", async (roomId) => {
+            Socket.join(roomId);
+            await markAsRead(roomId, Socket.userId);
+            console.log("User joined room", Socket.userId, roomId);
+        }); 
+        //42["sendMessage",{"roomId":"746d331a-9191-4141-ba5d-8f8a424f92c0","content":"HELLO"}]
+        Socket.on("sendMessage", async ({ roomId, content}) => { 
+            try {
+                // saving msg to db
+                const message = await sendMessage({
+                    chatRoomId: roomId,
+                    senderId: Socket.userId,
+                    content,
+                });
+                // Emit to room via socket
+                io.to(roomId).emit("newMessage", message);
 
-        Socket.on("sendMessage", async (content) => {
-            console.log(content)
-            
-            Socket.emit("receiveMessage", content);
+                // Get receiver user
+                const room = await getChatRoom(roomId);
+                if(!room) {
+                    throw new Error("Room not found");
+                }
+                const receiverId = Socket.role === "CUSTOMER" ? room.vendorId : room.customerId;
+                const receiverUser = await getUser(receiverId);
+                
+                // check if receiver is online
+                const roomSockets = await io.in(roomId).fetchSockets();
+                const isReceiverOnline = roomSockets.some(socket => socket.userId === receiverId);
+
+                // send FCM if offline
+                if(receiverUser.pushToken && !isReceiverOnline) {
+                    const fcmToken = receiverUser.pushToken;
+                    const title = "New message";
+                    const body = content;
+                    await sendNotifciation(fcmToken, title, body);
+                }
+            } catch (error) {
+                console.error("Error sending message", error);
+                Socket.emit("error", "Failed to send message");
+            }
         });
-
-        Socket.on("disconnect", () => {
-            console.log("Client disconnected",Socket.id);
-        });
-        
-        
     });
+
+    // ============================ DISCONNECTION HANDLER ===========================
+
+    io.on("disconnect", (Socket) => {
+        console.log("Client disconnected", Socket.id);
+    });
+
 };
-
-

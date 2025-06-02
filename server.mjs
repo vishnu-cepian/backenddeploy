@@ -12,6 +12,7 @@ import searchRoutes from "./routes/searchRoutes.mjs";
 import orderRoutes from "./routes/orderRoutes.mjs";
 import s3Routes from "./routes/s3routes.mjs";
 import pushNotification from "./routes/pushNotificationRoutes.mjs"
+import chatRoutes from "./routes/chatRoutes.mjs"
 
 // Import Utils and config files
 import { MESSAGE } from "./types/enums/index.mjs";
@@ -58,6 +59,7 @@ app.use("/api/search", searchRoutes);
 app.use("/api/order", orderRoutes);
 app.use("/api/s3", s3Routes);
 app.use("/api/pushNotification", pushNotification)
+app.use("/api/chat", chatRoutes)
 
 app.use((err, req, res, next) => {
   logger.error(err.stack);

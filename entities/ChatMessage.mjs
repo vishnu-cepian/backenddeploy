@@ -21,14 +21,15 @@ export const ChatMessage = new EntitySchema({
             type: "text",
             nullable: false
         },
+        isRead: {
+            type: "boolean",
+            default: false
+        },
         createdAt: {
             type: "timestamp",
             createDate: true
         },
-        updatedAt: {
-            type: "timestamp",
-            updateDate: true
-        }
+     
     },
     relations: {
         chatRoom: {

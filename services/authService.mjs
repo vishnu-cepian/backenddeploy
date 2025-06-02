@@ -100,7 +100,7 @@ export const signup = async (data) => {
     */
     
     try {
-        if (data.authorization === process.env.SIGNUP_TOKEN) {
+        
             const { email, name, password, role, phoneNumber } = data;
             if (!email || !name || !password || !role || !phoneNumber) {
                 throw sendError('Email, name, password, role, and phoneNumber are required', 400);
@@ -137,9 +137,7 @@ export const signup = async (data) => {
             return {
                 message: "User created successfully",
                 status: true,
-                data: newUser,
             };
-        }
     } catch (err) {
         logger.error(err);
         throw err;
@@ -433,8 +431,11 @@ export const verifyEmailOtp = async (data) => {
             await otpEmailRepository.delete({ email });
         }
         // OTP is valid
+
+        const verificationToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '5m' });
         return ({
             message: "OTP verified successfully",
+            verificationToken,
             status: true
         });
     } catch (err) {
@@ -582,8 +583,12 @@ export const verifyPhoneOtp = async(data) => {
             await otpPhoneRepository.delete({ phone });
         }
         // OTP is valid
+
+        const verificationToken = jwt.sign({ phone }, process.env.JWT_SECRET, { expiresIn: '5m' });
+
         return ({
             message: "OTP verified successfully",
+            verificationToken,
             status: true
         });
         // const  { phone, otp } = data;
