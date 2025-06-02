@@ -9,6 +9,8 @@ import { Orders } from '../entities/Orders.mjs';
 import { OrderItems } from '../entities/OrderItems.mjs';
 import { OrderVendors } from '../entities/OrderVendors.mjs';
 import { OrderItemMeasurementByVendor } from '../entities/OrderItemMeasurementByVendor.mjs';
+import { ChatRoom } from '../entities/ChatRoom.mjs';
+import { ChatMessage } from '../entities/ChatMessage.mjs';
 import 'dotenv/config'
 
 export const AppDataSource = new DataSource({
@@ -21,7 +23,7 @@ export const AppDataSource = new DataSource({
     // database: process.env.DB_DATABASE,
     schema: "public",
     synchronize: true,
-    entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, OrderVendors, OrderItemMeasurementByVendor],
+    entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, OrderVendors, OrderItemMeasurementByVendor, ChatRoom, ChatMessage],
 
 //     ssl: true,
 //     extra: {

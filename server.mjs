@@ -2,6 +2,8 @@ import express from "express";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import cors from "cors";
+import { createServer } from "http";
+import { Server } from "socket.io";
 
 // Import routes
 import authRoutes from "./routes/authRoutes.mjs";
@@ -17,12 +19,28 @@ import { logger } from "./utils/logger-utils.mjs";
 import { formatResponse } from "./utils/core-utils.mjs";
 import { AppDataSource } from "./config/data-source.mjs";
 
+import { initializeSocket } from "./sockets/index.mjs";
+
 dotenv.config();
 
 const app = express();
 
 app.use(bodyParser.json({ limit: "50mb" }));
 app.use(bodyParser.urlencoded({ limit: "50mb", extended: true }));
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+    methods: "GET, POST, PUT, DELETE, PATCH",
+    allowedHeaders: "Content-Type, Authorization",
+    credentials: true,
+    optionsSuccessStatus: 200,
+  },
+  maxHttpBufferSize: 1e8, // 100MB
+});
+
+initializeSocket(io);
 
 const corsOptions = {
   origin: "*",
@@ -71,6 +89,10 @@ AppDataSource.initialize()
     console.error("Error during Data Source initialization", err);
   });
   
-app.listen(PORT, () => {
+// app.listen(PORT, () => {
+//   console.log(`Server running at http://localhost:${PORT}`);
+// });
+
+httpServer.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
