@@ -43,7 +43,7 @@ export const initializeSocket = (io) => {
         console.log("Connection error", error);
     });
     io.on("connection", (Socket) => {
-
+        console.log("connected")
         Socket.on("joinRoom", async (roomId) => {
             Socket.join(roomId);
             await markAsRead(roomId, Socket.userId);
@@ -70,15 +70,19 @@ export const initializeSocket = (io) => {
                 const receiverUser = await getUser(receiverId);
                 
                 // check if receiver is online
+                
+                if(receiverUser) {
                 const roomSockets = await io.in(roomId).fetchSockets();
-                const isReceiverOnline = roomSockets.some(socket => socket.userId === receiverId);
-
+                const isReceiverOnline = roomSockets.some(socket => socket.userId === receiverUser.id);
+                // console.log(isReceiverOnline, receiverUser.pushToken)
                 // send FCM if offline
                 if(receiverUser.pushToken && !isReceiverOnline) {
+                    // console.log("sending FCM")
                     const fcmToken = receiverUser.pushToken;
                     const title = "New message";
                     const body = content;
                     await sendNotifciation(fcmToken, title, body);
+                    }
                 }
             } catch (error) {
                 console.error("Error sending message", error);
