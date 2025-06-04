@@ -20,75 +20,83 @@ export const Vendors = new EntitySchema({
             type: "uuid",
             unique: true
         },
-        profilePictureUrl: {
-            type: "varchar",
-            nullable: true 
-        },
-        aadhaarUrl: {
-            type: "varchar",
-            nullable: false 
-        },
         aadhaarNumber: {
             type: "varchar",
-            unique: true,
-            nullable: false 
+            length: 12,
+            nullable: false
         },
-        bankPassbookUrl: {
+        aadhaarUrlPath: {
             type: "varchar",
-            nullable: false 
-        },
-        accountNumber: {
-            type: "varchar",
-            nullable: false 
-        },
-        ifscCode: {
-            type: "varchar",
-            nullable: false 
-        },
-        accountHolderName: {
-            type: "varchar",
-            nullable: false 
-        },
-        serviceType: {
-            type: "varchar",
-            nullable: false 
-        },
-        shopName: {
-            type: "varchar",
-            nullable: false 
+            nullable: false
         },
         shopType: {
             type: "varchar",
-            nullable: false 
+            enum: ["IN-HOME", "OUTLET"],
+            nullable: false
+        },
+        ownershipType: {
+            type: "varchar",
+            enum: ["PARTNERSHIP", "SINGLE"],
+            nullable: false
+        },
+        serviceType: {
+            type: "varchar",
+            enum: ["TAILORING", "LAUNDRY"],
+            nullable: false
         },
         targetGender: {
             type: "varchar",
-            nullable: false 
+            enum: ["LADIES", "GENTS", "BOTH"],
+            nullable: false
         },
-        shopLocationName: {
+        shopName: {
             type: "varchar",
-            nullable: false 
+            nullable: false
         },
-        shopAddress: {
+        address: {
             type: "varchar",
-            nullable: false 
+            nullable: false
+        },
+        street: {
+            type: "varchar",
+            nullable: false
         },
         city: {
             type: "varchar",
-            nullable: false 
+            nullable: false
         },
-        postalCode: {
+        state: {
             type: "varchar",
-            nullable: false 
+            nullable: false
         },
-        shopImageUrl: {
+        pincode: {
             type: "varchar",
-            nullable: false 
+            nullable: false
         },
         shopDescription: {
+            type: "text",
+            nullable: false
+        },
+        shopDocumentUrlPath: {
             type: "varchar",
-            nullable: true 
-        },        
+            nullable: true
+        },
+        accountHolderName: {
+            type: "varchar",
+            nullable: false
+        },
+        accountNumber: {
+            type: "varchar",
+            nullable: false
+        },
+        ifscCode: {
+            type: "varchar",
+            nullable: false
+        },
+        bankPassbookUrlPath: {
+            type: "varchar",
+            nullable: false
+        },       
         location: {     //  { type: 'Point', coordinates: [lng, lat] }
             type: "geometry",
             spatialFeatureType: "Point", 

@@ -91,19 +91,6 @@ export const completeProfile = async (data, deviceInfo) => {
         await otpPhoneRepository.delete({ phone });
     }
 
-    const vendorAudit = vendorAuditRepo.create({
-      vendorId: userId,
-      otpVerifiedAt: new Date(),
-      toc: true,
-      ip: ip,
-      deviceInfo: deviceData,
-    });
-    await vendorAuditRepo.save(vendorAudit);
-
-    if (!vendorAudit) {
-      throw sendError('Vendor audit creation failed',400);
-    }
-
     const newVendor = vendorRepo.create({
       userId: userId,
       ...profileData,
@@ -124,6 +111,19 @@ export const completeProfile = async (data, deviceInfo) => {
       };
     }
 
+    const vendorAudit = vendorAuditRepo.create({
+      vendorId: newVendor.id,
+      otpVerifiedAt: new Date(),
+      toc: true,
+      ip: ip,
+      deviceInfo: deviceData,
+    });
+    await vendorAuditRepo.save(vendorAudit);
+
+    if (!vendorAudit) {
+      throw sendError('Vendor audit creation failed',400);
+    }
+    
     return {
       isProfileCompleted: true,
       message: "Vendor profile created successfully",
