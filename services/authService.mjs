@@ -13,7 +13,7 @@ import { Customers } from "../entities/Customers.mjs";
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
-  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '1m' });
 };
 
 export const generateRefreshToken = (payload) => {
