@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const s3Client = new S3Client({
@@ -30,4 +30,15 @@ export const getPresignedViewUrl = async (fileName) => {
         expiresIn: 3600 // 1 hour
     });
     return presignedUrl;
+};
+
+export const deleteFile = async (fileName) => {
+    const command = new DeleteObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: fileName
+    });
+    await s3Client.send(command);
+    return {
+        message: "File deleted successfully"
+    };
 };

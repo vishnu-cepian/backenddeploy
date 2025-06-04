@@ -36,3 +36,20 @@ export const getPresignedViewUrl = async (req, res) => {
         // next(error);
     }
 }   
+
+export const deleteFile = async (req, res) => {
+    try {
+        const { fileName } = req.body;
+        if (!fileName) {
+            throw new Error(formatError("File name is required", null));
+        }
+        const response = await s3Service.deleteFile(fileName);
+        if (!response) {
+            throw new Error(formatError("Failed to delete file", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        // next(error);
+    }
+}   
