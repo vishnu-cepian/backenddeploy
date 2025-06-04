@@ -64,3 +64,160 @@ export const getVendorDetails = async (req, res, next) => {
     next(err);
   }
 };
+
+export const saveVendorAvatarUrl = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+      ...req.body,
+    };
+
+    const response = await vendorService.saveVendorAvatarUrl(data);
+    if (!response) {
+      throw new Error(formatError("Avatar creation failed", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+};
+
+export const getVendorAvatarUrl = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+    };
+
+    const response = await vendorService.getVendorAvatarUrl(data);
+    if (!response) {
+      throw new Error(formatError("Vendor avatar fetch failed", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+};
+
+export const deleteVendorAvatarUrl = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+    };
+
+    const response = await vendorService.deleteVendorAvatarUrl(data);
+    if (!response) {
+      throw new Error(formatError("Vendor avatar detetion failed", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+};
+
+export const saveShopImageUrl = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+      ...req.body
+    };
+
+    const response = await vendorService.saveShopImageUrl(data);
+    if (!response) {
+      throw new Error(formatError("Vendor shop image creation failed", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+};
+
+export const getShopImageUrl = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+    };
+
+    const response = await vendorService.getShopImageUrl(data);
+    if (!response) {
+      throw new Error(formatError("Vendor shop image fetch failed", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+};
+
+export const deleteShopImageUrl = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+    };
+
+    const response = await vendorService.deleteShopImageUrl(data);
+    if (!response) {
+      throw new Error(formatError("Vendor shop image deleteion failed", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+};
+
+export const saveWorkImageUrl = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+      ...req.body
+    };
+
+    const response = await vendorService.saveWorkImageUrl(data);
+    if (!response) {
+      throw new Error(formatError("Vendor work image creation failed", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+};
+
+export const getVendorWorkImages = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+    };
+
+    const response = await vendorService.getVendorWorkImages(data);
+    if (!response) {
+      throw new Error(formatError("Vendor work image fetch failed", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+};
+
+export const deleteVendorWorkImage = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+      ...req.body
+    };
+
+    const response = await vendorService.deleteVendorWorkImage(data);
+    if (!response) {
+      throw new Error(formatError("Vendor work image deletion failed", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+};

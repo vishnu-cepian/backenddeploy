@@ -103,6 +103,14 @@ export const Vendors = new EntitySchema({
             srid: 4326,
             nullable: true
         },
+        shopImageUrlPath: {
+            type: "varchar",
+            nullable: true
+        },
+        vendorAvatarUrlPath: {
+            type: "varchar",
+            nullable: true
+        },
         rating: {
             type: "numeric",
             precision: 3,

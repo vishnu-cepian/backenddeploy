@@ -5,10 +5,13 @@ import { Vendors } from "../entities/Vendors.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
 import { VendorAudit } from "../entities/vendorAudit.mjs";
 import { OtpPhone } from "../entities/OtpPhone.mjs";
+import { vendorImages } from "../entities/vendorImages.mjs";
+import { getPresignedViewUrl } from "./s3service.mjs";
 
 const userRepo = AppDataSource.getRepository(User);
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const vendorAuditRepo = AppDataSource.getRepository(VendorAudit);
+const vendorImagesRepo = AppDataSource.getRepository(vendorImages);
 
 
 export const checkProfile = async (data) => {
@@ -150,6 +153,247 @@ export const getVendorDetails = async (data) => {
     return {
       message: "Vendor details fetched successfully",
       vendor,
+    };
+  } catch (error) {
+    logger.error(error);
+    throw error;
+  }
+}
+
+export const saveVendorAvatarUrl = async (data) => {
+  try {
+    const { s3Key, userId } = data;
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
+    });
+
+    if (!vendor) {
+      throw sendError('Vendor not found',400);
+    }
+
+    vendor.vendorAvatarUrlPath = s3Key;
+    await vendorRepo.save(vendor);
+
+    return {
+      message: "Vendor avatar url saved successfully",
+    };
+  } catch (error) {
+    logger.error(error);
+    throw error;
+  }
+}
+
+export const getVendorAvatarUrl = async (data) => {
+  try {
+    const { userId } = data;
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
+    });
+
+    if (!vendor) {
+      throw sendError('Vendor not found',400);
+    }
+
+    const presignedUrl = await getPresignedViewUrl(vendor.vendorAvatarUrlPath);
+
+    return {
+      message: "Vendor avatar url fetched successfully",
+      presignedUrl,
+    };
+  } catch (error) {
+    logger.error(error);
+    throw error;
+  }
+}
+
+export const deleteVendorAvatarUrl = async (data) => {
+  try {
+    const { userId } = data;
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
+    });
+
+    if (!vendor) {
+      throw sendError('Vendor not found',400);
+    }
+
+    vendor.vendorAvatarUrlPath = null;
+    await vendorRepo.save(vendor);
+
+    return {
+      message: "Vendor avatar url deleted successfully",
+    };
+  } catch (error) {
+    logger.error(error);
+    throw error;
+  }
+}
+
+export const saveShopImageUrl = async (data) => {
+  try {
+    const { s3Key, userId } = data;
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
+    });
+
+    if (!vendor) {
+      throw sendError('Vendor not found',400);
+    }
+
+    vendor.shopImageUrlPath = s3Key;
+    await vendorRepo.save(vendor);
+
+    return {
+      message: "Shop image url saved successfully",
+    };
+  } catch (error) {
+    logger.error(error);
+    throw error;
+  }
+}
+
+export const getShopImageUrl = async (data) => {
+  try {
+    const { userId } = data;
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
+    });
+
+    if (!vendor) {
+      throw sendError('Vendor not found',400);
+    }
+
+    const presignedUrl = await getPresignedViewUrl(vendor.shopImageUrlPath);
+
+    return {
+      message: "Shop image url fetched successfully",
+      presignedUrl,
+    };
+  } catch (error) {
+    logger.error(error);
+    throw error;
+  }
+}
+
+export const deleteShopImageUrl = async (data) => {
+  try {
+    const { userId } = data;
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
+    });
+
+    if (!vendor) {
+      throw sendError('Vendor not found',400);
+    }
+
+    vendor.shopImageUrlPath = null;
+    await vendorRepo.save(vendor);
+
+    return {
+      message: "Shop image url deleted successfully",
+    };
+  } catch (error) {
+    logger.error(error);
+    throw error;
+  }
+}
+
+export const saveWorkImageUrl = async (data) => {
+  try {
+    const { s3Key, userId } = data;
+    
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
+    });
+
+    if (!vendor) {
+      throw sendError('Vendor not found',400);
+    }
+
+    const vendorImage = vendorImagesRepo.create({
+      vendorId: vendor.id,
+      s3Key: s3Key,
+      uploadedAt: new Date(),
+    });
+
+    await vendorImagesRepo.save(vendorImage);
+
+    return {
+      message: "Work image url saved successfully",
+    };
+  } catch (error) {
+    logger.error(error);
+    throw error;
+  }
+}
+
+export const getVendorWorkImages = async (data) => {
+  try {
+    const { userId } = data;
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
+    });
+
+    if (!vendor) {
+      throw sendError('Vendor not found',400);
+    }
+
+    const vendorImages = await vendorImagesRepo.find({
+      where: { vendorId: vendor.id },
+      order: {
+        uploadedAt: "DESC",
+      },
+    });
+
+    const workImages = await Promise.all(vendorImages.map(async (image) => {
+      const presignedUrl = await getPresignedViewUrl(image.s3Key);
+      return {
+        ...image,
+        presignedUrl,
+      };
+    }));
+
+    return {
+      message: "Vendor work images fetched successfully",
+      workImages,
+    };
+  } catch (error) {
+    logger.error(error);
+    throw error;
+  }
+}
+
+export const deleteVendorWorkImage = async (data) => {
+  try {
+    const { s3Key, userId } = data;
+
+    const vendor = await vendorRepo.findOne({
+      where: { userId: userId },
+    });
+
+    if (!vendor) {
+      throw sendError('Vendor not found',400);
+    }
+
+    const vendorImage = await vendorImagesRepo.findOne({
+      where: { vendorId: vendor.id, s3Key: s3Key },
+    });
+
+    if (!vendorImage) {
+      throw sendError('Vendor work image not found',400);
+    }
+
+    await vendorImagesRepo.delete(vendorImage);
+
+    return {
+      message: "Vendor work image deleted successfully",
     };
   } catch (error) {
     logger.error(error);
