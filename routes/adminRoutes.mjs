@@ -15,4 +15,9 @@ router.get("/test",verifyAdminAccessToken, controllerWrapper((req, res) => {
 
 router.post("/refreshAccessToken", controllerWrapper(adminController.refreshAccessToken, { logRequest, logResponse }));
 
+logRequest = true;
+logResponse = true;
+
+router.get("/stats",verifyAdminAccessToken, controllerWrapper(adminController.stats, {logRequest, logResponse}))
+
 export default router;

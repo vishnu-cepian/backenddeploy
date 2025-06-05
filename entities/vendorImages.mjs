@@ -1,7 +1,7 @@
 import { EntitySchema } from "typeorm";
 
-export const vendorImages = new EntitySchema({
-    name: "vendorImages",
+export const VendorImages = new EntitySchema({
+    name: "VendorImages",
     tableName: "vendor_images",
     columns: {
         id: {

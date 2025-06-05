@@ -30,3 +30,16 @@ export const refreshAccessToken = async (req, res, next) => {
         next(error);
     }
 };
+
+export const stats = async (req, res, next) => {
+    try {
+        const response = await adminService.stats();
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};

@@ -2,25 +2,34 @@ import { logger } from "../utils/logger-utils.mjs";
 import { hashPassword, comparePassword } from "../utils/auth-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
 import jwt from 'jsonwebtoken';
-import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET } from '../config/auth-config.mjs';
+import { ADMIN_ACCESS_TOKEN_SECRET, ADMIN_REFRESH_TOKEN_SECRET } from '../config/auth-config.mjs';
 import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
 import { Customers } from "../entities/Customers.mjs";
+import { Orders } from "../entities/Orders.mjs";
+import { Vendors } from "../entities/Vendors.mjs";
 
+const orderRepo = AppDataSource.getRepository(Orders);
+// const orderItemRepo = AppDataSource.getRepository(OrderItems);
+// const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
+// const orderItemMeasurementByVendorRepo = AppDataSource.getRepository(OrderItemMeasurementByVendor);
+const customerRepo = AppDataSource.getRepository(Customers);
+const vendorRepo = AppDataSource.getRepository(Vendors);
+// const paymentRepo = AppDataSource.getRepository(Payments);
 
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
-    return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '1h' }); 
+    return jwt.sign(payload, ADMIN_ACCESS_TOKEN_SECRET, { expiresIn: '1m' }); 
   };
   
   export const generateRefreshToken = (payload) => {
-    return jwt.sign(payload, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+    return jwt.sign(payload, ADMIN_REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
   };
   
   export const verifyAccessToken = (token) => {
     try {
-      return jwt.verify(token, ACCESS_TOKEN_SECRET);
+      return jwt.verify(token, ADMIN_ACCESS_TOKEN_SECRET);
     } catch (err) {
       return null;
     }
@@ -28,7 +37,7 @@ export const generateAccessToken = (payload) => {
   
   export const verifyRefreshToken = (token) => {
     try {
-      return jwt.verify(token, REFRESH_TOKEN_SECRET);
+      return jwt.verify(token, ADMIN_REFRESH_TOKEN_SECRET);
     } catch (err) {
       return null;
     }
@@ -134,5 +143,32 @@ try {
   } catch (err) {
       logger.error(err);
       throw err;
+  }
+};
+
+export const stats = async () => {
+  try {
+    const userRepository = AppDataSource.getRepository(User);
+    const customers = await customerRepo.find();
+
+    const totalCustomers = customers.length;
+    // const totalOrders = await orderRepo.count();
+    // const totalRevenue = await orderRepository.sum('totalAmount');
+
+    const totalVerifiedVendors = await vendorRepo.find({ where: { isVerified: true } });
+    const totalUnverifiedVendors = await vendorRepo.find({ where: { isVerified: false } });
+    const totalVendors = totalVerifiedVendors.length + totalUnverifiedVendors.length;
+    const totalActiveVendors = await vendorRepo.find({ where: { isActive: true } });
+    const totalInactiveVendors = await vendorRepo.find({ where: { isActive: false } });
+
+    return {
+      totalCustomers,
+      totalVendors,
+      totalUnverifiedVendors,
+      totalOrders: 0
+    }
+  } catch (err) {
+    logger.error(err);
+    throw err;
   }
 };
