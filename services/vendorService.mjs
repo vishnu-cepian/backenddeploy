@@ -3,15 +3,15 @@ import { sendError } from "../utils/core-utils.mjs";
 import { User } from "../entities/User.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
-import { VendorAudit } from "../entities/vendorAudit.mjs";
+import { VendorAudit } from "../entities/VendorAudit.mjs";
 import { OtpPhone } from "../entities/OtpPhone.mjs";
-import { vendorImages } from "../entities/vendorImages.mjs";
+import { VendorImages } from "../entities/VendorImages.mjs";
 import { getPresignedViewUrl } from "./s3service.mjs";
 
 const userRepo = AppDataSource.getRepository(User);
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const vendorAuditRepo = AppDataSource.getRepository(VendorAudit);
-const vendorImagesRepo = AppDataSource.getRepository(vendorImages);
+const vendorImagesRepo = AppDataSource.getRepository(VendorImages);
 
 
 export const checkProfile = async (data) => {
