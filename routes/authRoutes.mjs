@@ -1,16 +1,16 @@
 import { Router } from "express";
 import * as authController from "../controllers/authController.mjs";
-import { verifyAccessToken } from "../middlewares/auth.mjs";
+import { verifyAccessToken, verifyOtpToken } from "../middlewares/auth.mjs";
 import { controllerWrapper } from "../controllers/index.mjs";
 
 const router = Router();
 
 // REFER authContoller.mjs TO DETERMINE WHICH CALLS NEED AUTHORIZATION TOKEN
 
-const logRequest = false;       // Making it true leads to credentials being logged in the console
-const logResponse = false;
+const logRequest = true;       // Making it true leads to credentials being logged in the console
+const logResponse = true;
 
-router.post("/signup",verifyAccessToken,controllerWrapper(authController.signup, { logRequest, logResponse }));  //response will be in the format of {message: "success", status: true, data: {}}
+router.post("/signup",verifyOtpToken,controllerWrapper(authController.signup, { logRequest, logResponse }));  //response will be in the format of {message: "success", status: true, data: {}}
 
 router.post("/login",controllerWrapper(authController.loginWithEmail, { logRequest, logResponse }));
 router.post("/google-signin",controllerWrapper(authController.loginWithGoogle, { logRequest, logResponse }));
