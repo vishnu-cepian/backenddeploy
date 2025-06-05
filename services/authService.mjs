@@ -3,7 +3,7 @@ import { hashPassword, comparePassword } from "../utils/auth-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
 import { Resend } from "resend";
 import jwt from 'jsonwebtoken';
-import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET } from '../config/auth-config.mjs';
+import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET, OTP_TOKEN_SECRET } from '../config/auth-config.mjs';
 import { OAuth2Client } from "google-auth-library";
 import twilio from "twilio";
 import { AppDataSource } from "../config/data-source.mjs";
@@ -436,7 +436,7 @@ export const verifyEmailOtp = async (data) => {
         }
         // OTP is valid
 
-        const verificationToken = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: '5m' });
+        const verificationToken = jwt.sign({ email }, OTP_TOKEN_SECRET, { expiresIn: '5m' });
         return ({
             message: "OTP verified successfully",
             verificationToken,
@@ -588,7 +588,7 @@ export const verifyPhoneOtp = async(data) => {
         }
         // OTP is valid
 
-        const verificationToken = jwt.sign({ phone }, process.env.JWT_SECRET, { expiresIn: '5m' });
+        const verificationToken = jwt.sign({ phone }, OTP_TOKEN_SECRET, { expiresIn: '5m' });
 
         return ({
             message: "OTP verified successfully",
