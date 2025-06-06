@@ -18,6 +18,8 @@ export const VendorAudit = new EntitySchema({
             type: "many-to-one",
             target: "Vendors",
             joinColumn: { name: "vendorId" },
+            cascade: true,
+            onDelete: "CASCADE"
         },
     },
 });
