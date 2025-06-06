@@ -50,9 +50,9 @@ export const checkProfile = async (data) => {
 
 export const completeProfile = async (data, deviceInfo) => {
   try {
-    const {userId, phone, otp, latitude, longitude, ...profileData} = data
+    const {userId, phoneNumber, otp, latitude, longitude, ...profileData} = data
     const { ip, ...deviceData } = deviceInfo;
-
+    
     const user = await userRepo.findOne({
       where: { id: userId },
       select: ["email"],
@@ -77,7 +77,7 @@ export const completeProfile = async (data, deviceInfo) => {
     }
 
     const otpPhoneRepository = AppDataSource.getRepository(OtpPhone);
-    const otpRecord = await otpPhoneRepository.findOne({ where: { phone } });
+    const otpRecord = await otpPhoneRepository.findOne({ where: { phone: phoneNumber } });
     if (!otpRecord) {
         throw sendError('OTP not found',400);
     }
@@ -91,7 +91,7 @@ export const completeProfile = async (data, deviceInfo) => {
     }
 
     if(otpRecord.otp === otp) {
-        await otpPhoneRepository.delete({ phone });
+        await otpPhoneRepository.delete({ phone: phoneNumber });
     }
 
     const newVendor = vendorRepo.create({

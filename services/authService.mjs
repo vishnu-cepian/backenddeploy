@@ -5,10 +5,10 @@ import { Resend } from "resend";
 import jwt from 'jsonwebtoken';
 import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET, OTP_TOKEN_SECRET } from '../config/auth-config.mjs';
 import { OAuth2Client } from "google-auth-library";
-import twilio from "twilio";
 import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
 import { Customers } from "../entities/Customers.mjs";
+import { sendEmail } from "./notificationService.mjs";
 
 //===================JWT UTILS====================
 
@@ -369,33 +369,16 @@ export const sendEmailOtp = async (data) => {
             expiresAt
             });
         }
-        /*
 
-
-
-
-
-        INTEGRATE EMAIL SERVICE
-
-
-
-
-
-
-        */
-        // const resend = new Resend(process.env.RESEND_API_KEY);  //for testing purpose
-
-        // await resend.emails.send({
-        //     from: 'onboarding@resend.dev',
-        //     to: email,                      // will only be able to send OTP to www.vishnurpillai@gmail.com
-        //     subject: 'Your OTP Code',
-        //     html: `<p>Your OTP code is <strong>${otp}</strong>. It will expire in 10 minutes.</p>`,
-        // });
-
-        return ({
-            message: "OTP sent successfully",
-            status: true
-        });
+        const response = await sendEmail(email, "Nexs", "global_otp", { otp: otp });
+        if (response.status === "success") {
+            return {
+                message: "OTP sent successfully",
+                status: true
+            }
+        } else {
+            throw sendError("Failed to send email", 500);
+        }
     } catch (err) {
         logger.error(err);
         throw err;
