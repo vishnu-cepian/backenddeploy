@@ -2,6 +2,7 @@ import express from "express";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import cors from "cors";
+dotenv.config();
 import { createServer } from "http";
 import { Server } from "socket.io";
 
@@ -22,8 +23,6 @@ import { formatResponse } from "./utils/core-utils.mjs";
 import { AppDataSource } from "./config/data-source.mjs";
 
 import { initializeSocket } from "./sockets/index.mjs";
-
-dotenv.config();
 
 const app = express();
 

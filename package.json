@@ -22,6 +22,7 @@
     "firebase-admin": "^13.4.0",
     "google-auth-library": "^9.15.1",
     "jsonwebtoken": "^9.0.2",
+    "node-device-detector": "^2.2.2",
     "nodemon": "^3.1.10",
     "pg": "^8.16.0",
     "reflect-metadata": "^0.2.2",
