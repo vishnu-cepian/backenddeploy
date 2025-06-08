@@ -152,6 +152,7 @@ export const loginWithEmail = async (data) => {
         - SIGNUP_TOKEN For added security
         - accessToken and refershToken will be generated and the app will save it in the local storage also the User table will be updated with new refreshToken
         - The user dashboard will be rendered by the ROLE
+        - If the user is blocked then the user will not be able to login
 
     */
     try {

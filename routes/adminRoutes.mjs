@@ -20,4 +20,6 @@ logResponse = true;
 
 router.get("/stats",verifyAdminAccessToken, controllerWrapper(adminController.stats, {logRequest, logResponse}))
 
+router.get("/getAllVendors",verifyAdminAccessToken, controllerWrapper(adminController.getAllVendors, {logRequest, logResponse}))
+
 export default router;

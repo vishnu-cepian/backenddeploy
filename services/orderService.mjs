@@ -147,8 +147,7 @@ export const sendOrderToVendor = async (data) => {
         const vendors = await vendorRepo.find({
             where: {
                 id: In(uniqueVendorIds),
-                isActive: true,
-                isVerified: true
+                status: "VERIFIED"
             }
         });
 

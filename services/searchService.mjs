@@ -21,8 +21,7 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
             JOIN "user" ON vendors."userId" = "user".id
             WHERE 
             vendors.location IS NOT NULL
-            AND vendors."isActive" = true
-            AND vendors."isVerified" = true
+            AND vendors.status = 'VERIFIED'
         `
 
     let conditions = [];
@@ -40,8 +39,7 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
             FROM vendors
             INNER JOIN "user" ON vendors."userId" = "user".id
             WHERE vendors.location IS NOT NULL
-              AND vendors."isActive" = true
-              AND vendors."isVerified" = true
+            AND vendors.status = 'VERIFIED'
             `;
             orderClause = ` ORDER BY rating DESC`;
             params = [];

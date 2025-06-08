@@ -155,16 +155,18 @@ export const stats = async () => {
     // const totalOrders = await orderRepo.count();
     // const totalRevenue = await orderRepository.sum('totalAmount');
 
-    const totalVerifiedVendors = await vendorRepo.find({ where: { isVerified: true } });
-    const totalUnverifiedVendors = await vendorRepo.find({ where: { isVerified: false } });
-    const totalVendors = totalVerifiedVendors.length + totalUnverifiedVendors.length;
-    const totalActiveVendors = await vendorRepo.find({ where: { isActive: true } });
-    const totalInactiveVendors = await vendorRepo.find({ where: { isActive: false } });
+    const totalVerifiedVendors = await vendorRepo.find({ where: { status: "VERIFIED" } });
+    const totalUnverifiedVendors = await vendorRepo.find({ where: { status: "PENDING" } });
+    const totalRejectedVendors = await vendorRepo.find({ where: { status: "REJECTED" } });
+    const totalBlockedVendors = await vendorRepo.find({ where: { status: "BLOCKED" } });
+    const totalVendors = totalVerifiedVendors.length + totalUnverifiedVendors.length + totalRejectedVendors.length + totalBlockedVendors.length;
 
     return {
       totalCustomers,
       totalVendors,
-      totalUnverifiedVendors,
+      totalUnverifiedVendors: totalUnverifiedVendors.length,
+      totalRejectedVendors: totalRejectedVendors.length,
+      totalBlockedVendors: totalBlockedVendors.length,
       totalOrders: 0
     }
   } catch (err) {
@@ -172,3 +174,13 @@ export const stats = async () => {
     throw err;
   }
 };
+
+
+  export const getAllVendors = async (pageNumber, limitNumber) => {
+  try {
+    return await vendorRepo.find({order: {createdAt: "DESC"}, skip: (pageNumber - 1) * limitNumber, take: limitNumber});
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}

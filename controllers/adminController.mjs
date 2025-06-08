@@ -43,3 +43,19 @@ export const stats = async (req, res, next) => {
         next(error);
     }
 };
+
+export const getAllVendors = async (req, res, next) => {
+    try {
+        const {page, limit} = req.query;
+        const pageNumber = page ? parseInt(page) : 1;
+        const limitNumber = limit ? parseInt(limit) : 10;
+        const response = await adminService.getAllVendors(parseInt(pageNumber), parseInt(limitNumber));
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};

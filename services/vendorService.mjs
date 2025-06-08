@@ -28,17 +28,33 @@ export const checkProfile = async (data) => {
       };
     }
 
-    if (vendor.isVerified === false) {
+    if (vendor.status === "PENDING") {
       return {
         exists: true,
-        isVerified: false,
+        status: "PENDING",
         message: "Vendor profile not verified => redirect to vendor verification pending status page",
+      };
+    }
+
+    if (vendor.status === "REJECTED") {
+      return {
+        exists: true,
+        status: "REJECTED",
+        message: "Vendor profile rejected => redirect to vendor verification rejected status page",
+      };
+    }
+
+    if (vendor.status === "BLOCKED") {
+      return {
+        exists: true,
+        status: "BLOCKED",
+        message: "Vendor profile blocked => redirect to vendor verification blocked status page",
       };
     }
 
     return {
       exists: true,
-      isVerified: true,
+      status: "VERIFIED",
       message: "Vendor profile complete => redirect to vendor dashboard",
     };
 
@@ -101,8 +117,7 @@ export const completeProfile = async (data, deviceInfo) => {
         type: "Point",
         coordinates: [longitude, latitude],
       },
-      isVerified: false,
-      isActive: true,
+      status: "PENDING",
     });
 
     await vendorRepo.save(newVendor);
