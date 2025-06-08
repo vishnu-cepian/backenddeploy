@@ -8,7 +8,7 @@ export const Vendors = new EntitySchema({
         { name: "vendor_rating_idx", columns: ["rating"] },
         { name: "vendor_shopname_idx", columns: ["shopName"] },
         { name: "vendor_servicetype_idx", columns: ["serviceType"] },
-        { name: "vendor_status_idx", columns: ["isVerified", "isActive"] }
+        { name: "vendor_status_idx", columns: ["status"] }
     ],
     columns: {
         id: {
@@ -127,13 +127,10 @@ export const Vendors = new EntitySchema({
             scale: 2,
             default: 0
         },
-        isVerified: {
-            type: "boolean",
-            default: false
-        },
-        isActive: {
-            type: "boolean",
-            default: true
+        status: {
+            type: "varchar",
+            enum: ["PENDING", "VERIFIED", "REJECTED", "BLOCKED"],
+            default: "PENDING"
         },
         createdAt: {
             type: "timestamp",
