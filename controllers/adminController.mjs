@@ -46,10 +46,71 @@ export const stats = async (req, res, next) => {
 
 export const getAllVendors = async (req, res, next) => {
     try {
-        const {page, limit} = req.query;
+        const {page, limit, status} = req.query;
         const pageNumber = page ? parseInt(page) : 1;
         const limitNumber = limit ? parseInt(limit) : 10;
-        const response = await adminService.getAllVendors(parseInt(pageNumber), parseInt(limitNumber));
+        let response;
+        if (status) {
+            response = await adminService.getAllVendorsByFilter(parseInt(pageNumber), parseInt(limitNumber), status);
+        } else {
+            response = await adminService.getAllVendors(parseInt(pageNumber), parseInt(limitNumber));
+        }
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const getVendorById = async (req, res, next) => {
+    try {
+        const id = req.params.id;
+        const response = await adminService.getVendorById(id);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const blockOrUnblockVendor = async (req, res, next) => {
+    try {
+        const id = req.params.id;
+        const response = await adminService.blockOrUnblockVendor(id);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const verifyVendor = async (req, res, next) => {
+    try {
+        const id = req.params.id;
+        const response = await adminService.verifyVendor(id);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const rejectVendor = async (req, res, next) => {
+    try {
+        const id = req.params.id;
+        const response = await adminService.rejectVendor(id);
         if (!response) {
             throw new Error(formatError("No response", response));
         }

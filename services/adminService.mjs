@@ -8,6 +8,7 @@ import { User } from "../entities/User.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { Orders } from "../entities/Orders.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
+import { In } from 'typeorm';
 
 const orderRepo = AppDataSource.getRepository(Orders);
 // const orderItemRepo = AppDataSource.getRepository(OrderItems);
@@ -15,6 +16,7 @@ const orderRepo = AppDataSource.getRepository(Orders);
 // const orderItemMeasurementByVendorRepo = AppDataSource.getRepository(OrderItemMeasurementByVendor);
 const customerRepo = AppDataSource.getRepository(Customers);
 const vendorRepo = AppDataSource.getRepository(Vendors);
+const userRepo = AppDataSource.getRepository(User);
 // const paymentRepo = AppDataSource.getRepository(Payments);
 
 //===================JWT UTILS====================
@@ -178,7 +180,179 @@ export const stats = async () => {
 
   export const getAllVendors = async (pageNumber, limitNumber) => {
   try {
-    return await vendorRepo.find({order: {createdAt: "DESC"}, skip: (pageNumber - 1) * limitNumber, take: limitNumber});
+    const vendors = await vendorRepo
+      .createQueryBuilder("vendors")
+      .leftJoinAndSelect("vendors.user", "user")
+      .select([
+        "vendors.id",
+        "vendors.status",
+        "vendors.createdAt",
+        "user.email",
+        "user.name",
+        "user.phoneNumber",
+        "user.isBlocked"
+      ])
+      .orderBy("vendors.createdAt", "DESC")
+      .skip((pageNumber - 1) * limitNumber)
+      .take(limitNumber)
+      .getMany();
+
+    return { vendors };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getAllVendorsByFilter = async (pageNumber, limitNumber, status) => {
+  try {
+    if (status === "BLOCKED") {
+      const vendors = await vendorRepo
+      .createQueryBuilder("vendors")
+      .leftJoinAndSelect("vendors.user", "user")
+      .select([
+        "vendors.id",
+        "vendors.status",
+        "vendors.createdAt",
+        "user.email",
+        "user.name",
+        "user.phoneNumber",
+        "user.isBlocked"
+      ])
+      .where("user.isBlocked = :isBlocked", { isBlocked: true })
+      .orderBy("vendors.createdAt", "DESC")
+      .skip((pageNumber - 1) * limitNumber)
+      .take(limitNumber)
+      .getMany();
+
+      return { vendors };
+    }
+
+    const vendors = await vendorRepo
+      .createQueryBuilder("vendors")
+      .leftJoinAndSelect("vendors.user", "user")
+      .select([
+        "vendors.id",
+        "vendors.status",
+        "vendors.createdAt",
+        "user.email",
+        "user.name",
+        "user.phoneNumber",
+        "user.isBlocked"
+      ])
+      .where("vendors.status = :status", { status })
+      .orderBy("vendors.createdAt", "DESC")
+      .skip((pageNumber - 1) * limitNumber)
+      .take(limitNumber)
+      .getMany();
+
+    return { vendors };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getVendorById = async (id) => {
+  try {
+    const vendor = await vendorRepo
+    .createQueryBuilder("vendors")
+    .leftJoinAndSelect("vendors.user", "user")
+    .select([
+      "vendors.id",
+      "vendors.userId",
+      "vendors.aadhaarNumber",
+      "vendors.aadhaarUrlPath", 
+      "vendors.shopType",
+      "vendors.ownershipType",
+      "vendors.serviceType",
+      "vendors.targetGender",
+      "vendors.shopName",
+      "vendors.address",
+      "vendors.city",
+      "vendors.street",
+      "vendors.state",
+      "vendors.pincode",
+      "vendors.location",
+      "vendors.shopImageUrlPath",
+      "vendors.shopDocumentUrlPath",
+      "vendors.accountNumber",
+      "vendors.ifscCode",
+      "vendors.accountHolderName",
+      "vendors.bankPassbookUrlPath",
+      "vendors.shopDescription",
+      "vendors.status",
+      "vendors.createdAt",
+      "vendors.updatedAt",
+      "vendors.rating",
+      "vendors.ratingCount",
+      "vendors.popularityScore",
+      "user.email",
+      "user.name",
+      "user.phoneNumber",
+      "user.isBlocked"
+    ])
+    .where("vendors.id = :id", { id })
+    .getOne();
+   
+    return { vendor };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const blockOrUnblockVendor = async (id) => {
+  try {
+    const vendor = await vendorRepo.findOne({ where: { id } });
+    if (!vendor) {
+      throw sendError('Vendor not found', 404);
+    }
+    const blockStatus = await userRepo.findOne({ where: { id: vendor.userId }, select: ["isBlocked"] });
+    await userRepo.update(vendor.userId, { isBlocked: !blockStatus.isBlocked });
+    return { message: "Vendor blocked successfully" };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const unblockVendor = async (id) => {
+  try {
+    const vendor = await vendorRepo.findOne({ where: { id } });
+    if (!vendor) {
+      throw sendError('Vendor not found', 404);
+    }
+    await userRepo.update(vendor.userId, { isBlocked: false });
+    return { message: "Vendor unblocked successfully" };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const verifyVendor = async (id) => {
+  try {
+    const vendor = await vendorRepo.findOne({ where: { id } });
+    if (!vendor) {
+      throw sendError('Vendor not found', 404);
+    }
+    await vendorRepo.update(id, { status: "VERIFIED" });
+    return { message: "Vendor verified successfully" };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const rejectVendor = async (id) => {
+  try {
+    const vendor = await vendorRepo.findOne({ where: { id } });
+    if (!vendor) {
+      throw sendError('Vendor not found', 404);
+    }
+    await vendorRepo.update(id, { status: "REJECTED" });
+    return { message: "Vendor rejected successfully" };
   } catch (err) {
     logger.error(err);
     throw err;

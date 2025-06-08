@@ -9,17 +9,16 @@ let logRequest = false
 let logResponse = false
 
 router.post("/login", controllerWrapper(adminController.login, { logRequest, logResponse }));
-router.get("/test",verifyAdminAccessToken, controllerWrapper((req, res) => {
-    res.status(200).json({ message: "Admin test route" });
-}, { logRequest, logResponse }));
-
 router.post("/refreshAccessToken", controllerWrapper(adminController.refreshAccessToken, { logRequest, logResponse }));
 
 logRequest = true;
 logResponse = true;
 
 router.get("/stats",verifyAdminAccessToken, controllerWrapper(adminController.stats, {logRequest, logResponse}))
-
 router.get("/getAllVendors",verifyAdminAccessToken, controllerWrapper(adminController.getAllVendors, {logRequest, logResponse}))
+router.get("/getVendorById/:id",verifyAdminAccessToken, controllerWrapper(adminController.getVendorById, {logRequest, logResponse}))
+router.post("/blockorUnblockVendor/:id",verifyAdminAccessToken, controllerWrapper(adminController.blockOrUnblockVendor, {logRequest, logResponse}))
+router.post("/verifyVendor/:id",verifyAdminAccessToken, controllerWrapper(adminController.verifyVendor, {logRequest, logResponse}))
+router.post("/rejectVendor/:id",verifyAdminAccessToken, controllerWrapper(adminController.rejectVendor, {logRequest, logResponse}))
 
 export default router;
