@@ -32,6 +32,10 @@ export const User = new EntitySchema({
             type: "varchar",
             nullable: true
         },
+        isBlocked: {
+            type: "boolean",
+            default: false
+        },
         refreshToken: {
             type: "varchar",
             nullable: true

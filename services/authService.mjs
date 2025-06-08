@@ -167,6 +167,9 @@ export const loginWithEmail = async (data) => {
             if (!user) {
                 throw sendError('User not found', 404);
             }
+            if (user.isBlocked) {
+                throw sendError('User is blocked', 403);
+            }
             // Check if password is correct
             const isPasswordValid = await comparePassword(password, user.password);
             if (!isPasswordValid) {
