@@ -13,7 +13,7 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
     const vendorRepo = AppDataSource.getRepository(Vendors);
 
     let baseQuery = `
-            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors."shopImageUrl", vendors.rating, vendors."ratingCount",
+            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors.rating, vendors."ratingCount",
             ST_Distance(vendors.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)/1000 AS distance,
             (0.6 * (vendors.rating/5.0)) +
             (0.4 * (1 - LEAST(ST_Distance(vendors.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / ($3), 1.0))) AS hybrid_score
@@ -22,6 +22,7 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
             WHERE 
             vendors.location IS NOT NULL
             AND vendors.status = 'VERIFIED'
+            AND "user"."isBlocked" = false
         `
 
     let conditions = [];
@@ -35,11 +36,12 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
 
         case "rating":
             baseQuery = `
-            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors."shopImageUrl", vendors.rating, vendors."ratingCount"
+            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors.rating, vendors."ratingCount"
             FROM vendors
             INNER JOIN "user" ON vendors."userId" = "user".id
             WHERE vendors.location IS NOT NULL
             AND vendors.status = 'VERIFIED'
+            AND "user"."isBlocked" = false
             `;
             orderClause = ` ORDER BY rating DESC`;
             params = [];
