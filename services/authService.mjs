@@ -297,7 +297,9 @@ export const loginWithGoogle = async (data) => {
                 email: email
             });
         }
-
+        if (user.isBlocked) {
+            throw sendError('User is blocked', 403);
+        }
         // Generate JWT token
         const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
         const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
@@ -327,6 +329,10 @@ export const loginWithGoogle = async (data) => {
                 id: user.id,
                 email: user.email,
                 role: user.role,
+                name: user.name,
+                phoneNumber: user.phoneNumber,
+                createdAt: user.createdAt,
+                lastLogin: user.updatedAt,
             },
             accessToken,
             refreshToken,

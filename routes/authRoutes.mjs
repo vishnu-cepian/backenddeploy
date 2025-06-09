@@ -13,7 +13,7 @@ const logResponse = true;
 router.post("/signup",verifyOtpToken,controllerWrapper(authController.signup, { logRequest, logResponse }));  //The env has OTP_TOKEN_SECRET which will be handled by verifyOtpToken middleware to restrict bypassing the OTP
 
 router.post("/login",controllerWrapper(authController.loginWithEmail, { logRequest, logResponse }));
-router.post("/google-signin",controllerWrapper(authController.loginWithGoogle, { logRequest, logResponse }));
+router.get("/google-signin",controllerWrapper(authController.loginWithGoogle, { logRequest, logResponse }));
 
 router.post("/checkEmail",controllerWrapper(authController.checkEmail, { logRequest, logResponse }));
 
