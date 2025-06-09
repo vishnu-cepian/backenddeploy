@@ -71,7 +71,7 @@ export const generateAccessToken = (payload) => {
           throw sendError('User not found', 404);
       }
       if (user.refreshToken !== refreshToken) {
-          throw sendError('Invalid refresh token', 401);
+          throw sendError('Refresh token mismatch', 403);
       }
       const newAccessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
       const newRefreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
@@ -204,46 +204,55 @@ export const stats = async () => {
   }
 }
 
-export const getAllVendorsByFilter = async (pageNumber, limitNumber, status) => {
+export const getAllVendorsByFilter = async (pageNumber, limitNumber, status, service) => {
   try {
-    if (status === "BLOCKED") {
-      const vendors = await vendorRepo
+    const baseQuery = vendorRepo
       .createQueryBuilder("vendors")
       .leftJoinAndSelect("vendors.user", "user")
       .select([
         "vendors.id",
-        "vendors.status",
+        "vendors.status", 
         "vendors.createdAt",
         "user.email",
         "user.name",
         "user.phoneNumber",
         "user.isBlocked"
       ])
-      .where("user.isBlocked = :isBlocked", { isBlocked: true })
       .orderBy("vendors.createdAt", "DESC")
       .skip((pageNumber - 1) * limitNumber)
-      .take(limitNumber)
-      .getMany();
+      .take(limitNumber);
 
+    if (service && status) {
+      if (status === "BLOCKED") {
+      const vendors = await baseQuery
+          .where("vendors.serviceType = :service", { service })
+          .andWhere("user.isBlocked = :isBlocked", { isBlocked: true })
+          .getMany();
+        return { vendors };
+      }
+      const vendors = await baseQuery
+        .where("vendors.status = :status", { status })
+        .andWhere("vendors.serviceType = :service", { service })
+        .getMany();
       return { vendors };
     }
 
-    const vendors = await vendorRepo
-      .createQueryBuilder("vendors")
-      .leftJoinAndSelect("vendors.user", "user")
-      .select([
-        "vendors.id",
-        "vendors.status",
-        "vendors.createdAt",
-        "user.email",
-        "user.name",
-        "user.phoneNumber",
-        "user.isBlocked"
-      ])
+    if (service) {
+      const vendors = await baseQuery
+        .where("vendors.serviceType = :service", { service })
+        .getMany();
+      return { vendors };
+    }
+
+    if (status === "BLOCKED") {
+      const vendors = await baseQuery
+        .where("user.isBlocked = :isBlocked", { isBlocked: true })
+        .getMany();
+      return { vendors };
+    }
+
+    const vendors = await baseQuery
       .where("vendors.status = :status", { status })
-      .orderBy("vendors.createdAt", "DESC")
-      .skip((pageNumber - 1) * limitNumber)
-      .take(limitNumber)
       .getMany();
 
     return { vendors };

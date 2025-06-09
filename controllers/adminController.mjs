@@ -46,12 +46,12 @@ export const stats = async (req, res, next) => {
 
 export const getAllVendors = async (req, res, next) => {
     try {
-        const {page, limit, status} = req.query;
+        const {page, limit, status, service} = req.query;
         const pageNumber = page ? parseInt(page) : 1;
         const limitNumber = limit ? parseInt(limit) : 10;
         let response;
-        if (status) {
-            response = await adminService.getAllVendorsByFilter(parseInt(pageNumber), parseInt(limitNumber), status);
+        if ( status || service) {
+            response = await adminService.getAllVendorsByFilter(parseInt(pageNumber), parseInt(limitNumber), status, service);
         } else {
             response = await adminService.getAllVendors(parseInt(pageNumber), parseInt(limitNumber));
         }
@@ -67,8 +67,8 @@ export const getAllVendors = async (req, res, next) => {
 
 export const getVendorById = async (req, res, next) => {
     try {
-        const id = req.params.id;
-        const response = await adminService.getVendorById(id);
+        const vendorId = req.params.id;
+        const response = await adminService.getVendorById(vendorId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
@@ -81,8 +81,8 @@ export const getVendorById = async (req, res, next) => {
 
 export const blockOrUnblockVendor = async (req, res, next) => {
     try {
-        const id = req.params.id;
-        const response = await adminService.blockOrUnblockVendor(id);
+        const vendorId = req.params.id;
+        const response = await adminService.blockOrUnblockVendor(vendorId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
@@ -95,8 +95,8 @@ export const blockOrUnblockVendor = async (req, res, next) => {
 
 export const verifyVendor = async (req, res, next) => {
     try {
-        const id = req.params.id;
-        const response = await adminService.verifyVendor(id);
+        const vendorId = req.params.id;
+        const response = await adminService.verifyVendor(vendorId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
@@ -109,8 +109,8 @@ export const verifyVendor = async (req, res, next) => {
 
 export const rejectVendor = async (req, res, next) => {
     try {
-        const id = req.params.id;
-        const response = await adminService.rejectVendor(id);
+        const vendorId = req.params.id;
+        const response = await adminService.rejectVendor(vendorId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
