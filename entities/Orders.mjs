@@ -13,6 +13,18 @@ export const Orders = new EntitySchema({
             type: "uuid",
             nullable: false
         },
+        selectedVendorId: {
+            type: "uuid",
+            nullable: true
+        },
+        finalQuoteId: {
+            type: "uuid",
+            nullable: true
+        },
+        paymentId: {
+            type: "uuid",
+            nullable: true
+        },
         requiredByDate: {
             type: "date",
             nullable: false
@@ -22,9 +34,20 @@ export const Orders = new EntitySchema({
             default: false,
             nullable: false
         },
+        isPaid: {
+            type: "boolean",
+            default: false,
+            nullable: false
+        },
+        isRefunded: {
+            type: "boolean",
+            default: false,
+            nullable: false
+        },
         orderStatus: {
             type: "varchar",
-            enum: ["PENDING", "ACCEPTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
+            enum: ["PENDING","QUOTED", "ACCEPTED", "IN_PROGRESS", "COMPLETED",
+                 "CANCELLED", "PAID"],
             default: "PENDING",
             nullable: false
         },
@@ -32,6 +55,10 @@ export const Orders = new EntitySchema({
             type: "timestamp",
             createDate: true
         },
+        updatedAt: {
+            type: "timestamp",
+            updateDate: true
+        }
     },
     relations: {
         customer: {

@@ -25,6 +25,10 @@ export const OrderItems = new EntitySchema({
             type: "jsonb",
             nullable: true
         },
+        universalSize: {
+            type: "varchar",
+            nullable: true
+        },
     },
     relations: {
         order: {
