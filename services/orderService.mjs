@@ -19,50 +19,68 @@ const vendorRepo = AppDataSource.getRepository(Vendors);
 const paymentRepo = AppDataSource.getRepository(Payments);
 
 export const createOrder = async (data) => {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
-        const { userId , requiredByDate, clothProvided, orderItems } = data;
+        const { userId, requiredByDate, clothProvided, orderItems } = data;
+
+        if (!userId) throw sendError("User ID is required");
+        if (!requiredByDate) throw sendError("Required by date is required");
+        if (clothProvided === undefined) throw sendError("Cloth provided status is required");
+        if (!Array.isArray(orderItems) || orderItems.length === 0) throw sendError("Order items are required and must be a non-empty array");
+
+
+        const requiredDate = new Date(requiredByDate);
+
+        if (isNaN(requiredDate.getTime())) throw sendError("Invalid required by date format");
+        if (requiredDate <= new Date()) throw sendError("Required by date must be in the future");
+
 
         const customer = await customerRepo.findOne({ where: { userId: userId } });
-        if (!customer) {
-            throw sendError("Customer not found");
-        }
-        const order = orderRepo.create({
-            customerId: customer.id,
-            requiredByDate: requiredByDate,
-            clothProvided: clothProvided,
-            orderItems: orderItems
-        });
-        await orderRepo.save(order);
+        if (!customer) throw sendError("Customer not found");
 
-        if (!order) {
-            throw sendError("Order not created");
-        }
+
+        const order = await queryRunner.manager.save(Orders, {
+            customerId: customer.id,
+            requiredByDate: requiredDate,
+            clothProvided: clothProvided,
+            orderStatus: "PENDING",
+            isPaid: false,
+        });
+        
+        if (!order) throw sendError("Order not created");
 
         for (const item of orderItems) {
-            const {quantity , measurements} = item;
-            if (quantity > 5) {
-                throw sendError("Quantity cannot be greater than 5");
-            }
-            if (!measurements) {
-                throw sendError("Measurements are required");
-            }
-            const orderItem = orderItemRepo.create({
-                orderId: order.id,
-                itemId: item.itemId,
-                itemType: item.itemType,
-                quantity: item.quantity,
-                measurements: item.measurements
-            });
-            await orderItemRepo.save(orderItem);
-        }
+            const { quantity, measurements, universalSize, itemType } = item;
+            
+            if (!itemType) throw sendError("Item type is required for each order item");
+            if (typeof quantity !== 'number' || quantity <= 0) throw sendError("Quantity must be a positive number");
+            if (quantity > 5 && !universalSize) throw sendError("Universal size is required for quantity greater than 5");
+            if (quantity > 5 && measurements) throw sendError("Measurements are not allowed for quantity greater than 5");
+            if (quantity < 5 && !measurements) throw sendError("Measurements are required for quantity less than 5");
+            if (!measurements && !universalSize) throw sendError("Measurements or universal size are required");
 
+            await queryRunner.manager.save(OrderItems, {
+                orderId: order.id,
+                itemType: itemType,
+                quantity: quantity,
+                measurements: measurements || null,
+                universalSize: universalSize || null
+            });
+        }
+        await queryRunner.commitTransaction();
         return {
             message: "Order created successfully",
             orderId: order.id
         }
-    }catch(err) {
-     logger.error(err);
-     throw err;
+    } catch(err) {
+        await queryRunner.rollbackTransaction();
+        logger.error(err);
+        throw err;
+    } finally {
+        await queryRunner.release();
     }
 }
 
