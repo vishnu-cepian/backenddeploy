@@ -13,7 +13,7 @@ import { sendEmail } from "./notificationService.mjs";
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
-  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '1m' });
+  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
 };
 
 export const generateRefreshToken = (payload) => {
