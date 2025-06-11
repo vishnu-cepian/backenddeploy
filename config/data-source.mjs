@@ -13,6 +13,7 @@ import { ChatRoom } from '../entities/ChatRoom.mjs';
 import { ChatMessage } from '../entities/ChatMessage.mjs';
 import { VendorAudit } from '../entities/VendorAudit.mjs';
 import { VendorImages } from '../entities/VendorImages.mjs';
+import { OrderQuotes } from '../entities/orderQuote.mjs';
 
 import 'dotenv/config'
 
@@ -26,7 +27,7 @@ export const AppDataSource = new DataSource({
     // database: process.env.DB_DATABASE,
     schema: "public",
     synchronize: true,
-    entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, OrderVendors, OrderItemMeasurementByVendor, ChatRoom, ChatMessage, VendorAudit, VendorImages],
+    entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, OrderVendors, OrderItemMeasurementByVendor, ChatRoom, ChatMessage, VendorAudit, VendorImages, OrderQuotes],
 
 //     ssl: true,
 //     extra: {
