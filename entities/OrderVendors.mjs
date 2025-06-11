@@ -19,25 +19,9 @@ export const OrderVendors = new EntitySchema({
         },
         status: {
             type: "varchar",
-            enum: ["PENDING", "ACCEPTED", "REJECTED", "EXPIRED", "FINALIZED", "FROZEN"],
+            enum: ["PENDING", "ACCEPTED", "REJECTED", "EXPIRED"],
             default: "PENDING",
             nullable: false
-        },
-        quotedPrice: {
-            type: "decimal",
-            nullable: true
-        },
-        quotedDays: {
-            type: "integer",
-            nullable: true
-        },
-        lockedAt: {
-            type: "timestamp",
-            nullable: true
-        },
-        paid: {
-            type: "boolean",
-            default: false
         },
         createdAt: {
             type: "timestamp",

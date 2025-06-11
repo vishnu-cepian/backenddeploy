@@ -64,7 +64,7 @@ export const deleteOrder = async (req, res, next) => {
 
 export const sendOrderToVendor = async (req, res, next) => {
     try {
-        const data = { orderId: req.params.orderId, customerId: req.params.customerId, ...req.body };
+        const data = req.body;
         const response = await orderService.sendOrderToVendor(data);
         if (!response) {
             throw new Error(formatError("Order not sent to vendor", response));
@@ -92,7 +92,7 @@ export const viewOrderVendorStatus = async (req, res, next) => {
 
 export const vendorOrderResponse = async (req, res, next) => {
     try {
-        const data = { orderId: req.params.orderId, vendorId: req.params.vendorId, ...req.body };
+        const data = {userId: req.user.id, ...req.body};
         const response = await orderService.vendorOrderResponse(data);
         if (!response) {
             throw new Error(formatError("Order vendor response not sent", response));
