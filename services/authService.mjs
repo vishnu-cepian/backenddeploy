@@ -134,6 +134,11 @@ export const signup = async (data) => {
                     throw sendError("Customer profile creation failed", 400);
                 }
             }
+            const response = await sendEmail(email, "Nexs", "global_otp", { text: "WELCOME" });
+            if (response.status !== "success") {
+                throw sendError("Failed to send email", 500);
+            }
+              
             return {
                 message: "User created successfully",
                 status: true,
@@ -678,10 +683,10 @@ export const forgotPassword = async (data) => {
 
 export const resetPassword = async (data) => {
     try {
-        const { email, otp, newPassword } = data;
+        const { email, newPassword } = data;
     
-        if (!email || !otp || !newPassword) {
-            throw sendError('Email, OTP, and new password are required',400);
+        if (!email || !newPassword) {
+            throw sendError('Email and new password are required',400);
         }
 
         // Check if user exists
@@ -689,21 +694,6 @@ export const resetPassword = async (data) => {
         const user = await userRepository.findOne({ where: { email } });
         if (!user) {
             throw sendError('User not found',404);
-        }
-
-        // Verify OTP
-        const otpEmailRepository = AppDataSource.getRepository('OtpEmail');
-        const otpRecord = await otpEmailRepository.findOne({ where: { email } });
-        if (!otpRecord) {
-            throw sendError('OTP not found',400);
-        }
-
-        if (otpRecord.otp !== otp) {
-            throw sendError('Invalid OTP',400);
-        }
-
-        if (new Date() > otpRecord.expiresAt) {
-            throw sendError('OTP expired',400);
         }
 
         // Hash the new password

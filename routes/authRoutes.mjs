@@ -23,8 +23,8 @@ router.post("/sendPhoneOtp",controllerWrapper(authController.sendPhoneOtp, { log
 router.post("/verifyPhoneOtp",controllerWrapper(authController.verifyPhoneOtp, { logRequest, logResponse }));        
 
 
-router.post("/forgotPassword",controllerWrapper(authController.forgotPassword, { logRequest, logResponse }));
-router.post("/resetPassword",controllerWrapper(authController.resetPassword, { logRequest, logResponse }));     // use PUT request
+// router.post("/forgotPassword",controllerWrapper(authController.forgotPassword, { logRequest, logResponse }));
+router.post("/resetPassword",verifyOtpToken,controllerWrapper(authController.resetPassword, { logRequest, logResponse }));     // use PUT request
 
 // router.post("/updatePassword",controllerWrapper(authController.updatePassword, { logRequest, logResponse }));
 // router.post("/updateProfile",controllerWrapper(authController.updateProfile, { logRequest, logResponse }));
