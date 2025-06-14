@@ -5,6 +5,7 @@ import cors from "cors";
 dotenv.config();
 import { createServer } from "http";
 import { Server } from "socket.io";
+import os from "os";
 // import cron
 import "./cron/expirePendingVendors.mjs"
 
@@ -63,6 +64,21 @@ app.use("/api/s3", s3Routes);
 app.use("/api/pushNotification", pushNotification)
 app.use("/api/chat", chatRoutes)
 app.use("/api/admin",adminRoutes)
+app.get("/api/health", (req, res) => {
+  res.json({
+    env: process.env.NODE_ENV,
+    message: "Server is running",
+    status: "healthy",
+    uptime: os.uptime(),
+    memoryUsage: process.memoryUsage(),
+    cpuUsage: process.cpuUsage(),
+    platform: process.platform,
+    arch: process.arch,
+    nodeVersion: process.version,
+    totalMem: os.totalmem(),
+    freeMem: os.freemem(),
+  });
+});
 
 app.use((err, req, res, next) => {
   logger.error(err.stack);
