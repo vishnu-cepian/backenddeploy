@@ -3,6 +3,12 @@ import { EntitySchema } from "typeorm";
 export const OrderVendors = new EntitySchema({
     name: "OrderVendors",
     tableName: "orderVendors",
+    indices: [
+        { name: "order_vendor_status_idx", columns: ["status"] },
+        { name: "order_vendor_order_id_idx", columns: ["orderId"] },
+        { name: "order_vendor_vendor_id_idx", columns: ["vendorId"] },
+        { name: "order_vendor_created_at_idx", columns: ["createdAt"] }
+    ],
     columns: {
         id: {
             primary: true,
@@ -19,7 +25,7 @@ export const OrderVendors = new EntitySchema({
         },
         status: {
             type: "varchar",
-            enum: ["PENDING", "ACCEPTED", "REJECTED", "EXPIRED"],
+            enum: ["PENDING", "ACCEPTED", "REJECTED", "EXPIRED", "FROZEN"],
             default: "PENDING",
             nullable: false
         },
