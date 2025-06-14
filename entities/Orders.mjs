@@ -1,4 +1,5 @@
 import { EntitySchema } from "typeorm";
+import { ORDER_STATUS } from "../types/enums/index.mjs";
 
 export const Orders = new EntitySchema({
     name: "Orders",
@@ -46,9 +47,8 @@ export const Orders = new EntitySchema({
         },
         orderStatus: {
             type: "varchar",
-            enum: ["PENDING","QUOTED", "ACCEPTED", "IN_PROGRESS", "COMPLETED",
-                 "CANCELLED", "PAID"],
-            default: "PENDING",
+            enum: Object.values(ORDER_STATUS),
+            default: ORDER_STATUS.PENDING,
             nullable: false
         },
         createdAt: {
