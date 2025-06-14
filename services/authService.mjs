@@ -64,8 +64,8 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
     if (user.refreshToken !== refreshToken) {
         throw sendError('Invalid refresh token', 401);
     }
-    const newAccessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
-    const newRefreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
+    const newAccessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
+    const newRefreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
     await userRepository.update(
         { id: user.id },
         { refreshToken: newRefreshToken }
@@ -184,8 +184,8 @@ export const loginWithEmail = async (data) => {
             }
 
             // Generate JWT token
-            const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
-            const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
+            const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
+            const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
 
             await userRepository.update(
                 { id: user.id },
@@ -306,8 +306,8 @@ export const loginWithGoogle = async (data) => {
             throw sendError('User is blocked', 403);
         }
         // Generate JWT token
-        const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role });
-        const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role });
+        const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
+        const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
 
         await userRepository.update(
             { id: user.id },

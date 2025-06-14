@@ -19,6 +19,9 @@ export const verifyAccessToken = (req, res, next) => {
     }
     return res.status(403).json({ message: 'Invalid token' });
     }
+    if(decoded.isBlocked) {
+      return res.status(403).json({ message: 'User is blocked' });
+    }
     req.user = decoded; // Attach user data to request object
     next(); // Proceed to the next middleware or route handler
   });
