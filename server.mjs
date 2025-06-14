@@ -5,6 +5,8 @@ import cors from "cors";
 dotenv.config();
 import { createServer } from "http";
 import { Server } from "socket.io";
+// import cron
+import "./cron/expirePendingVendors.mjs"
 
 // Import routes
 import authRoutes from "./routes/authRoutes.mjs";
