@@ -7,7 +7,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import os from "os";
 // import cron
-import "./cron/expirePendingVendors.mjs"
+import "./jobs/expirePendingVendors.mjs"
 
 // Import routes
 import authRoutes from "./routes/authRoutes.mjs";
