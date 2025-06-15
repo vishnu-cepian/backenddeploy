@@ -51,6 +51,19 @@ export const Orders = new EntitySchema({
             default: ORDER_STATUS.PENDING,
             nullable: false
         },
+        orderStatusTimestamp: {
+            type: "jsonb",
+            default: {
+                paid: null,
+                orderConfirmed: null,
+                orderInProgress: null,
+                readyForDelivery: null,
+                delivered: null,
+                cancelled: null,
+                refunded: null,
+                completed: null
+            }
+        },
         createdAt: {
             type: "timestamp",
             createDate: true
