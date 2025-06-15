@@ -5,7 +5,11 @@ export const Vendors = new EntitySchema({
     tableName: "vendors",
     indices: [
         { name: "vendor_location_gix", columns: ["location"], spatial: true },
-        { name: "vendor_rating_idx", columns: ["rating"] },
+        { name: "vendor_current_month_rating_idx", columns: ["currentMonthRating"] },
+        { name: "vendor_current_month_bayesian_score_idx", columns: ["currentMonthBayesianScore"] },
+        { name: "vendor_current_month_review_count_idx", columns: ["currentMonthReviewCount"] },
+        { name: "vendor_all_time_rating_idx", columns: ["allTimeRating"] },
+        { name: "vendor_all_time_review_count_idx", columns: ["allTimeReviewCount"] },
         { name: "vendor_shopname_idx", columns: ["shopName"] },
         { name: "vendor_servicetype_idx", columns: ["serviceType"] },
         { name: "vendor_status_idx", columns: ["status"] }
@@ -111,19 +115,29 @@ export const Vendors = new EntitySchema({
             type: "varchar",
             nullable: true
         },
-        rating: {
+        allTimeRating: {
             type: "numeric",
             precision: 3,
             scale: 2,
             default: 0
         },
-        ratingCount: {
+        allTimeReviewCount: {
             type: "int",
             default: 0,
         },
-        popularityScore: {              // FOR FUTURE USE  
+        currentMonthRating: { 
             type: "numeric", 
-            precision: 6,
+            precision: 3,
+            scale: 2,
+            default: 0
+        },
+        currentMonthReviewCount: {
+            type: "int",
+            default: 0,
+        },
+        currentMonthBayesianScore: {
+            type: "numeric",
+            precision: 3,
             scale: 2,
             default: 0
         },
