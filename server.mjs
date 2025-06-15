@@ -6,8 +6,10 @@ dotenv.config();
 import { createServer } from "http";
 import { Server } from "socket.io";
 import os from "os";
-// import cron
+// import jobs
 import "./jobs/expirePendingVendors.mjs"
+import "./jobs/resetMonthlyLeadershipBoard.mjs"
+import "./jobs/dailyRefreshLeadershipBoard.mjs"
 
 // Import routes
 import authRoutes from "./routes/authRoutes.mjs";
@@ -18,6 +20,7 @@ import s3Routes from "./routes/s3routes.mjs";
 import pushNotification from "./routes/pushNotificationRoutes.mjs"
 import chatRoutes from "./routes/chatRoutes.mjs"
 import adminRoutes from "./routes/adminRoutes.mjs"
+import ratingRoutes from "./routes/ratingRoutes.mjs"
 
 // Import Utils and config files
 import { MESSAGE } from "./types/enums/index.mjs";
@@ -64,6 +67,7 @@ app.use("/api/s3", s3Routes);
 app.use("/api/pushNotification", pushNotification)
 app.use("/api/chat", chatRoutes)
 app.use("/api/admin",adminRoutes)
+app.use("/api/rating", ratingRoutes)
 app.get("/api/health", (req, res) => {
   res.json({
     env: process.env.NODE_ENV,
