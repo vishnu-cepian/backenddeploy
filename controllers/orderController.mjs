@@ -104,6 +104,20 @@ export const vendorOrderResponse = async (req, res, next) => {
     }   
 };
 
+export const createRazorpayOrder = async (req, res, next) => {
+    try {
+        const data = {userId: req.user.id, ...req.body};
+        const response = await orderService.createRazorpayOrder(data);
+        if (!response) {
+            throw new Error(formatError("Order vendor response not sent", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }   
+};
+
 export const viewAcceptedOrderDetails = async (req, res, next) => {
     try {
         const data = { orderId: req.params.orderId, vendorId: req.params.vendorId };
@@ -152,6 +166,20 @@ export const confirmVendorPayment = async (req, res, next) => {
         const response = await orderService.confirmVendorPayment(data);
         if (!response) {
             throw new Error(formatError("Payment not confirmed", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const freezeOrderVendors = async (req, res, next) => {
+    try {
+        const data = { orderId: req.params.orderId, vendorId: req.params.vendorId };
+        const response = await orderService.freezeOrderVendors(data);
+        if (!response) {
+            throw new Error(formatError("Failed to freeze order vendors", response));
         }
         res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
     } catch (error) {

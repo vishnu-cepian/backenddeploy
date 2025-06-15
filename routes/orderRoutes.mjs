@@ -24,7 +24,11 @@ router.post("/vendorOrderResponse", verifyAccessToken, controllerWrapper(orderCo
 
 // PAYMENT ROUTES
 
-// router.post("/initiateVendorPayment/:orderId/:vendorId/:customerId", verifyAccessToken, controllerWrapper(orderController.initiateVendorPayment, { logRequest: true, logResponse: true }));
+router.post("/createRazorpayOrder", verifyAccessToken, controllerWrapper(orderController.createRazorpayOrder, { logRequest: true, logResponse: true }));
+// import * as orderService from "../services/orderService.mjs"
+// router.post("/handleRazorpayWebhook", orderService.handleRazorpayWebhook);
 // router.post("/confirmVendorPayment/:paymentId", verifyAccessToken, controllerWrapper(orderController.confirmVendorPayment, { logRequest: true, logResponse: true }));
+
+// router.post("/freezeOrderVendors/:orderId/:vendorId", verifyAccessToken, controllerWrapper(orderController.freezeOrderVendors, { logRequest: true, logResponse: true }));
 
 export default router;

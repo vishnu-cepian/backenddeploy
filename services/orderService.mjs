@@ -8,8 +8,11 @@ import { OrderItemMeasurementByVendor } from "../entities/OrderItemMeasurementBy
 import { Customers } from "../entities/Customers.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { Payments } from "../entities/Payments.mjs";
-import { OrderQuotes } from "../entities/orderQuote.mjs";
-import { In } from "typeorm";
+import { OrderQuotes } from "../entities/OrderQuote.mjs";
+import { In, Not } from "typeorm";
+import Razorpay from "razorpay";
+import crypto from "crypto";
+import { ORDER_VENDOR_STATUS, ORDER_STATUS } from "../types/enums/index.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderItemRepo = AppDataSource.getRepository(OrderItems);
@@ -27,7 +30,7 @@ export const createOrder = async (data) => {
 
     try {
         const { userId, requiredByDate, clothProvided, orderItems } = data;
-
+        
         if (!userId) throw sendError("User ID is required");
         if (!requiredByDate) throw sendError("Required by date is required");
         if (clothProvided === undefined) throw sendError("Cloth provided status is required");
@@ -48,7 +51,7 @@ export const createOrder = async (data) => {
             customerId: customer.id,
             requiredByDate: requiredDate,
             clothProvided: clothProvided,
-            orderStatus: "PENDING",
+            orderStatus: ORDER_STATUS.PENDING,
             isPaid: false,
         });
         
@@ -86,55 +89,6 @@ export const createOrder = async (data) => {
     }
 }
 
-// export const getOrders = async (data) => {
-//     try {
-//         const { userId } = data;
-//         const customer = await customerRepo.findOne({ where: { userId: userId } });
-//         if (!customer) {
-//             throw sendError("Customer not found");
-//         }
-//         const orders = await orderRepo.find({ where: { customerId: customer.id } });
-//         if (!orders) {
-//             throw sendError("Orders not found");
-//         }
-//         return orders;
-//     } catch (err) {
-//         logger.error(err);
-//         throw err;
-//     }
-// }
-
-// export const getOrderById = async (data) => {
-//     try {
-//         const { orderId } = data;
-//         const orderItems = await orderItemRepo.find({ where: { orderId: orderId } });
-//         if (!orderItems) {
-//             throw sendError("Order items not found");
-//         }
-//         return orderItems;
-//     } catch (err) {
-//         logger.error(err);
-//         throw err;
-//     }
-// }
-
-// export const deleteOrder = async (data) => {
-//     try {
-//         const { orderId } = data;
-//         const order = await orderRepo.findOne({ where: { id: orderId } });
-//         if (!order) {
-//             throw sendError("Order not found");
-//         }
-//         await orderRepo.remove(order);
-//         return {
-//             message: "Order deleted successfully"
-//         }
-//     } catch (err) {
-//         logger.error(err);
-//         throw err;
-//     }
-// }
-
 export const sendOrderToVendor = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
@@ -149,7 +103,7 @@ export const sendOrderToVendor = async (data) => {
         const order = await orderRepo.findOne({ where: { id: orderId} });
 
         if (!order) throw sendError("Order not found");
-        if (order.orderStatus !== "PENDING") throw sendError("Order cannot be sent. Status is not valid");
+        if (order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order cannot be sent. Status is not valid");
 
         const uniqueVendorIds = [...new Set(vendorIds)];
 
@@ -174,7 +128,7 @@ export const sendOrderToVendor = async (data) => {
             await queryRunner.manager.save(OrderVendors, {
                 orderId: orderId,
                 vendorId: vendorId,
-                status: "PENDING"
+                status: ORDER_VENDOR_STATUS.PENDING
             });
         }
         await queryRunner.commitTransaction();
@@ -205,85 +159,6 @@ export const sendOrderToVendor = async (data) => {
     }
 }
 
-// export const viewOrderVendorStatus = async (data) => {
-//     try {
-//         const { orderId } = data;
-//         // Find order by ID
-//         const order = await orderRepo.findOne({ where: { id: orderId } });
-//         if (!order) {
-//             throw sendError("Order not found");
-//         }
-        
-//         // Get all vendors associated with this order
-//         const orderVendors = await orderVendorRepo.find({ where: { orderId: orderId } });
-        
-//         for (const vendor of orderVendors) {
-//             if (vendor.status === "PENDING") {
-//                 // Calculate hours elapsed since vendor was assigned (adjusted for timezone)
-//                 const hoursElapsed = (new Date() - new Date(vendor.createdAt)) / (1000 * 60 * 60) - 5.5;
-//                 const hour = Math.floor(hoursElapsed);
-//                 const minute = Math.floor((hoursElapsed - hour) * 60);
-             
-//                 // console.log(hour+" hr "+ minute +" min");
-                
-//                 // If more than 24 hours have passed, mark vendor status as EXPIRED
-//                 if (hour >= 24) {
-//                     vendor.status = "EXPIRED";
-//                     await orderVendorRepo.save(vendor);
-//                 }
-//             }
-//         }
-        
-//         if (!orderVendors) {
-//             throw sendError("Order vendors not found");
-//         }
-
-//         return orderVendors;
-//     } catch (err) {
-//         logger.error(err);
-//         throw err;
-//     }
-// }
-
-// export const viewAcceptedOrderDetails = async (data) => {
-//     try {
-//         const { orderId, vendorId } = data;
-//         const order = await orderRepo.findOne({ where: { id: orderId } });
-//         if (!order) {
-//             throw sendError("Order not found");
-//         }
-
-//         const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
-//         if (!orderVendor) {
-//             throw sendError("Order vendor not found");
-//         }
-
-//         if (orderVendor.status !== "ACCEPTED") {
-//             throw sendError("Order vendor status is not ACCEPTED");
-//         }
-        
-//         return orderVendor;
-//     } catch (err) {
-//         logger.error(err);
-//         throw err;
-//     }
-// }
-
-// export const viewReceivedOrderDetails = async (data) => {
-//     try {
-//         const { vendorId } = data;
-//         const orderVendor = await orderVendorRepo.find({ where: { vendorId: vendorId } });
-//         if (!orderVendor) {
-//             throw sendError("Order vendor not found");
-//         }
-
-//         return orderVendor;
-//     } catch (err) {
-//         logger.error(err);
-//         throw err;
-//     }
-// }
-
 export const vendorOrderResponse = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
@@ -302,7 +177,7 @@ export const vendorOrderResponse = async (data) => {
 
         const order = await orderRepo.findOne({ where: { id: orderId } });
         if (!order) throw sendError("Order not found");
-        if (order.orderStatus !== "PENDING") throw sendError("Order is not in PENDING status");
+        if (order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is not in PENDING status");
 
         if(order.selectedVendorId) throw sendError("Order is already assigned to a vendor");
         
@@ -311,15 +186,15 @@ export const vendorOrderResponse = async (data) => {
 
         const now = new Date();
         const diff = (now.getTime() - new Date(orderVendor.createdAt).getTime()) / (1000 * 60 * 60);
-        if(diff > 24 && orderVendor.status === "PENDING") {
-            orderVendor.status = "EXPIRED";
+        if(diff > 24 && orderVendor.status === ORDER_VENDOR_STATUS.PENDING) {
+            orderVendor.status = ORDER_VENDOR_STATUS.EXPIRED;
             await orderVendorRepo.save(orderVendor);
             throw sendError("Response window expired. Order automatically marked as expired.");
         }
-        if(orderVendor.status !== "PENDING") throw sendError(`Order is in ${orderVendor.status} status`);
+        if(orderVendor.status !== ORDER_VENDOR_STATUS.PENDING) throw sendError(`Order is in ${orderVendor.status} status`);
 
         if(action === "REJECTED") {
-            orderVendor.status = "REJECTED";
+            orderVendor.status = ORDER_VENDOR_STATUS.REJECTED;
             await orderVendorRepo.save(orderVendor);
             return {
                 message: "Order rejected successfully",
@@ -330,7 +205,7 @@ export const vendorOrderResponse = async (data) => {
             const existingQuote = await orderQuoteRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
             if(existingQuote) throw sendError("Quote already exists");
 
-            orderVendor.status = "ACCEPTED";
+            orderVendor.status = ORDER_VENDOR_STATUS.ACCEPTED;
             await queryRunner.manager.save(OrderVendors, orderVendor);
 
             await queryRunner.manager.save(OrderQuotes, {
@@ -366,6 +241,164 @@ export const vendorOrderResponse = async (data) => {
             await queryRunner.release();
         }
     }
+
+export const createRazorpayOrder = async (data) => {
+    try {
+        const { userId, orderId, quoteId } = data;
+
+        const razorpay = new Razorpay({
+            key_id: process.env.RAZORPAY_KEY_ID,
+            key_secret: process.env.RAZORPAY_KEY_SECRET
+        });
+
+        const customer = await customerRepo.findOne({ where: { userId: userId } });
+        if (!customer) throw sendError("Customer not found");
+
+        const order = await orderRepo.findOne({ where: { id: orderId } });
+        if (!order || order.customerId !== customer.id) throw sendError("Order not found or doesn't belong to the customer");
+
+        if (order.selectedVendorId || order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is already assigned to a vendor or is not in PENDING status");
+
+        const quote = await orderQuoteRepo.findOne({ where: { id: quoteId } });
+        if (!quote || quote.orderId !== orderId) throw sendError("Quote not found or doesn't belong to the order");
+
+        const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: quote.vendorId } });
+        if (!orderVendor || orderVendor.status !== ORDER_VENDOR_STATUS.ACCEPTED) throw sendError("No accepted quote found for this vendor");
+
+        const quoteAgeHours = (new Date() - new Date(quote.createdAt)) / (1000 * 60 * 60);
+        if (quoteAgeHours > 24) throw sendError("Quote is expired");
+
+        const razorpayOrder = await razorpay.orders.create({
+            amount: quote.quotedPrice * 100,
+            currency: "INR",
+            receipt: `order_${orderId}_quote_${quote.id}`,
+            notes: {
+                orderId: orderId.toString(),
+                quoteId: quote.id.toString(),
+                vendorId: quote.vendorId.toString(),
+                customerId: customer.id.toString(),
+                amount: quote.quotedPrice.toString(),
+            }
+        })
+
+        if (!razorpayOrder) throw sendError("Failed to create Razorpay order");
+
+        return {
+            message: "Razorpay order created successfully",
+            razorpayOrderId: razorpayOrder.id,
+            amount: quote.quotedPrice,
+            currency: "INR",
+        }
+    } catch(err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+/*
+*   CODE IS NOT COMPLETED AND TESTED
+*   ALSO THIS CODE DOESNT HANDLE FAILURE CASES
+*/
+export const handleRazorpayWebhook = async (req, res) => {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+        const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+        const signature = req.headers["x-razorpay-signature"];
+        const body = JSON.stringify(req.body);
+
+        const expectedSignature = crypto.createHmac("sha256", secret).update(body).digest("hex");
+
+        if (signature !== expectedSignature) throw sendError("Invalid signature");
+
+        const { event, data } = req.body;
+
+        if (event === "payment.captured") {
+            const payment = req.body.payload.payment.entity;
+            const { orderId, quoteId, vendorId, customerId, amount } = payment.notes;
+            const order = await orderRepo.findOne({ where: { id: orderId } });
+            const quote = await orderQuoteRepo.findOne({ where: { id: quoteId } });
+
+            if(!order || !quote || order.selectedVendorId || order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is already assigned to a vendor or is not in PENDING status");
+
+            const paymentDetails = await queryRunner.manager.save(Payments, {
+                orderId: orderId,
+                vendorId: vendorId,
+                customerId: customerId,
+                quoteId: quoteId,
+                razorpayPaymentId: payment.id,
+                paymentAmount: amount,
+                paymentCurrency: payment.currency,
+                paymentMethod: payment.method,
+                paymentStatus: payment.status,
+                paymentDate: payment.createdAt
+            });
+
+            order.selectedVendorId = quote.vendorId;
+            order.finalQuoteId = quoteId;
+            order.paymentId = paymentDetails.id;
+            order.orderStatus = ORDER_STATUS.ORDER_CONFIRMED;
+            order.isPaid = true;  
+            // UPDATE THE VENDOR ADDRESS ALSO 
+            order.orderStatusTimestamp.orderConfirmed = payment.createdAt;
+
+            await queryRunner.manager.save(Orders, order);
+
+            const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
+            if (!orderVendor) throw sendError("Order vendor not found");
+
+            orderVendor.status = ORDER_VENDOR_STATUS.FINALIZED;
+            await queryRunner.manager.save(OrderVendors, orderVendor);
+
+            // freeze other vendors
+            await queryRunner.manager.update(OrderVendors, {
+                orderId,
+                vendorId: Not(vendorId)
+            }, {
+                status: ORDER_VENDOR_STATUS.FROZEN
+            });
+
+            // INITIATE CLOTH PICKUP FROM CUSTOMER
+            if(order.clothProvided) {
+            }
+
+
+            await queryRunner.commitTransaction();
+        }
+    } catch(err) {
+        await queryRunner.rollbackTransaction();
+        logger.error(err);
+        throw err;
+    } finally {
+        await queryRunner.release();
+    }
+}
+
+export const cancelOrder = async (data) => {
+    try {
+        const { orderId } = data;
+
+        const order = await orderRepo.findOne({ where: { id: orderId } });
+        if (!order) throw sendError("Order not found");
+
+        if (order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is not in PENDING status");
+
+        order.orderStatus = ORDER_STATUS.CANCELLED;
+        await orderRepo.save(order);
+
+        return {
+            message: "Order cancelled successfully",
+        }
+
+    } catch(err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
 // export const initiateVendorPayment = async (data) => {
 //     try {
 //         const {customerId, orderId, vendorId } = data;
@@ -475,5 +508,133 @@ export const vendorOrderResponse = async (data) => {
 //     } catch (error) {
 //         logger.error(error);
 //         throw error;
+//     }
+// }
+
+// export const getOrders = async (data) => {
+//     try {
+//         const { userId } = data;
+//         const customer = await customerRepo.findOne({ where: { userId: userId } });
+//         if (!customer) {
+//             throw sendError("Customer not found");
+//         }
+//         const orders = await orderRepo.find({ where: { customerId: customer.id } });
+//         if (!orders) {
+//             throw sendError("Orders not found");
+//         }
+//         return orders;
+//     } catch (err) {
+//         logger.error(err);
+//         throw err;
+//     }
+// }
+
+// export const getOrderById = async (data) => {
+//     try {
+//         const { orderId } = data;
+//         const orderItems = await orderItemRepo.find({ where: { orderId: orderId } });
+//         if (!orderItems) {
+//             throw sendError("Order items not found");
+//         }
+//         return orderItems;
+//     } catch (err) {
+//         logger.error(err);
+//         throw err;
+//     }
+// }
+
+// export const deleteOrder = async (data) => {
+//     try {
+//         const { orderId } = data;
+//         const order = await orderRepo.findOne({ where: { id: orderId } });
+//         if (!order) {
+//             throw sendError("Order not found");
+//         }
+//         await orderRepo.remove(order);
+//         return {
+//             message: "Order deleted successfully"
+//         }
+//     } catch (err) {
+//         logger.error(err);
+//         throw err;
+//     }
+// }
+
+// export const viewOrderVendorStatus = async (data) => {
+//     try {
+//         const { orderId } = data;
+//         // Find order by ID
+//         const order = await orderRepo.findOne({ where: { id: orderId } });
+//         if (!order) {
+//             throw sendError("Order not found");
+//         }
+        
+//         // Get all vendors associated with this order
+//         const orderVendors = await orderVendorRepo.find({ where: { orderId: orderId } });
+        
+//         for (const vendor of orderVendors) {
+//             if (vendor.status === "PENDING") {
+//                 // Calculate hours elapsed since vendor was assigned (adjusted for timezone)
+//                 const hoursElapsed = (new Date() - new Date(vendor.createdAt)) / (1000 * 60 * 60) - 5.5;
+//                 const hour = Math.floor(hoursElapsed);
+//                 const minute = Math.floor((hoursElapsed - hour) * 60);
+             
+//                 // console.log(hour+" hr "+ minute +" min");
+                
+//                 // If more than 24 hours have passed, mark vendor status as EXPIRED
+//                 if (hour >= 24) {
+//                     vendor.status = "EXPIRED";
+//                     await orderVendorRepo.save(vendor);
+//                 }
+//             }
+//         }
+        
+//         if (!orderVendors) {
+//             throw sendError("Order vendors not found");
+//         }
+
+//         return orderVendors;
+//     } catch (err) {
+//         logger.error(err);
+//         throw err;
+//     }
+// }
+
+// export const viewAcceptedOrderDetails = async (data) => {
+//     try {
+//         const { orderId, vendorId } = data;
+//         const order = await orderRepo.findOne({ where: { id: orderId } });
+//         if (!order) {
+//             throw sendError("Order not found");
+//         }
+
+//         const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
+//         if (!orderVendor) {
+//             throw sendError("Order vendor not found");
+//         }
+
+//         if (orderVendor.status !== "ACCEPTED") {
+//             throw sendError("Order vendor status is not ACCEPTED");
+//         }
+        
+//         return orderVendor;
+//     } catch (err) {
+//         logger.error(err);
+//         throw err;
+//     }
+// }
+
+// export const viewReceivedOrderDetails = async (data) => {
+//     try {
+//         const { vendorId } = data;
+//         const orderVendor = await orderVendorRepo.find({ where: { vendorId: vendorId } });
+//         if (!orderVendor) {
+//             throw sendError("Order vendor not found");
+//         }
+
+//         return orderVendor;
+//     } catch (err) {
+//         logger.error(err);
+//         throw err;
 //     }
 // }
