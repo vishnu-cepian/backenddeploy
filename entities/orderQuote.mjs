@@ -9,13 +9,9 @@ export const OrderQuotes = new EntitySchema({
             type: "uuid",
             generated: "uuid"
         },     
-        orderId: {
+        orderVendorId: {
             type: "uuid",
             nullable: false
-        },
-        vendorId: {
-            type: "uuid",
-            nullable: true
         },
         quotedPrice: {
             type: "float",
@@ -39,17 +35,10 @@ export const OrderQuotes = new EntitySchema({
         }
     },
     relations: {
-        order: {
-            type: "many-to-one",
-            target: "Orders",
-            joinColumn: { name: "orderId" },
-            onDelete: "CASCADE",
-            cascade: true
-        },
-        vendor: {
-            type: "many-to-one",
-            target: "Vendors",
-            joinColumn: { name: "vendorId" },
+        orderVendor: {
+            type: "one-to-one",
+            target: "OrderVendors",
+            joinColumn: { name: "orderVendorId" },
             onDelete: "CASCADE",
             cascade: true
         }
