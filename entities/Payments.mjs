@@ -21,24 +21,34 @@ export const Payments = new EntitySchema({
             type: "uuid",
             nullable: false
         },
-        amount: {
+        quoteId: {
+            type: "uuid",
+            nullable: false
+        },
+        razorpayPaymentId: {
+            type: "varchar",
+            nullable: true
+        },
+        paymentAmount: {
             type: "decimal",
             precision: 10,
             scale: 2,
             nullable: false
         },
-        status: {
+        paymentStatus: {
             type: "varchar",
-            enum: ["PENDING", "PAID", "FAILED"],
-            default: "PENDING"
+            nullable: false
         },
-        paidAt: {
-            type: "timestamp",
-            nullable: true
+        paymentMethod: {
+            type: "varchar",
+            nullable: false
         },
-        createdAt: {
+        paymentCurrency: {
+            type: "varchar",
+            nullable: false
+        },
+        paymentDate: {
             type: "timestamp",
-            createDate: true
         }
     },
     relations: {
@@ -55,6 +65,11 @@ export const Payments = new EntitySchema({
         customer: {
             type: "many-to-one",
             target: "Customers",
+            joinColumn: true
+        },
+        quote: {
+            type: "many-to-one",
+            target: "OrderQuotes",
             joinColumn: true
         }
     }
