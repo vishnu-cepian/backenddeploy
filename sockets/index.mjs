@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import { sendMessage, markAsRead, getChatRoom, getUser } from "../services/chatService.mjs";
-import { sendNotifciation } from "../services/pushService.mjs";
+import { sendPushNotification } from "../services/notificationService.mjs";
 import { ACCESS_TOKEN_SECRET } from '../config/auth-config.mjs';
 /*
 
@@ -81,7 +81,7 @@ export const initializeSocket = (io) => {
                     const fcmToken = receiverUser.pushToken;
                     const title = "New message";
                     const body = content;
-                    await sendNotifciation(fcmToken, title, body);
+                    await sendPushNotification(fcmToken, title, body);
                     }
                 }
             } catch (error) {

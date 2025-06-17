@@ -17,7 +17,7 @@ import vendorRoutes from "./routes/vendorRoutes.mjs";
 import searchRoutes from "./routes/searchRoutes.mjs";
 import orderRoutes from "./routes/orderRoutes.mjs";
 import s3Routes from "./routes/s3routes.mjs";
-import pushNotification from "./routes/pushNotificationRoutes.mjs"
+import notificationRoutes from "./routes/notificationRoutes.mjs"
 import chatRoutes from "./routes/chatRoutes.mjs"
 import adminRoutes from "./routes/adminRoutes.mjs"
 import ratingRoutes from "./routes/ratingRoutes.mjs"
@@ -64,7 +64,7 @@ app.use("/api/vendor", vendorRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/order", orderRoutes);
 app.use("/api/s3", s3Routes);
-app.use("/api/pushNotification", pushNotification)
+app.use("/api/notification", notificationRoutes)
 app.use("/api/chat", chatRoutes)
 app.use("/api/admin",adminRoutes)
 app.use("/api/rating", ratingRoutes)
@@ -82,6 +82,11 @@ app.get("/api/health", (req, res) => {
     totalMem: os.totalmem(),
     freeMem: os.freemem(),
   });
+});
+
+// Handle 404 - Route not found
+app.use((req, res, next) => {
+  res.status(404).json(formatResponse("Route not found", false, {}));
 });
 
 app.use((err, req, res, next) => {
