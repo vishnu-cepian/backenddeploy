@@ -154,10 +154,10 @@ export const completeProfile = async (data, deviceInfo) => {
 
 export const getVendorDetails = async (data) => {
   try {
-    const { vendorId } = data;
+    const { userId } = data;
 
     const vendor = await vendorRepo.findOne({
-      where: { id: vendorId },
+      where: { userId: userId },
     });
 
     if (!vendor) {

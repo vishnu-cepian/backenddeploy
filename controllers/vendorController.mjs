@@ -52,7 +52,7 @@ export const completeProfile = async (req, res, next) => {
 export const getVendorDetails = async (req, res, next) => {
   try {
     const data = {
-      vendorId: req.params.vendorId,
+      userId: req.user.id,
     };
     const response = await vendorService.getVendorDetails(data);
     if (!response) {

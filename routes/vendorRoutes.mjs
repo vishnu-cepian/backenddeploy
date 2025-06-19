@@ -7,7 +7,7 @@ const router = Router();
 
 router.get("/checkProfile", verifyAccessToken, controllerWrapper(vendorController.checkProfile, { logRequest: true, logResponse: true })); // Check if the user is a vendor
 router.post("/completeProfile", verifyAccessToken, controllerWrapper(vendorController.completeProfile, { logRequest: true, logResponse: true })); // Complete vendor profile
-router.get("/getVendorDetails/:vendorId", verifyAccessToken, controllerWrapper(vendorController.getVendorDetails, { logRequest: true, logResponse: true })); // Get vendor details
+router.get("/getVendorDetails", verifyAccessToken, controllerWrapper(vendorController.getVendorDetails, { logRequest: true, logResponse: true })); // Get vendor details
 router.post("/saveVendorAvatarUrl", verifyAccessToken, controllerWrapper(vendorController.saveVendorAvatarUrl, { logRequest: true, logResponse: true })); // Save vendor avatar url
 router.get("/getVendorAvatarUrl", verifyAccessToken, controllerWrapper(vendorController.getVendorAvatarUrl, { logRequest: true, logResponse: true })); // Get vendor avatar url
 router.post("/deleteVendorAvatarUrl", verifyAccessToken, controllerWrapper(vendorController.deleteVendorAvatarUrl, { logRequest: true, logResponse: true })); // Delete vendor avatar url
