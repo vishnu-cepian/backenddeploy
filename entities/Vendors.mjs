@@ -48,14 +48,9 @@ export const Vendors = new EntitySchema({
             enum: ["TAILORING", "LAUNDRY"],
             nullable: false
         },
-        laundryServices: {
+        vendorServices: {
             type: "varchar",
             nullable: true
-        },
-        targetGender: {
-            type: "varchar",
-            enum: ["LADIES", "GENTS", "BOTH"],
-            nullable: false
         },
         shopName: {
             type: "varchar",
