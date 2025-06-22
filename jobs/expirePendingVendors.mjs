@@ -11,17 +11,14 @@ const cronTime = process.env.CRON_TIME || "*/30 * * * *";
 cron.schedule(cronTime, async () => {
     try {
         const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
-        const orderVendors = await orderVendorRepo.find({
-            where: {
-                status: ORDER_VENDOR_STATUS.PENDING,
-                createdAt: LessThan(new Date(Date.now() - 24 * 60 * 60 * 1000))
-            }
-        });
-        for (const orderVendor of orderVendors) {
-            orderVendor.status = ORDER_VENDOR_STATUS.EXPIRED;
-            await orderVendorRepo.save(orderVendor);
-        }
-        logger.info(`Expired ${orderVendors.length} pending vendors at ${new Date().toISOString()}`);
+        // Bulk update all pending vendors older than 24 hours
+        const result = await orderVendorRepo.createQueryBuilder()
+            .update()
+            .set({ status: ORDER_VENDOR_STATUS.EXPIRED })
+            .where("status = :status", { status: ORDER_VENDOR_STATUS.PENDING })
+            .andWhere("createdAt < :date", { date: new Date(Date.now() - 24 * 60 * 60 * 1000) })
+            .execute();
+        logger.info(`Expired ${result.affected} pending vendors at ${new Date().toISOString()}`);
 
     } catch (error) {
         logger.error("Error in expirePendingVendors cron job", error);
