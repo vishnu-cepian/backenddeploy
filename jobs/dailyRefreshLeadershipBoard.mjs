@@ -6,8 +6,8 @@ import { Not } from "typeorm";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 
-const cronTime = "0 0 * * *";
-// const cronTime = "*/1 * * * *"; //for testing
+// const cronTime = "0 0 * * *";
+const cronTime = "*/1 * * * *"; //for testing
 
 cron.schedule(cronTime, async () => {
     try {            
@@ -20,16 +20,27 @@ cron.schedule(cronTime, async () => {
 
         const C = parseFloat(globalStats.averageRating) || 3.5;
         const m = 5;
-        
-        const vendors = await vendorRepo.find({ where: { status: "VERIFIED", currentMonthRating: Not(0) } });
+        // const vendors = await vendorRepo.find({ where: { status: "VERIFIED", currentMonthRating: Not(0) } });
 
-        for (const vendor of vendors) {
-            const V = parseInt(vendor.currentMonthReviewCount);
-            const R = parseFloat(vendor.currentMonthRating); // average is already calculated
-            const bayesianScore = (V * R + m * C) / (V + m);
-            vendor.currentMonthBayesianScore = bayesianScore;
-            await vendorRepo.save(vendor);
-        }
+        // for (const vendor of vendors) {
+        //     const V = parseInt(vendor.currentMonthReviewCount);
+        //     const R = parseFloat(vendor.currentMonthRating); // average is already calculated
+        //     const bayesianScore = (V * R + m * C) / (V + m);
+        //     vendor.currentMonthBayesianScore = bayesianScore;
+        //     await vendorRepo.save(vendor);
+        // }
+
+
+        // Bulk update: Use a single query to update all vendors
+        await vendorRepo.createQueryBuilder()
+            .update()
+            .set({
+                currentMonthBayesianScore: () =>
+                    `(currentMonthReviewCount * currentMonthRating + ${m} * ${C}) / (currentMonthReviewCount + ${m})`
+            })
+            .where("status = :status", { status: "VERIFIED" })
+            .andWhere("currentMonthRating > 0")
+            .execute();
 
         logger.info(`Daily job executed at ${new Date().toISOString()}`);
     } catch (error) {
