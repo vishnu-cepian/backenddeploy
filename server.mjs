@@ -10,6 +10,7 @@ import os from "os";
 import "./jobs/expirePendingVendors.mjs"
 import "./jobs/resetMonthlyLeadershipBoard.mjs"
 import "./jobs/dailyRefreshLeadershipBoard.mjs"
+import "./jobs/expireAcceptedQuotes.mjs"
 
 // Import routes
 import authRoutes from "./routes/authRoutes.mjs";
