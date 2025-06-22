@@ -4,7 +4,6 @@ import { AppDataSource } from "../config/data-source.mjs";
 import { Orders } from "../entities/Orders.mjs";
 import { OrderItems } from "../entities/OrderItems.mjs";
 import { OrderVendors } from "../entities/OrderVendors.mjs";
-import { OrderItemMeasurementByVendor } from "../entities/OrderItemMeasurementByVendor.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { Payments } from "../entities/Payments.mjs";
@@ -15,12 +14,9 @@ import crypto from "crypto";
 import { ORDER_VENDOR_STATUS, ORDER_STATUS } from "../types/enums/index.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
-const orderItemRepo = AppDataSource.getRepository(OrderItems);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
-const orderItemMeasurementByVendorRepo = AppDataSource.getRepository(OrderItemMeasurementByVendor);
 const customerRepo = AppDataSource.getRepository(Customers);
 const vendorRepo = AppDataSource.getRepository(Vendors);
-const paymentRepo = AppDataSource.getRepository(Payments);
 const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
 
 export const createOrder = async (data) => {
@@ -202,15 +198,14 @@ export const vendorOrderResponse = async (data) => {
         }
 
         if(action === "ACCEPTED") {
-            const existingQuote = await orderQuoteRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
+            const existingQuote = await orderQuoteRepo.findOne({ where: { orderVendorId: orderVendor.id } });
             if(existingQuote) throw sendError("Quote already exists");
 
             orderVendor.status = ORDER_VENDOR_STATUS.ACCEPTED;
             await queryRunner.manager.save(OrderVendors, orderVendor);
 
             await queryRunner.manager.save(OrderQuotes, {
-                orderId: orderId,
-                vendorId: vendorId,
+                orderVendorId: orderVendor.id,
                 quotedPrice: quotedPrice,
                 quotedDays: quotedDays,
                 notes: notes || null
@@ -260,22 +255,22 @@ export const createRazorpayOrder = async (data) => {
         if (order.selectedVendorId || order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is already assigned to a vendor or is not in PENDING status");
 
         const quote = await orderQuoteRepo.findOne({ where: { id: quoteId } });
-        if (!quote || quote.orderId !== orderId) throw sendError("Quote not found or doesn't belong to the order");
+        if (!quote) throw sendError("Quote not found");
 
-        const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: quote.vendorId } });
+        const orderVendor = await orderVendorRepo.findOne({ where: { id: quote.orderVendorId } });
         if (!orderVendor || orderVendor.status !== ORDER_VENDOR_STATUS.ACCEPTED) throw sendError("No accepted quote found for this vendor");
 
         const quoteAgeHours = (new Date() - new Date(quote.createdAt)) / (1000 * 60 * 60);
         if (quoteAgeHours > 24) throw sendError("Quote is expired");
-
+     
         const razorpayOrder = await razorpay.orders.create({
             amount: quote.quotedPrice * 100,
             currency: "INR",
-            receipt: `order_${orderId}_quote_${quote.id}`,
+            receipt: quoteId,
             notes: {
                 orderId: orderId.toString(),
                 quoteId: quote.id.toString(),
-                vendorId: quote.vendorId.toString(),
+                vendorId: orderVendor.vendorId.toString(),
                 customerId: customer.id.toString(),
                 amount: quote.quotedPrice.toString(),
             }
@@ -286,8 +281,9 @@ export const createRazorpayOrder = async (data) => {
         return {
             message: "Razorpay order created successfully",
             razorpayOrderId: razorpayOrder.id,
-            amount: quote.quotedPrice,
+            amount: razorpayOrder.amount,
             currency: "INR",
+            key_id: process.env.RAZORPAY_KEY_ID, // FOR TESTING
         }
     } catch(err) {
         logger.error(err);
@@ -314,7 +310,7 @@ export const handleRazorpayWebhook = async (req, res) => {
 
         if (signature !== expectedSignature) throw sendError("Invalid signature");
 
-        const { event, data } = req.body;
+        const { event } = req.body;
 
         if (event === "payment.captured") {
             const payment = req.body.payload.payment.entity;
@@ -323,6 +319,9 @@ export const handleRazorpayWebhook = async (req, res) => {
             const quote = await orderQuoteRepo.findOne({ where: { id: quoteId } });
 
             if(!order || !quote || order.selectedVendorId || order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is already assigned to a vendor or is not in PENDING status");
+
+
+            const paymentDate = new Date(payment.created_at * 1000);
 
             const paymentDetails = await queryRunner.manager.save(Payments, {
                 orderId: orderId,
@@ -334,16 +333,19 @@ export const handleRazorpayWebhook = async (req, res) => {
                 paymentCurrency: payment.currency,
                 paymentMethod: payment.method,
                 paymentStatus: payment.status,
-                paymentDate: payment.createdAt
+                paymentDate: paymentDate
             });
 
-            order.selectedVendorId = quote.vendorId;
+            order.selectedVendorId = vendorId;
             order.finalQuoteId = quoteId;
             order.paymentId = paymentDetails.id;
             order.orderStatus = ORDER_STATUS.ORDER_CONFIRMED;
             order.isPaid = true;  
             // UPDATE THE VENDOR ADDRESS ALSO 
-            order.orderStatusTimestamp.orderConfirmed = payment.createdAt;
+            order.orderStatusTimestamp.orderConfirmed = paymentDate;
+
+            quote.isProcessed = true;
+            await queryRunner.manager.save(OrderQuotes, quote);
 
             await queryRunner.manager.save(Orders, order);
 
@@ -362,11 +364,14 @@ export const handleRazorpayWebhook = async (req, res) => {
             });
 
             // INITIATE CLOTH PICKUP FROM CUSTOMER
-            if(order.clothProvided) {
-            }
+            // if(order.clothProvided) {
+            // }
 
 
             await queryRunner.commitTransaction();
+            res.status(200).json({
+                message: "Order confirmed successfully",
+            })
         }
     } catch(err) {
         await queryRunner.rollbackTransaction();
@@ -399,117 +404,6 @@ export const cancelOrder = async (data) => {
     }
 }
 
-// export const initiateVendorPayment = async (data) => {
-//     try {
-//         const {customerId, orderId, vendorId } = data;
-
-//         const order = await orderRepo.findOne({ where: { id: orderId, customerId: customerId } });
-//         if (!order) {
-//             throw sendError("Order not found or doesn't belong to the customer");
-//         }
-
-//         if (order.orderStatus !== "PENDING") {
-//             throw sendError("Order is not in PENDING status");
-//         }
-
-//         const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
-//         if (!orderVendor) {
-//             throw sendError("No accepted quote found for this vendor");
-//         }
-
-//         if (orderVendor.status !== "ACCEPTED") {
-//             throw sendError("Vendor quote is not accepted");
-//         }
-
-//         // check for existing payment in payments table
-
-//         const existingPayment = await paymentRepo.findOne({ where: { orderId: orderId, vendorId: vendorId, customerId: customerId } });
-//         if ( existingPayment.status === "PENDING" || existingPayment.status === "PAID") {
-//             throw sendError("Payment already exists");
-//         }
-
-//         // create new payment
-
-//         const payment = paymentRepo.create({
-//             orderId: orderId,
-//             vendorId: vendorId,
-//             customerId: customerId,
-//             amount: orderVendor.quotedPrice,
-//             status: "PENDING"
-//         });
-
-//         await paymentRepo.save(payment);
-
-//         return {
-//             message: "Payment initiated successfully",
-//             paymentId: payment.id,
-//             amount: orderVendor.quotedPrice
-//         }
-
-//     } catch (error) {
-//         logger.error(error);
-//         throw error;
-//     }
-// }
-
-// export const confirmVendorPayment = async (data) => {
-//     try {
-//         const { paymentId } = data;
-
-//         const payment = await paymentRepo.findOne({ where: { id: paymentId } });
-//         if (!payment || payment.status === "PAID") {
-//             throw sendError("Payment not found or already confirmed");
-//         }
-
-//         payment.status = "PAID";
-//         payment.paidAt = new Date();
-//         await paymentRepo.save(payment);
-
-//         const orderVendor = await orderVendorRepo.findOne({ where: { orderId: payment.orderId, vendorId: payment.vendorId } });
-//         if (!orderVendor) {
-//             throw sendError("Order vendor not found");
-//         }
-
-//         const order = await orderRepo.findOne({ where: { id: payment.orderId } });
-//         if (!order) {
-//             throw sendError("Order not found");
-//         }
-//         // UPDATE ORDER STATUS TO IN-PROGRESS
-//         order.orderStatus = "IN-PROGRESS";
-//         await orderRepo.save(order);
-
-//         // UPDATE ORDER VENDOR STATUS TO FINALIZED
-//         orderVendor.status = "FINALIZED";
-//         await orderVendorRepo.save(orderVendor);
-
-//         // FREEZE OTHER VENDOR QUOTES
-
-//         const otherVendors = await orderVendorRepo.find({ where: { orderId: payment.orderId, vendorId: Not(payment.vendorId), status: "ACCEPTED" } });
-//         if (otherVendors.length > 0) {
-//             for (const vendor of otherVendors) {
-//                 vendor.status = "FROZEN";
-//                 await orderVendorRepo.save(vendor);
-//             }
-//         }
-
-//         /*
-//         //
-//         //
-//         //  unlock measurements table
-//         //  send notification to customer
-//         //
-//         //
-//         */
-//         return {
-//             message: "Payment confirmed successfully",
-//             paymentId: payment.id,
-//             amount: payment.amount
-//         }
-//     } catch (error) {
-//         logger.error(error);
-//         throw error;
-//     }
-// }
 
 // export const getOrders = async (data) => {
 //     try {
