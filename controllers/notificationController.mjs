@@ -34,11 +34,11 @@ export const getUserFcmToken = async (req, res, next) => {
 
 export const sendPushNotification = async (req, res, next) => {
     try {
-        const {token, title, message} = req.body;
+        const {token, title, message, url} = req.body;
         if (!token || !title || !message) {
             throw new Error(formatError("Token, title, and message are required"));
         }
-        const response = await pushService.sendPushNotification(token,title,message);
+        const response = await pushService.sendPushNotification(token,title,message,url);
         if (!response) {
             throw new Error(formatError("Error in response", response));
         }

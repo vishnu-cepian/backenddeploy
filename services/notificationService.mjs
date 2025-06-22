@@ -68,10 +68,11 @@ export const getUserFcmToken = async (userId) => {
  * @param {string} token // FCM token
  * @param {string} title // Notification title
  * @param {string} message // Notification message
+ * @param {string} url //deep link of app
  * @returns {Promise<Object>} 
  * 
  */
-export const sendPushNotification =  async (token, title, message) => {
+export const sendPushNotification =  async (token, title, message, url) => {
     try {
       const payload = {
         notification: {
@@ -80,7 +81,7 @@ export const sendPushNotification =  async (token, title, message) => {
       },
       token,
       data: {
-        "body": "hai",
+        "url" : url
       }
     };
       const response = await firebaseAdmin.messaging().send(payload);
