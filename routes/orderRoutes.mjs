@@ -2,6 +2,7 @@ import { Router } from "express";
 import * as orderController from "../controllers/orderController.mjs";
 import { verifyAccessToken } from "../middlewares/auth.mjs";
 import { controllerWrapper } from "../controllers/index.mjs";
+import { handleRazorpayWebhook } from "../services/orderService.mjs";
 
 const router = Router();
 
@@ -25,8 +26,8 @@ router.post("/vendorOrderResponse", verifyAccessToken, controllerWrapper(orderCo
 // PAYMENT ROUTES
 
 router.post("/createRazorpayOrder", verifyAccessToken, controllerWrapper(orderController.createRazorpayOrder, { logRequest: true, logResponse: true }));
-// import * as orderService from "../services/orderService.mjs"
-// router.post("/handleRazorpayWebhook", orderService.handleRazorpayWebhook);
+
+router.post("/handleRazorpayWebhook", handleRazorpayWebhook);
 // router.post("/confirmVendorPayment/:paymentId", verifyAccessToken, controllerWrapper(orderController.confirmVendorPayment, { logRequest: true, logResponse: true }));
 
 // router.post("/freezeOrderVendors/:orderId/:vendorId", verifyAccessToken, controllerWrapper(orderController.freezeOrderVendors, { logRequest: true, logResponse: true }));
