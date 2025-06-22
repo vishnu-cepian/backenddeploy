@@ -2,7 +2,6 @@ import cron from "node-cron";
 import { logger } from "../utils/logger-utils.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
-import { Not } from "typeorm";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 
