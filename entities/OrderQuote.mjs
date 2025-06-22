@@ -25,6 +25,11 @@ export const OrderQuotes = new EntitySchema({
             type: "text",
             nullable: true
         },
+        isProcessed: {
+            type: "boolean",
+            default: false,
+            nullable: false
+        },
         createdAt: {
             type: "timestamp",
             createDate: true
