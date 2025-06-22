@@ -3,7 +3,6 @@ import { AppDataSource } from "../config/data-source.mjs";
 import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs";
 import { logger } from "../utils/logger-utils.mjs";
-import { LessThan } from "typeorm";
 import { ORDER_VENDOR_STATUS } from "../types/enums/index.mjs";
 
 // 1 MINUTE FOR TESTING
