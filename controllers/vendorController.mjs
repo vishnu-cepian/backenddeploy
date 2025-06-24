@@ -208,7 +208,7 @@ export const deleteVendorWorkImage = async (req, res, next) => {
   try {
     const data = {
       userId: req.user.id,
-      ...req.body
+      s3Key: req.params.s3Key,
     };
 
     const response = await vendorService.deleteVendorWorkImage(data);
