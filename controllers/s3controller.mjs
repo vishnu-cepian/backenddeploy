@@ -39,7 +39,7 @@ export const getPresignedViewUrl = async (req, res) => {
 
 export const deleteFile = async (req, res) => {
     try {
-        const { fileName } = req.body;
+        const fileName = req.params.fileName;
         if (!fileName) {
             throw new Error(formatError("File name is required", null));
         }
