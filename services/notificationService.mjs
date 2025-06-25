@@ -32,7 +32,10 @@ export const savePushToken = async (data) => {
         }
         user.pushToken = token;
         await userRepository.save(user);
-        return user;
+        return {
+            message: "Push token saved successfully",
+            status: true
+        }
     } catch (error) {
         logger.error(error);
         throw error;
