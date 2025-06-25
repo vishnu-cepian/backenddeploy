@@ -17,6 +17,20 @@ export const searchVendorsByRating = async (req, res, next) => {
     }
 };
 
+export const searchVendorsByNearestLocation = async (req, res, next) => {
+    try {
+        const params = req.params;
+        const response = await searchService.searchVendorByNearestLocation(params);
+        if (!response) {
+            throw new Error(formatError("Vendors not found", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (err) {
+        logger.error(err);
+        next(err);
+    }
+};
+
 export const searchVendorsByRatingAndLocation = async (req, res, next) => {
     try {
         const params = req.params;
@@ -31,10 +45,10 @@ export const searchVendorsByRatingAndLocation = async (req, res, next) => {
     }
 };
 
-export const searchVendorsByQuery = async (req, res, next) => {
+export const searchVendorsByShopName = async (req, res, next) => {
     try {
         const params = req.params;
-        const response = await searchService.searchVendorsByQuery(params);
+        const response = await searchService.searchVendorsByShopName(params);
         if (!response) {
             throw new Error(formatError("Vendors not found", response));
         }

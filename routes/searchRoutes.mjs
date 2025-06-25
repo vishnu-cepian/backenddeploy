@@ -5,8 +5,9 @@ import { controllerWrapper } from "../controllers/index.mjs";
 
 const router = Router();
 
-router.get('/searchByRating/:limit/:offset', verifyAccessToken, controllerWrapper(searchController.searchVendorsByRating, { logRequest: true, logResponse: true }));
-router.get('/searchByRatingAndLocation/:lat/:lng/:radiusKm/:limit/:offset', verifyAccessToken, controllerWrapper(searchController.searchVendorsByRatingAndLocation, { logRequest: true, logResponse: true }));
-router.get('/search/:query/:lat/:lng/:radiusKm/:limit/:offset', verifyAccessToken, controllerWrapper(searchController.searchVendorsByQuery, { logRequest: true, logResponse: true })); //GET: /search/query/city eg: /search/vendor1/kochi/100
+router.get('/searchByRating/:serviceType/:limit/:offset', verifyAccessToken, controllerWrapper(searchController.searchVendorsByRating, { logRequest: true, logResponse: true }));
+router.get('/searchByNearestLocation/:serviceType/:lng/:lat/:radiusKm/:limit/:offset', verifyAccessToken, controllerWrapper(searchController.searchVendorsByNearestLocation, { logRequest: true, logResponse: true }));
+router.get('/searchByRatingAndLocation/:serviceType/:lng/:lat/:radiusKm/:limit/:offset', verifyAccessToken, controllerWrapper(searchController.searchVendorsByRatingAndLocation, { logRequest: true, logResponse: true }));
+router.get('/searchByShopName/:serviceType/:query/:lng/:lat/:radiusKm/:limit/:offset', verifyAccessToken, controllerWrapper(searchController.searchVendorsByShopName, { logRequest: true, logResponse: true })); //GET: /search/query/city eg: /search/vendor1/kochi/100
 
 export default router;

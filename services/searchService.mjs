@@ -1,11 +1,10 @@
 import { AppDataSource } from "../config/data-source.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { logger } from "../utils/logger-utils.mjs";
-import { ILike } from "typeorm";
 
 // --------------------------------------------SEARCH HELPER FUNCTIONS----------------------------------------------------------------------------------------------
 
-export const searchResults = async (lng, lat, radiusKm, searchType, searchValue, limit = 10, offset = 0) => {
+export const searchResults = async (serviceType, lng, lat, radiusKm, searchType, searchValue, limit, offset ) => {
     
     // USE POSTGIS EXTENSION
     // CREATE EXTENSION IF NOT EXISTS postgis;  (IN pgAdmin or any other tool)
@@ -13,9 +12,9 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
     const vendorRepo = AppDataSource.getRepository(Vendors);
 
     let baseQuery = `
-            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors.rating, vendors."ratingCount",
+            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors."allTimeRating", vendors."allTimeReviewCount", vendors."shopImageUrlPath",
             ST_Distance(vendors.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography)/1000 AS distance,
-            (0.6 * (vendors.rating/5.0)) +
+            (0.6 * (vendors."allTimeRating"/5.0)) +
             (0.4 * (1 - LEAST(ST_Distance(vendors.location::geography, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) / ($3), 1.0))) AS hybrid_score
             FROM vendors 
             JOIN "user" ON vendors."userId" = "user".id
@@ -23,44 +22,39 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
             vendors.location IS NOT NULL
             AND vendors.status = 'VERIFIED'
             AND "user"."isBlocked" = false
+            AND vendors."serviceType" = $4
         `
 
     let conditions = [];
-    let params = [lng, lat, radiusKm * 1000];
+    let params = [lng, lat, radiusKm * 1000, serviceType];
     let orderClause = "";
 
     switch(searchType) {  
-        case "ratingAndLocation":
-            orderClause = "ORDER BY hybrid_score DESC, distance ASC";
-            break;
-
         case "rating":
             baseQuery = `
-            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors.rating, vendors."ratingCount"
+            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors."allTimeRating", vendors."allTimeReviewCount", vendors."shopImageUrlPath",
             FROM vendors
             INNER JOIN "user" ON vendors."userId" = "user".id
             WHERE vendors.location IS NOT NULL
             AND vendors.status = 'VERIFIED'
             AND "user"."isBlocked" = false
+            AND vendors."serviceType" = $1
             `;
-            orderClause = ` ORDER BY rating DESC`;
+            orderClause = ` ORDER BY "allTimeRating" DESC`;
             params = [];
+            params.push(serviceType);
             break;
 
-        case "name":
-            conditions.push(`"user".name ILIKE $4`);
-            orderClause = "ORDER BY hybrid_score DESC, distance ASC";
-            params.push(`%${searchValue}%`);
+        case "location":
+            orderClause = "ORDER BY distance ASC";
             break;
-      
+
+        case "ratingAndLocation":
+            orderClause = "ORDER BY hybrid_score DESC, distance ASC";
+            break;
+
         case "shopName":
-            conditions.push(`"shopName" ILIKE $4`);
-            orderClause = "ORDER BY hybrid_score DESC, distance ASC";
-            params.push(`%${searchValue}%`);
-            break;
-      
-        case "serviceType":
-            conditions.push(`"serviceType" ILIKE $4`);
+            conditions.push(`"shopName" ILIKE $5`);
             orderClause = "ORDER BY hybrid_score DESC, distance ASC";
             params.push(`%${searchValue}%`);
             break;
@@ -74,7 +68,7 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
     }
     const finalQuery = `${baseQuery} ${orderClause} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
-    
+
     const results = await vendorRepo.query(finalQuery, params);
     return results;
 };
@@ -84,8 +78,8 @@ export const searchResults = async (lng, lat, radiusKm, searchType, searchValue,
 // --------------------------------------------SEARCH SERVICES ----------------------------------------------------------------------------------------------
 export const searchVendorsByRating = async (params) => {
     try {
-        const { limit = 10, offset = 0 } = params;
-        const result = await searchResults(0, 0, 0, "rating", "", limit, offset);
+        const { serviceType, limit = 10, offset = 0 } = params;
+        const result = await searchResults( serviceType.toUpperCase(),0, 0, 0, "rating", "",limit, offset);
         if(result.length !== 0) 
             return result;
         return {"message": "no Vendors found"};
@@ -94,11 +88,25 @@ export const searchVendorsByRating = async (params) => {
         throw err;
     }
 };
+
+export const searchVendorByNearestLocation = async (params) => {
+    try {
+        const { serviceType, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
+        const result = await searchResults(serviceType.toUpperCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "location", "", limit, offset);
+
+        if(result.length !== 0) 
+            return result;
+        return {"message": "no Vendors found"};
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
 
 export const searchVendorsByRatingAndLocation = async (params) => {
     try {
-        const { lat, lng, radiusKm, limit = 10, offset = 0 } = params;
-        const result = await searchResults(parseFloat(lat), parseFloat(lng), parseFloat(radiusKm), "ratingAndLocation", "", limit, offset);
+        const { serviceType, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
+        const result = await searchResults(serviceType.toUpperCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "ratingAndLocation", "", limit, offset);
         if(result.length !== 0) 
             return result;
         return {"message": "no Vendors found"};
@@ -108,44 +116,13 @@ export const searchVendorsByRatingAndLocation = async (params) => {
     }
 };
 
-export const searchVendorsByQuery = async (params) => {
+export const searchVendorsByShopName = async (params) => {
     try {
-        const { query, lat, lng, radiusKm, limit = 10, offset = 0 } = params;
+        const { serviceType, query, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
 
-        const vendorRepo = AppDataSource.getRepository(Vendors);
-        
-        let vendors = await vendorRepo                      // Name wise search
-            .createQueryBuilder("vendors")
-            .leftJoinAndSelect("user", "user", "vendors.userId = user.id")
-            .where("user.name ILIKE :query", { query: `%${query}%` })
-            .getMany();
-
-        if(vendors.length !== 0) {
-            const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "name", query, limit, offset);
-            return results;
-        }
-        else if(vendors.length === 0) {         // Shop name wise search
-            vendors = await vendorRepo.find({
-                where: {
-                    shopName: ILike(`%${query}%`),
-                },
-            });
-            if(vendors.length !== 0) {
-                const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit, offset);
-                return results;
-            } else {
-                vendors = await vendorRepo.find({   // serviceType wise search
-                    where: {
-                        serviceType: ILike(`%${query}%`),
-                    },
-                });
-
-                if(vendors.length !== 0) {
-                    const results = await searchResults(parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "serviceType", query, limit, offset);
-                    return results;
-                }
-            }
-        }
+        const result = await searchResults(serviceType.toUpperCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit, offset);
+        if(result.length !== 0) 
+            return result;
         return {"message": "No vendors found"};
     } catch (err) {
         logger.error(err);
