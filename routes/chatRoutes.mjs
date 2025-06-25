@@ -5,6 +5,13 @@ import { controllerWrapper } from "../controllers/index.mjs";
 
 const router = Router();
 
+/*
+
+    NOT TESTED
+
+
+
+*/
 
 router.post("/getOrCreateChatRoom", verifyAccessToken, controllerWrapper(chatController.getOrCreateChatRoom, { logRequest: true, logResponse: true }));
 router.get("/getChatRoom", verifyAccessToken, controllerWrapper(chatController.getChatRoom, { logRequest: true, logResponse: true }));
