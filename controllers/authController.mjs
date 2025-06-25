@@ -5,7 +5,7 @@ import { logger } from "../utils/logger-utils.mjs";
 
 export const signup = async (req, res, next) => {
   try {
-    const data = { ...req.body, authorization: req.headers['authorization']?.split(' ')[1] };  //get custom token from client 
+    const data = req.body; 
 
     const response = await authService.signup(data);
     if (!response) {
@@ -20,7 +20,7 @@ export const signup = async (req, res, next) => {
 
 export const loginWithEmail = async (req, res, next) => {
   try {
-    const data = { ...req.body, authorization: req.headers['authorization']?.split(' ')[1] };  //get custom token from client
+    const data = req.body;
     const response = await authService.loginWithEmail(data);
     if (!response) {
       throw new Error(formatError("Authentication Failed!", response));
@@ -35,7 +35,7 @@ export const loginWithEmail = async (req, res, next) => {
 export const loginWithGoogle = async (req, res, next) => {
   try {
     const data = req.headers['authorization']?.split(' ')[1]; // Get google token from Authorization header
-    // console.log("Google Token: ", data);
+    
     const response = await authService.loginWithGoogle(data);
     if (!response) {
       throw new Error(formatError("Authentication Failed!", response));
@@ -50,7 +50,7 @@ export const loginWithGoogle = async (req, res, next) => {
 
 export const checkEmail = async (req, res, next) => {
   try {
-    const data = { ...req.body, authorization: req.headers['authorization']?.split(' ')[1] };  //get custom token from client
+    const data = req.body; 
     const response = await authService.checkEmail(data);
     if (!response) {
       throw new Error(formatError("Authentication Failed!", response));
@@ -118,20 +118,6 @@ export const verifyPhoneOtp = async (req, res, next) => {
   }
 };
 
-export const forgotPassword = async (req, res, next) => {
-  try {
-    const data = req.body;
-    const response = await authService.forgotPassword(data);
-    if (!response) {
-      throw new Error(formatError("Authentication Failed!", response));
-    }
-    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
-  } catch (err) {
-    logger.error(err);
-    next(err);
-  }
-};
-
 export const resetPassword = async (req, res, next) => {
   try {
     const data = req.body;
@@ -162,7 +148,7 @@ export const refreshToken = async (req, res, next) => {
 
 export const logout = async (req, res, next) => {
   try {
-    const data = req.body;
+    const data = { userId: req.user.id };
     const response = await authService.logout(data);
     if (!response) {
       throw new Error(formatError("Authentication Failed!", response));
