@@ -1,6 +1,5 @@
 import jwt from 'jsonwebtoken'; // Import JWT library
 import { ACCESS_TOKEN_SECRET, ADMIN_ACCESS_TOKEN_SECRET, OTP_TOKEN_SECRET } from '../config/auth-config.mjs';
-import { sendError } from '../utils/core-utils.mjs';
 
 // Middleware to verify JWT token
 export const verifyAccessToken = (req, res, next) => {
@@ -47,7 +46,7 @@ export const verifyAdminAccessToken = (req, res, next) => {
     return res.status(403).json({ message: 'Invalid token' });
     }
     req.user = decoded; // Attach user data to request object
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role.toUpperCase() !== 'ADMIN') {
       return res.status(403).json({ message: 'Unauthorized' });
     }
     next(); // Proceed to the next middleware or route handler

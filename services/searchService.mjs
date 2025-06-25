@@ -79,7 +79,7 @@ export const searchResults = async (serviceType, lng, lat, radiusKm, searchType,
 export const searchVendorsByRating = async (params) => {
     try {
         const { serviceType, limit = 10, offset = 0 } = params;
-        const result = await searchResults( serviceType.toUpperCase(),0, 0, 0, "rating", "",limit, offset);
+        const result = await searchResults( serviceType.toLowerCase(),0, 0, 0, "rating", "",limit, offset);
         if(result.length !== 0) 
             return result;
         return {"message": "no Vendors found"};
@@ -92,7 +92,7 @@ export const searchVendorsByRating = async (params) => {
 export const searchVendorByNearestLocation = async (params) => {
     try {
         const { serviceType, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
-        const result = await searchResults(serviceType.toUpperCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "location", "", limit, offset);
+        const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "location", "", limit, offset);
 
         if(result.length !== 0) 
             return result;
@@ -106,7 +106,7 @@ export const searchVendorByNearestLocation = async (params) => {
 export const searchVendorsByRatingAndLocation = async (params) => {
     try {
         const { serviceType, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
-        const result = await searchResults(serviceType.toUpperCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "ratingAndLocation", "", limit, offset);
+        const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "ratingAndLocation", "", limit, offset);
         if(result.length !== 0) 
             return result;
         return {"message": "no Vendors found"};
@@ -120,7 +120,7 @@ export const searchVendorsByShopName = async (params) => {
     try {
         const { serviceType, query, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
 
-        const result = await searchResults(serviceType.toUpperCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit, offset);
+        const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit, offset);
         if(result.length !== 0) 
             return result;
         return {"message": "No vendors found"};

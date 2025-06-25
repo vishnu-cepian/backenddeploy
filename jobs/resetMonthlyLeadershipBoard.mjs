@@ -17,7 +17,7 @@ cron.schedule(cronTime, async () => {
     await queryRunner.startTransaction();
 
     try {
-        const serviceTypes = ["TAILORING", "LAUNDRY"];
+        const serviceTypes = ["tailoring", "laundry"];
         const now = new Date();
         
         // now.getMonth() is 0-indexed, so leave it without subtracting 1 to get previous month

@@ -66,7 +66,7 @@ export const initializeSocket = (io) => {
                 if(!room) {
                     throw new Error("Room not found");
                 }
-                const receiverId = Socket.role === "CUSTOMER" ? room.vendorId : room.customerId;
+                const receiverId = Socket.role.toLowerCase() === "customer" ? room.vendorId : room.customerId;
                 const receiverUser = await getUser(receiverId);
                 
                 // check if receiver is online

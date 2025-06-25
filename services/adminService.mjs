@@ -114,7 +114,7 @@ try {
             throw sendError('User not found', 404);
         }
 
-        if(user.role !== 'ADMIN') {
+        if(user.role.toUpperCase() !== 'ADMIN') {
             throw sendError('Unauthorized', 403);
         }
         // Check if password is correct
@@ -275,7 +275,7 @@ export const getVendorById = async (id) => {
       "vendors.shopType",
       "vendors.ownershipType",
       "vendors.serviceType",
-      "vendors.targetGender",
+      "vendors.vendorServices",
       "vendors.shopName",
       "vendors.address",
       "vendors.city",
@@ -293,9 +293,10 @@ export const getVendorById = async (id) => {
       "vendors.status",
       "vendors.createdAt",
       "vendors.updatedAt",
-      "vendors.rating",
-      "vendors.ratingCount",
-      "vendors.popularityScore",
+      "vendors.allTimeRating",
+      "vendors.allTimeReviewCount",
+      "vendors.currentMonthRating",
+      "vendors.currentMonthReviewCount",
       "user.email",
       "user.name",
       "user.phoneNumber",

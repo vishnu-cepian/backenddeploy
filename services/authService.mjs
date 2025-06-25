@@ -114,7 +114,7 @@ export const signup = async (data) => {
             });
             await userRepository.save(newUser);
 
-            if (role.toUpperCase() === "CUSTOMER") {
+            if (role.toLowerCase() === "customer") {
                 const customerRepo = AppDataSource.getRepository(Customers);
                 const newCustomer = customerRepo.create({
                     userId: newUser.id,
