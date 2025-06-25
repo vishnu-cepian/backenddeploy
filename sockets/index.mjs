@@ -81,7 +81,16 @@ export const initializeSocket = (io) => {
                     const fcmToken = receiverUser.pushToken;
                     const title = "New message";
                     const body = content;
-                    await sendPushNotification(fcmToken, title, body);
+                    /*
+
+
+                    add url 
+
+
+
+                    */
+                    const url = receiverUser.id;    // CHANGE IT LATER
+                    await sendPushNotification(fcmToken, title, body, url);
                     }
                 }
             } catch (error) {
