@@ -606,7 +606,7 @@ export const logout = async (data) => {
         // Invalidate the refresh token
         await userRepository.update(
             { id: userId },
-            { refreshToken: null }
+            { refreshToken: null, pushToken: null }
         );
 
         return ({
