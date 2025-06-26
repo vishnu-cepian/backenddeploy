@@ -12,6 +12,7 @@ import { In, Not } from "typeorm";
 import Razorpay from "razorpay";
 import crypto from "crypto";
 import { ORDER_VENDOR_STATUS, ORDER_STATUS } from "../types/enums/index.mjs";
+import { calculateVendorPayoutAmount, calculateOrderAmount } from "../utils/pricing_utils.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -204,10 +205,29 @@ export const vendorOrderResponse = async (data) => {
             orderVendor.status = ORDER_VENDOR_STATUS.ACCEPTED;
             await queryRunner.manager.save(OrderVendors, orderVendor);
 
+            /*
+            * 
+            *   Save the quotedPrice (By Vendor)
+            *   Calculate and save the vendorPayoutAfterCommission  -- FOR VENDOR PAYOUTS VIA ADMIN / RAZORPAY DASHBOARD 
+            *   Calculate and save the priceAfterPlatformFee
+            *   Calculate and save the deliveryCharge -- USE DELIVERY SERVICE API TO FETCH FARE
+            *   Calculate and save the finalPrice -- TO BE ADDED ON RAZORPAY ORDER
+            * 
+            */
+
+            const vendorPayoutAfterCommission = calculateVendorPayoutAmount(quotedPrice);
+            const priceAfterPlatformFee = calculateOrderAmount(quotedPrice);
+            const deliveryCharge = 40;
+            const finalPrice = priceAfterPlatformFee + deliveryCharge;
+
             await queryRunner.manager.save(OrderQuotes, {
                 orderVendorId: orderVendor.id,
-                quotedPrice: quotedPrice,
                 quotedDays: quotedDays,
+                quotedPrice: quotedPrice,
+                vendorPayoutAfterCommission: vendorPayoutAfterCommission,
+                priceAfterPlatformFee: priceAfterPlatformFee,
+                deliveryCharge: deliveryCharge,
+                finalPrice: finalPrice,
                 notes: notes || null
             });
         }
@@ -264,7 +284,7 @@ export const createRazorpayOrder = async (data) => {
         if (quoteAgeHours > 24) throw sendError("Quote is expired");
      
         const razorpayOrder = await razorpay.orders.create({
-            amount: quote.quotedPrice * 100,
+            amount: quote.finalPrice * 100,
             currency: "INR",
             receipt: quoteId,
             notes: {
@@ -272,7 +292,7 @@ export const createRazorpayOrder = async (data) => {
                 quoteId: quote.id.toString(),
                 vendorId: orderVendor.vendorId.toString(),
                 customerId: customer.id.toString(),
-                amount: quote.quotedPrice.toString(),
+                amount: quote.finalPrice.toString(),
             }
         })
 
@@ -291,14 +311,36 @@ export const createRazorpayOrder = async (data) => {
     }
 }
 
+
+export const refundRazorpayPayment = async (paymentId, reason) => {
+    try {
+        const razorpay = new Razorpay({
+            key_id: process.env.RAZORPAY_KEY_ID,
+            key_secret: process.env.RAZORPAY_KEY_SECRET
+        });
+        await razorpay.payments.refund(paymentId, {
+            speed: "normal",
+            notes: { reason: reason }
+        });
+        logger.info(`Refunded payment ${paymentId} for reason ${reason}`);
+    } catch(err) {
+        logger.error(`Error refunding payment ${paymentId} for reason ${reason}`);
+        logger.error(err);
+        throw err;
+    }
+}
+
 /*
 *   CODE IS NOT COMPLETED AND TESTED
-*   ALSO THIS CODE DOESNT HANDLE FAILURE CASES
+*   
 */
 export const handleRazorpayWebhook = async (req, res) => {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
+
+    let paymentId = null;
+    let event = null;
 
     try {
         const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
@@ -310,7 +352,7 @@ export const handleRazorpayWebhook = async (req, res) => {
 
         if (signature !== expectedSignature) throw sendError("Invalid signature");
 
-        const { event } = req.body;
+        event = req.body.event;
 
         if (event === "payment.captured") {
             const payment = req.body.payload.payment.entity;
@@ -320,8 +362,18 @@ export const handleRazorpayWebhook = async (req, res) => {
 
             if(!order || !quote || order.selectedVendorId || order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is already assigned to a vendor or is not in PENDING status");
 
+            const existingPayment = await paymentRepo.findOne({ where: { razorpayPaymentId: payment.id } });
+            if (existingPayment) {
+                logger.info(`Duplicate webhook received for payment ${payment.id}`);
+                return res.status(200).json({
+                    message: "Payment already exists",
+                });
+            }
+
+            if (Number(amount) !== Number(quote.finalPrice)) throw sendError("Payment amount does not match the order amount");
 
             const paymentDate = new Date(payment.created_at * 1000);
+            paymentId = payment.id;
 
             const paymentDetails = await queryRunner.manager.save(Payments, {
                 orderId: orderId,
@@ -372,8 +424,30 @@ export const handleRazorpayWebhook = async (req, res) => {
             res.status(200).json({
                 message: "Order confirmed successfully",
             })
+        } else if (event === "payment.failed") {
+            const payment = req.body.payload.payment.entity;
+            const { orderId, quoteId, customerId, amount } = payment.notes;
+            
+            await queryRunner.manager.save(PaymentFailures, {
+                orderId: orderId,
+                quoteId: quoteId,
+                customerId: customerId,
+                amount: amount,
+                reason: payment.error_description || "unknown",
+                status: payment.status,
+                timestamp: new Date(payment.created_at * 1000),
+            });
+            
+            // send notification to customer
+
+            return res.status(200).json({
+                message: "Payment failed recorded",
+            })
         }
     } catch(err) {
+        if (paymentId && event === "payment.captured") {
+            await refundRazorpayPayment(paymentId, "Order Validation failed after payment");
+        }
         await queryRunner.rollbackTransaction();
         logger.error(err);
         throw err;
@@ -399,6 +473,64 @@ export const cancelOrder = async (data) => {
         }
 
     } catch(err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const updateOrderStatus = async (data) => {
+    try {
+        const { orderId, status } = data;
+
+        if (!orderId || !status) throw sendError("Order ID and status are required");
+
+        const order = await orderRepo.findOne({ where: { id: orderId } });
+        if (!order) throw sendError("Order not found");
+        
+        switch (order.orderStatus) {
+            case ORDER_STATUS.ORDER_CONFIRMED:
+                if (status === ORDER_STATUS.IN_PROGRESS) {
+                    order.orderStatus = ORDER_STATUS.IN_PROGRESS;
+                    await orderRepo.save(order);
+
+                    // notify 
+
+                    return {
+                        message: "Order status updated to IN_PROGRESS successfully",
+                        newStatus: ORDER_STATUS.IN_PROGRESS
+                    }
+                }
+                break;
+
+            case ORDER_STATUS.IN_PROGRESS:
+                if (status === ORDER_STATUS.READY_FOR_PICKUP) {
+                    order.orderStatus = ORDER_STATUS.READY_FOR_PICKUP;
+                    await orderRepo.save(order);
+
+                    // notify 
+
+                    return {
+                        message: "Order status updated to READY_FOR_PICKUP successfully",
+                        newStatus: ORDER_STATUS.READY_FOR_PICKUP
+                    }
+                }
+                break;
+            default:
+                throw sendError(`Invalid current order status: ${order.orderStatus}`);
+        }
+        throw sendError(`Invalid status transition from ${order.orderStatus} to ${status}`);
+
+
+
+        ////    IF WEBHOOK AVAILABLE FOR DELIVERY THEN USE ORDER_STATUS.COMPLTED $ ORDER_STATUS.OUT_FOR_DELIVERY  IN THAT
+    
+    
+    
+    
+    
+    
+    
+    } catch (err) {
         logger.error(err);
         throw err;
     }
