@@ -9,10 +9,12 @@ export const calculateVendorFee = (amount) => {
 }
 
 export const calculateVendorPayoutAmount = (amount) => {
+    amount = parseFloat(amount);
     return amount - calculateVendorFee(amount);
 }
 
 export const calculateOrderAmount = (amount) => {
+    amount = parseFloat(amount);
     return amount + calculatePlatformFee(amount);
 }
 
