@@ -26,7 +26,9 @@ export const VendorImages = new EntitySchema({
         vendor: {
             type: "many-to-one",
             target: "Vendors",
-            joinColumn: true
+            joinColumn: { name: "vendorId" },
+            onDelete: "CASCADE",
+            cascade: true
         }
     }
 });
