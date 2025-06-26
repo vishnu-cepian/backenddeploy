@@ -6,7 +6,7 @@ import { verifyAccessToken, verifyAdminAccessToken } from "../middlewares/auth.m
 const router = Router();
 
 // APP PROTECTED ROUTES
-router.post("/save-push-token", controllerWrapper(notificationController.savePushToken, { logRequest: true, logResponse: true }));
+router.post("/save-push-token", verifyAccessToken, controllerWrapper(notificationController.savePushToken, { logRequest: true, logResponse: true }));
 router.get("/get-user-fcm-token", verifyAccessToken, controllerWrapper(notificationController.getUserFcmToken, { logRequest: true, logResponse: true }));
 router.post("/send-push-notification",  controllerWrapper(notificationController.sendPushNotification, { logRequest: true, logResponse: true }));
 

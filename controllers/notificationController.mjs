@@ -7,7 +7,7 @@ export const savePushToken = async (req, res, next) => {
     try {
         const data = {
             pushToken : req.body.pushToken,
-            userId : req.body.userId
+            userId : req.user.id
         }
         
         const response = await notificationService.savePushToken(data);
