@@ -13,12 +13,28 @@ export const OrderQuotes = new EntitySchema({
             type: "uuid",
             nullable: false
         },
+        quotedDays: {
+            type: "int",
+            nullable: false
+        },
         quotedPrice: {
             type: "float",
             nullable: false
         },
-        quotedDays: {
-            type: "int",
+        vendorPayoutAfterCommission: {
+            type: "float",
+            nullable: false
+        },
+        priceAfterPlatformFee: {
+            type: "float",
+            nullable: false
+        },
+        deliveryCharge: {
+            type: "float",
+            nullable: false
+        },
+        finalPrice: {
+            type: "float",
             nullable: false
         },
         notes: {
