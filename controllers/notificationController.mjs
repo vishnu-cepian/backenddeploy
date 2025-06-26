@@ -6,7 +6,7 @@ import * as notificationService from "../services/notificationService.mjs";
 export const savePushToken = async (req, res, next) => {
     try {
         const data = {
-            token : req.body.token,
+            pushToken : req.body.pushToken,
             userId : req.body.userId
         }
         

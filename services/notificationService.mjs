@@ -17,8 +17,8 @@ import { Not, IsNull } from "typeorm";
  */
 export const savePushToken = async (data) => {
     try {
-      const { token, userId } = data;
-      if(!token) {
+      const { pushToken, userId } = data;
+      if(!pushToken) {
         throw sendError("pushToken required");
       }
       const userRepository = AppDataSource.getRepository(User);
@@ -30,7 +30,7 @@ export const savePushToken = async (data) => {
         if (!user) {
             throw sendError("User not found");
         }
-        user.pushToken = token;
+        user.pushToken = pushToken;
         await userRepository.save(user);
         return {
             message: "Push token saved successfully",
