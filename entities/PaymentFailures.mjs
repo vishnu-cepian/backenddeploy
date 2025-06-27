@@ -22,7 +22,7 @@ export const PaymentFailures = new EntitySchema({
             nullable: false,
         },
         paymentId: {
-            type: "uuid",
+            type: "varchar",
             nullable: false,
         },
         amount: {
