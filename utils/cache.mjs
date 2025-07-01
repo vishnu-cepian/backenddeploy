@@ -38,4 +38,25 @@ export const cacheOrFetch = async (key, fetchFn, ttl = DEFAULT_EXPIRY) => {
   return freshData;
 };
 
+export const deleteByPattern = async (pattern) => {
+    try {
+      const stream = redis.scanStream({
+        match: pattern,
+        count: 100,
+      });
+  
+      stream.on('data', (keys = []) => {
+        if (keys.length) {
+          redis.del(...keys);
+        }
+      });
+  
+      stream.on('end', () => {
+        console.log(`Pattern "${pattern}" deletion complete.`);
+      });
+    } catch (err) {
+      console.error('Redis deleteByPattern error:', err);
+    }
+  };  
+
 export default redis;
