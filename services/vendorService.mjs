@@ -8,6 +8,7 @@ import { OtpPhone } from "../entities/OtpPhone.mjs";
 import { VendorImages } from "../entities/VendorImages.mjs";
 import { getPresignedViewUrl, deleteFile } from "./s3service.mjs";
 import { cacheOrFetch, delCache } from "../utils/cache.mjs";
+import { VENDOR_STATUS } from "../types/enums/index.mjs";
 
 const userRepo = AppDataSource.getRepository(User);
 const vendorRepo = AppDataSource.getRepository(Vendors);
@@ -29,7 +30,7 @@ export const checkProfile = async (data) => {
       };
     }
 
-    if (vendor.status === "PENDING") {
+    if (vendor.status === VENDOR_STATUS.PENDING) {
       return {
         exists: true,
         status: "PENDING",
@@ -37,7 +38,7 @@ export const checkProfile = async (data) => {
       };
     }
 
-    if (vendor.status === "REJECTED") {
+    if (vendor.status === VENDOR_STATUS.REJECTED) {
       return {
         exists: true,
         status: "REJECTED",
@@ -45,7 +46,7 @@ export const checkProfile = async (data) => {
       };
     }
 
-    if (vendor.status === "BLOCKED") {
+    if (vendor.status === VENDOR_STATUS.BLOCKED) {
       return {
         exists: true,
         status: "BLOCKED",
@@ -55,7 +56,7 @@ export const checkProfile = async (data) => {
 
     return {
       exists: true,
-      status: "VERIFIED",
+      status: VENDOR_STATUS.VERIFIED,
       message: "Vendor profile complete => redirect to vendor dashboard",
     };
 
