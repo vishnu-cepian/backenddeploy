@@ -1,6 +1,7 @@
 import { AppDataSource } from "../config/data-source.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { logger } from "../utils/logger-utils.mjs";
+import { cacheOrFetch } from "../utils/cache.mjs";
 
 // --------------------------------------------SEARCH HELPER FUNCTIONS----------------------------------------------------------------------------------------------
 
@@ -32,7 +33,7 @@ export const searchResults = async (serviceType, lng, lat, radiusKm, searchType,
     switch(searchType) {  
         case "rating":
             baseQuery = `
-            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors."allTimeRating", vendors."allTimeReviewCount", vendors."shopImageUrlPath",
+            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors."allTimeRating", vendors."allTimeReviewCount", vendors."shopImageUrlPath"
             FROM vendors
             INNER JOIN "user" ON vendors."userId" = "user".id
             WHERE vendors.location IS NOT NULL
@@ -79,10 +80,12 @@ export const searchResults = async (serviceType, lng, lat, radiusKm, searchType,
 export const searchVendorsByRating = async (params) => {
     try {
         const { serviceType, limit = 10, offset = 0 } = params;
+        return cacheOrFetch(`searchVendorsByRating:${serviceType.toLowerCase()}:${limit}:${offset}`, async () => {
         const result = await searchResults( serviceType.toLowerCase(),0, 0, 0, "rating", "",limit, offset);
         if(result.length !== 0) 
             return result;
         return {"message": "no Vendors found"};
+        }, 300);
     } catch (err) {
         logger.error(err);
         throw err;
@@ -92,11 +95,14 @@ export const searchVendorsByRating = async (params) => {
 export const searchVendorByNearestLocation = async (params) => {
     try {
         const { serviceType, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
+
+        return cacheOrFetch(`searchVendorsByLocation:${serviceType.toLowerCase()}:${lng}:${lat}:${radiusKm}:${limit}:${offset}`, async () => {
         const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "location", "", limit, offset);
 
         if(result.length !== 0) 
             return result;
         return {"message": "no Vendors found"};
+        }, 60);
     } catch (err) {
         logger.error(err);
         throw err;
@@ -106,10 +112,13 @@ export const searchVendorByNearestLocation = async (params) => {
 export const searchVendorsByRatingAndLocation = async (params) => {
     try {
         const { serviceType, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
-        const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "ratingAndLocation", "", limit, offset);
-        if(result.length !== 0) 
-            return result;
-        return {"message": "no Vendors found"};
+
+        return cacheOrFetch(`searchVendorsByRatingAndLocation:${serviceType.toLowerCase()}:${lng}:${lat}:${radiusKm}:${limit}:${offset}`, async () => {
+            const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "ratingAndLocation", "", limit, offset);
+            if(result.length !== 0) 
+                return result;
+            return {"message": "no Vendors found"};
+        }, 60);
     } catch (err) {
         logger.error(err);
         throw err;
@@ -120,10 +129,12 @@ export const searchVendorsByShopName = async (params) => {
     try {
         const { serviceType, query, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
 
-        const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit, offset);
-        if(result.length !== 0) 
-            return result;
-        return {"message": "No vendors found"};
+        return cacheOrFetch(`searchVendorsByShopName:${serviceType.toLowerCase()}:${query}:${lng}:${lat}:${radiusKm}:${limit}:${offset}`, async () => {
+            const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit, offset);
+            if(result.length !== 0) 
+                return result;
+            return {"message": "No vendors found"};
+        }, 60);
     } catch (err) {
         logger.error(err);
         throw err;

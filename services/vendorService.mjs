@@ -7,7 +7,7 @@ import { VendorAudit } from "../entities/VendorAudit.mjs";
 import { OtpPhone } from "../entities/OtpPhone.mjs";
 import { VendorImages } from "../entities/VendorImages.mjs";
 import { getPresignedViewUrl, deleteFile } from "./s3service.mjs";
-import { cacheOrFetch } from "../utils/cache.mjs";
+import { cacheOrFetch, delCache } from "../utils/cache.mjs";
 
 const userRepo = AppDataSource.getRepository(User);
 const vendorRepo = AppDataSource.getRepository(Vendors);
@@ -360,6 +360,8 @@ export const saveWorkImageUrl = async (data) => {
 
     await vendorImagesRepo.save(vendorImage);
 
+    await delCache(`vendorWorkImages:${userId}`);
+
     return {
       message: "Work image url saved successfully",
     };
@@ -372,34 +374,35 @@ export const saveWorkImageUrl = async (data) => {
 export const getVendorWorkImages = async (data) => {
   try {
     const { userId } = data;
+    return cacheOrFetch(`vendorWorkImages:${userId}`, async () => {
+      const vendor = await vendorRepo.findOne({
+        where: { userId: userId },
+      });
 
-    const vendor = await vendorRepo.findOne({
-      where: { userId: userId },
-    });
+      if (!vendor) {
+        throw sendError('Vendor not found',400);
+      }
 
-    if (!vendor) {
-      throw sendError('Vendor not found',400);
-    }
+      const vendorImages = await vendorImagesRepo.find({
+        where: { vendorId: vendor.id },
+        order: {
+          uploadedAt: "DESC",
+        },
+      });
 
-    const vendorImages = await vendorImagesRepo.find({
-      where: { vendorId: vendor.id },
-      order: {
-        uploadedAt: "DESC",
-      },
-    });
+      const workImages = await Promise.all(vendorImages.map(async (image) => {
+        const presignedUrl = await getPresignedViewUrl(image.s3Key);
+        return {
+          ...image,
+          presignedUrl,
+        };
+      }));
 
-    const workImages = await Promise.all(vendorImages.map(async (image) => {
-      const presignedUrl = await getPresignedViewUrl(image.s3Key);
       return {
-        ...image,
-        presignedUrl,
+        message: "Vendor work images fetched successfully",
+        workImages,
       };
-    }));
-
-    return {
-      message: "Vendor work images fetched successfully",
-      workImages,
-    };
+    }, 300);
   } catch (error) {
     logger.error(error);
     throw error;
@@ -428,6 +431,8 @@ export const deleteVendorWorkImage = async (data) => {
 
     await deleteFile(vendorImage.s3Key);
     await vendorImagesRepo.delete(vendorImage);
+
+    await delCache(`vendorWorkImages:${userId}`);
 
     return {
       message: "Vendor work image deleted successfully",
