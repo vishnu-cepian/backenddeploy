@@ -45,3 +45,20 @@ export const AppDataSource = new DataSource({
 //   ca: fs.readFileSync('/path/to/ca-certificate.crt').toString()
 // } : false
 });
+
+
+// FOR PRODUCTION
+
+// export const AppDataSource = new DataSource({
+//     type: "postgres",
+//     host: process.env.DB_HOST, // your RDS endpoint
+//     port: 5432,
+//     username: process.env.DB_USER, // 'postgres'
+//     password: process.env.DB_PASS,
+//     database: process.env.DB_NAME, // e.g. 'myapp'
+//     synchronize: false, // ✅ false in production
+//     logging: true,
+//     entities: ["src/entities/*.js"], // adjust path as needed
+//     migrations: ["src/migrations/*.js"],
+//     ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+//   });
