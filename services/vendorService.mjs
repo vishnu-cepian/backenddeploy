@@ -7,6 +7,7 @@ import { VendorAudit } from "../entities/VendorAudit.mjs";
 import { OtpPhone } from "../entities/OtpPhone.mjs";
 import { VendorImages } from "../entities/VendorImages.mjs";
 import { getPresignedViewUrl, deleteFile } from "./s3service.mjs";
+import { cacheOrFetch } from "../utils/cache.mjs";
 
 const userRepo = AppDataSource.getRepository(User);
 const vendorRepo = AppDataSource.getRepository(Vendors);
@@ -155,38 +156,39 @@ export const completeProfile = async (data, deviceInfo) => {
 export const getVendorDetails = async (data) => {
   try {
     const { userId } = data;
-
-    const vendor = await vendorRepo.createQueryBuilder("vendors")
-    .leftJoin("vendors.user", "user")
-    .select([
-      "vendors.id",
-      "user.name",
-      "vendors.shopName",
-      "vendors.serviceType",
-      "vendors.vendorServices",
-      "vendors.city",
-      "vendors.state",
-      "vendors.shopDescription",
-      "vendors.allTimeRating",
-      "vendors.allTimeReviewCount",
-      "vendors.currentMonthRating",
-      "vendors.currentMonthReviewCount",
-      "vendors.currentMonthBayesianScore",
-      "vendors.vendorAvatarUrlPath",
-      "vendors.shopImageUrlPath",
-    ])
-    .where("vendors.userId = :userId", { userId })
-    .getOne();
- 
-    if (!vendor) {
+    return cacheOrFetch(`vendorDetails:${userId}`, async () => {
+      const vendor = await vendorRepo.createQueryBuilder("vendors")
+      .leftJoin("vendors.user", "user")
+      .select([
+        "vendors.id",
+        "user.name",
+        "vendors.shopName",
+        "vendors.serviceType",
+        "vendors.vendorServices",
+        "vendors.city",
+        "vendors.state",
+        "vendors.shopDescription",
+        "vendors.allTimeRating",
+        "vendors.allTimeReviewCount",
+        "vendors.currentMonthRating",
+        "vendors.currentMonthReviewCount",
+        "vendors.currentMonthBayesianScore",
+        "vendors.vendorAvatarUrlPath",
+        "vendors.shopImageUrlPath",
+      ])
+      .where("vendors.userId = :userId", { userId })
+      .getOne();
+  
+      if (!vendor) {
+        return {
+          message: "Vendor not found",
+        };
+      }
       return {
-        message: "Vendor not found",
+        message: "Vendor details fetched successfully",
+        vendor,
       };
-    }
-    return {
-      message: "Vendor details fetched successfully",
-      vendor,
-    };
+    }, 300);
   } catch (error) {
     logger.error(error);
     throw error;
