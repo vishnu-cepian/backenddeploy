@@ -4,12 +4,13 @@ import { AppDataSource } from "../config/data-source.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { Not } from "typeorm";
 import { LeaderboardHistory } from "../entities/LeaderboardHistory.mjs";
+import { deleteByPattern } from "../utils/cache.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 
 // Run at midnight on the first day of every month
-const cronTime = "0 0 1 * *";
-// const cronTime = "*/1 * * * *"; //for testing
+// const cronTime = "0 0 1 * *";
+const cronTime = "*/1 * * * *"; //for testing
 
 cron.schedule(cronTime, async () => {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -78,6 +79,7 @@ cron.schedule(cronTime, async () => {
         }
 
         await queryRunner.commitTransaction();
+        await deleteByPattern("getMonthlyLeadershipBoard:*");
         logger.info(`Monthly job executed at ${new Date().toISOString()}`);
     } catch (error) {
         await queryRunner.rollbackTransaction();

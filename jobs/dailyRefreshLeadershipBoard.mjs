@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { logger } from "../utils/logger-utils.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
+import { deleteByPattern } from "../utils/cache.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 
@@ -40,6 +41,8 @@ cron.schedule(cronTime, async () => {
             .where("status = :status", { status: "VERIFIED" })
             .andWhere("currentMonthRating > 0")
             .execute();
+
+            await deleteByPattern('getDailyLeadershipBoard:*'); //clear all cache for getDailyLeadershipBoard
 
         logger.info(`Daily job executed at ${new Date().toISOString()}`);
     } catch (error) {

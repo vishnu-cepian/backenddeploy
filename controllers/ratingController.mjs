@@ -30,3 +30,17 @@ export const getDailyLeadershipBoard = async (req, res, next) => {
       next(err);
     }
   };
+
+  export const getMonthlyLeadershipBoard = async (req, res, next) => {
+    try {
+      const data = req.body;
+      const response = await ratingService.getMonthlyLeadershipBoard(data);
+      if (!response) {
+        throw new Error(formatError("Daily leadership board not found", response));
+      }
+      res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (err) {
+      logger.error(err);
+      next(err);
+    }
+  };

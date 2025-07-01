@@ -6,12 +6,15 @@ import { Orders } from "../entities/Orders.mjs";
 import { Rating } from "../entities/Rating.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { ORDER_STATUS } from "../types/enums/index.mjs";
+import { LeaderboardHistory } from "../entities/LeaderboardHistory.mjs";
 import { Not } from "typeorm";
+import { cacheOrFetch } from "../utils/cache.mjs";
 
 const ratingRepo = AppDataSource.getRepository(Rating);
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const orderRepo = AppDataSource.getRepository(Orders);
 const customerRepo = AppDataSource.getRepository(Customers);
+const leaderBoardHistoryRepo = AppDataSource.getRepository(LeaderboardHistory);
 
 export const updateVendorRating = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -73,23 +76,50 @@ export const updateVendorRating = async (data) => {
         await queryRunner.release();
     }
 }
-
+//
+//
+//   CACHE SHOULD BE UPDATED BY THE CRON JOB EVERY DAY
+//   CACHE TTL IS 1 DAY
+//
+//
 export const getDailyLeadershipBoard = async (data) => {
     try {
         const { serviceType, limit = 25 } = data;
-        const vendors = await vendorRepo.find({ where: { status: "VERIFIED", serviceType, currentMonthRating: Not(0) } });
 
-        const standings = vendors.sort((a, b) => b.currentMonthBayesianScore - a.currentMonthBayesianScore).slice(0, limit);
-        return standings.map(vendor => ({
-            id: vendor.id,
-            shopName: vendor.shopName,
-            currentMonthRating: vendor.currentMonthRating,
-            currentMonthReviewCount: vendor.currentMonthReviewCount,
-            currentMonthBayesianScore: vendor.currentMonthBayesianScore,
-            serviceType: vendor.serviceType
-        }));
+        return cacheOrFetch(`getDailyLeadershipBoard:${serviceType.toLowerCase()}`, async () => {
+            if(!serviceType) throw sendError("Enter service type");
+            const vendors = await vendorRepo.find({ where: { status: "VERIFIED", serviceType: serviceType.toLowerCase(), currentMonthRating: Not(0) } });
+
+            const standings = vendors.sort((a, b) => b.currentMonthBayesianScore - a.currentMonthBayesianScore).slice(0, limit);
+            return standings.map(vendor => ({
+                id: vendor.id,
+                shopName: vendor.shopName,
+                currentMonthRating: vendor.currentMonthRating,
+                currentMonthReviewCount: vendor.currentMonthReviewCount,
+                currentMonthBayesianScore: vendor.currentMonthBayesianScore,
+                serviceType: vendor.serviceType,
+                vendorShopImageUrl: vendor.vendorShopImageUrl
+            }));
+        }, 86400);
     } catch (error) {
         logger.error("Error in getDailyLeadershipBoard", error);
+        throw error;
+    }
+}
+
+export const getMonthlyLeadershipBoard = async (data) => {
+    try {
+        const { serviceType, monthYear, limit = 25 } = data;
+
+        if(!serviceType) throw sendError("service type required");
+        if(!monthYear) throw sendError("month and year required");
+
+        return cacheOrFetch(`getMonthlyLeadershipBoard:${serviceType.toLowerCase()}:${monthYear}`, async () => {
+            const history = await leaderBoardHistoryRepo.find({ where: { serviceType: serviceType.toLowerCase(), monthYear }, order: { bayesianScore: "DESC" }, take: limit });
+            return history;
+        }, 86400); // 24 hr
+    } catch (error) {
+        logger.error("Error in getMonthlyLeadershipBoard", error);
         throw error;
     }
 }
