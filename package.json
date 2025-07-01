@@ -21,6 +21,7 @@
     "express": "^5.1.0",
     "firebase-admin": "^13.4.0",
     "google-auth-library": "^9.15.1",
+    "ioredis": "^5.6.1",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.1.0",
     "node-device-detector": "^2.2.2",
