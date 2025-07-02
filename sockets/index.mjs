@@ -2,18 +2,14 @@ import jwt from "jsonwebtoken";
 import { sendMessage, markAsRead, getChatRoom, getUser } from "../services/chatService.mjs";
 import { sendPushNotification } from "../services/notificationService.mjs";
 import { ACCESS_TOKEN_SECRET } from '../config/auth-config.mjs';
-/*
-
-    for postman testing do-> file->new->websocket
-    uri:- ws://localhost:8000/socket.io/?EIO=4&transport=websocket
-    add token as params
-    after connecting first send 40 as text for initiating handshake
-    then send the message by 42 (ex:- 42["joinRoom", "roomId"])
-
-
-*/
+import { pubClient, subClient } from '../config/redis-config.mjs';
+import { createAdapter  } from "@socket.io/redis-adapter";
+import { sendError } from "../utils/core-utils.mjs";
 
 export const initializeSocket = (io) => {
+
+    const pubAdapter = createAdapter(pubClient, subClient);
+    io.adapter(pubAdapter);
 
     // ======================= AUTHENTICATION MIDDLEWARE =======================
     io.use(async(Socket, next) => {
@@ -23,11 +19,6 @@ export const initializeSocket = (io) => {
         }
         try {
             const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET);
-            // const user = await AppDataSource.getRepository(User).findOne({
-            //     where: {
-            //         id: payload.id
-            //     }
-            // });
             Socket.userId = decoded.id;
             Socket.role = decoded.role;
             next();
@@ -42,68 +33,96 @@ export const initializeSocket = (io) => {
     io.on("connection_error", (Socket, error) => {
         console.log("Connection error", error);
     });
-    io.on("connection", (Socket) => {
-        console.log("connected")
+    io.on("connection", async (Socket) => {
+
+        if (!Socket.userId || !Socket.role) {
+            Socket.disconnect(true);
+            return;
+        }
+        console.log("User connected", Socket.userId, Socket.role);
+
+        await pubClient.hset('online_users', Socket.userId, Socket.id);
+
         Socket.on("joinRoom", async (roomId) => {
-            Socket.join(roomId);
-            await markAsRead(roomId, Socket.userId);
-            console.log("User joined room", Socket.userId, roomId);
-        }); 
-        //42["sendMessage",{"roomId":"746d331a-9191-4141-ba5d-8f8a424f92c0","content":"HELLO"}]
-        Socket.on("sendMessage", async ({ roomId, content}) => { 
             try {
+
+                await Socket.join(roomId);
+                await markAsRead(roomId, Socket.userId);
+                console.log("User joined room", Socket.userId, roomId);
+
+            } catch (error) {
+                console.error("Error joining room", error);
+                Socket.emit("error", "Failed to join room");
+            }
+        }); 
+
+        Socket.on("sendMessage", async ({ roomId, content}, acknowledge) => { 
+            let message;
+            try {
+                
+                if(!roomId || !content?.trim()) {
+                    throw sendError("Invalid message");
+                }
                 // saving msg to db
-                const message = await sendMessage({
+                /**
+                 * 
+                 * 
+                 * USE BULL MQ TO SAVE MESSAGE TO DB
+                 *  const message = await messageQueue.add('save_message', {
+                    roomId,
+                    senderId: socket.userId,
+                    content
+                });
+                 * 
+                 */
+                message = await sendMessage({
                     chatRoomId: roomId,
                     senderId: Socket.userId,
                     content,
                 });
-                // Emit to room via socket
+
                 io.to(roomId).emit("newMessage", message);
 
-                // Get receiver user
                 const room = await getChatRoom(roomId);
-                if(!room) {
-                    throw new Error("Room not found");
-                }
+                if(!room) return;
+
                 const receiverId = Socket.role.toLowerCase() === "customer" ? room.vendorId : room.customerId;
                 const receiverUser = await getUser(receiverId);
-                
-                // check if receiver is online
-                
-                if(receiverUser) {
-                const roomSockets = await io.in(roomId).fetchSockets();
-                const isReceiverOnline = roomSockets.some(socket => socket.userId === receiverUser.id);
-                // console.log(isReceiverOnline, receiverUser.pushToken)
-                // send FCM if offline
-                if(receiverUser.pushToken && !isReceiverOnline) {
-                    // console.log("sending FCM")
-                    const fcmToken = receiverUser.pushToken;
-                    const title = "New message";
-                    const body = content;
-                    /*
-
-
-                    add url 
-
-
-
-                    */
-                    const url = receiverUser.id;    // CHANGE IT LATER
-                    await sendPushNotification(fcmToken, title, body, url);
+               
+                if(receiverId) {
+                    const receiver = await pubClient.hget('online_users', receiverUser.id);
+                    console.log("receiver",receiver)
+                    const isReceiverOnline = receiver !== null;
+                   
+                    if(receiverUser.pushToken && !isReceiverOnline) {
+                        const fcmToken = receiverUser.pushToken;
+                        const title = "New message";
+                        const body = message.content;
+                        const url = '/chat/' + roomId;    // CHANGE IT LATER
+                        await sendPushNotification(fcmToken, title, body, url);
                     }
                 }
+
+
+                acknowledge?.({ status: 'success', message: "Message sent successfully"});
+               
             } catch (error) {
                 console.error("Error sending message", error);
                 Socket.emit("error", "Failed to send message");
+                acknowledge?.({ status: 'error', tempId: message.id, message: "Failed to send message"});
             }
         });
+        Socket.on("disconnect", async () => {
+            console.log("Client disconnected", Socket.id);
+            await pubClient.hdel('online_users', Socket.userId);
+        }); 
     });
 
     // ============================ DISCONNECTION HANDLER ===========================
-
-    io.on("disconnect", (Socket) => {
+    // NOT USED
+    io.on("disconnect", async (Socket) => {
         console.log("Client disconnected", Socket.id);
+        await pubClient.hdel('online_users', Socket.userId, Socket.id);
     });
 
 };
