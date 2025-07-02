@@ -1,4 +1,4 @@
-import redis from '../config/redis-config.mjs';
+import { redis } from '../config/redis-config.mjs';
 
 const DEFAULT_EXPIRY = 60; // seconds
 
