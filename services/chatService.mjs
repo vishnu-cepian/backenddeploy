@@ -22,7 +22,7 @@ export const getOrCreateChatRoom = async (data) => {
         // If user is customer, they are customerId and receiver is vendorId
         // Otherwise user is vendorId and receiver is customerId
         let customerId, vendorId;
-        if(user.role.toLowercase() === "customer") {
+        if((user.role).toLowerCase() === "customer") {
             customerId = user.id;
             vendorId = receiverId;
 
@@ -95,7 +95,7 @@ export const getChatRoomsForUser = async (user) => {
     try {
         let chatRooms;
         const userId = user.id;
-        if(user.role.toLowercase() === "customer") {
+        if((user.role).toLowerCase() === "customer") {
             const customer = await customerRepo.findOne({
                 where: {
                     userId: userId
@@ -243,6 +243,9 @@ export const getUser = async (userId) => {
         const customer = await customerRepo.findOne({
             where: {
                 id: userId
+            },
+            select: {
+                userId: true
             }
         })
         if(customer) {
@@ -251,6 +254,9 @@ export const getUser = async (userId) => {
         const vendor = await vendorRepo.findOne({
             where: {
                 id: userId
+            },
+            select: {
+                userId: true
             }
         })
         if(vendor) {
@@ -259,6 +265,10 @@ export const getUser = async (userId) => {
         const user = await userRepo.findOne({
             where: {
                 id: uId
+            },
+            select: {
+                id: true,
+                pushToken: true
             }
         })
         return user;
