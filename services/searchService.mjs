@@ -3,6 +3,7 @@ import { Vendors } from "../entities/Vendors.mjs";
 import { logger } from "../utils/logger-utils.mjs";
 import { cacheOrFetch } from "../utils/cache.mjs";
 import { getPresignedViewUrl } from "./s3service.mjs";
+import { sendError } from "../utils/core-utils.mjs";
 
 // --------------------------------------------SEARCH HELPER FUNCTIONS----------------------------------------------------------------------------------------------
 
@@ -80,18 +81,51 @@ export const searchResults = async (serviceType, lng, lat, radiusKm, searchType,
 // --------------------------------------------SEARCH SERVICES ----------------------------------------------------------------------------------------------
 export const searchVendorsByRating = async (params) => {
     try {
-        const { serviceType, limit = 10, offset = 0 } = params;
-        return cacheOrFetch(`searchVendorsByRating:${serviceType.toLowerCase()}:${limit}:${offset}`, async () => {
-        const result = await searchResults( serviceType.toLowerCase(),0, 0, 0, "rating", "",limit, offset);
-        const resultWithPresignedUrl = await Promise.all(result.map(async vendor => {
-            if(vendor.shopImageUrlPath) {
-                vendor.shopImageUrlPath = await getPresignedViewUrl(vendor.shopImageUrlPath)
+        const { serviceType, page = 1 } = params;
+
+        const limit = 5;
+        const offset = (page - 1) * limit;
+
+        if (!serviceType || typeof serviceType !== 'string') {
+            throw sendError('Invalid serviceType parameter');
+        }
+        if (page < 1 || !Number.isInteger(page)) {
+            throw sendError('Page must be a positive integer');
+        }
+
+        return cacheOrFetch(`searchVendorsByRating:${serviceType.toLowerCase()}:${page}:${limit}`, async () => {
+        const result = await searchResults( serviceType.toLowerCase(),0, 0, 0, "rating", "",limit + 1, offset);
+ 
+        if(!result || result.length === 0) {
+            return {
+                data: [],
+                pagination: {
+                    currentPage: page,
+                    totalPages: 0,
+                    hasMore: false
+                },
+                message: "No vendors found"
             }
-            return vendor;
-        }))
-        if(resultWithPresignedUrl.length !== 0) 
-            return resultWithPresignedUrl;  
-        return {"message": "no Vendors found"};
+        }
+
+        const processedResults = await Promise.all(
+            result.slice(0, limit).map(async vendor => ({
+                ...vendor,
+                shopImageUrlPath: vendor.shopImageUrlPath 
+                    ? await getPresignedViewUrl(vendor.shopImageUrlPath)
+                    : null
+            }))
+        );
+
+        return {
+            data: processedResults,
+            pagination: {
+                currentPage: page,
+                totalPages: Math.ceil(result.length / limit),
+                hasMore: result.length > limit,
+                nextPage: result.length > limit ? page + 1 : null
+            }
+        };
         }, 300);
     } catch (err) {
         logger.error(err);
@@ -101,21 +135,32 @@ export const searchVendorsByRating = async (params) => {
 
 export const searchVendorByNearestLocation = async (params) => {
     try {
-        const { serviceType, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
+        const { serviceType, lng, lat, radiusKm, page = 1 } = params;
 
-        return cacheOrFetch(`searchVendorsByLocation:${serviceType.toLowerCase()}:${lng}:${lat}:${radiusKm}:${limit}:${offset}`, async () => {
-        const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "location", "", limit, offset);
+        const limit = 5;
+        const offset = (page - 1) * limit;
 
-        const resultWithPresignedUrl = await Promise.all(result.map(async vendor => {
-            if(vendor.shopImageUrlPath) {
-                vendor.shopImageUrlPath = await getPresignedViewUrl(vendor.shopImageUrlPath)
+        return cacheOrFetch(`searchVendorsByLocation:${serviceType.toLowerCase()}:${lng}:${lat}:${radiusKm}:${page}:${limit}`, async () => {
+        const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "location", "", limit + 1, offset);
+
+        const processedResults = await Promise.all(
+            result.slice(0, limit).map(async vendor => ({
+                ...vendor,
+                shopImageUrlPath: vendor.shopImageUrlPath 
+                    ? await getPresignedViewUrl(vendor.shopImageUrlPath)
+                    : null
+            }))
+        );
+
+        return {
+            data: processedResults,
+            pagination: {
+                currentPage: page,
+                totalPages: Math.ceil(result.length / limit),
+                hasMore: result.length > limit,
+                nextPage: result.length > limit ? page + 1 : null
             }
-            return vendor;
-        }))
-
-        if(resultWithPresignedUrl.length !== 0) 
-            return resultWithPresignedUrl;
-        return {"message": "no Vendors found"};
+        };
         }, 60);
     } catch (err) {
         logger.error(err);
@@ -125,19 +170,32 @@ export const searchVendorByNearestLocation = async (params) => {
 
 export const searchVendorsByRatingAndLocation = async (params) => {
     try {
-        const { serviceType, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
+        const { serviceType, lng, lat, radiusKm, page = 1 } = params;
 
-        return cacheOrFetch(`searchVendorsByRatingAndLocation:${serviceType.toLowerCase()}:${lng}:${lat}:${radiusKm}:${limit}:${offset}`, async () => {
-            const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "ratingAndLocation", "", limit, offset);
-            const resultWithPresignedUrl = await Promise.all(result.map(async vendor => {
-                if(vendor.shopImageUrlPath) {
-                    vendor.shopImageUrlPath = await getPresignedViewUrl(vendor.shopImageUrlPath)
+        const limit = 5;
+        const offset = (page - 1) * limit;
+
+        return cacheOrFetch(`searchVendorsByRatingAndLocation:${serviceType.toLowerCase()}:${lng}:${lat}:${radiusKm}:${page}:${limit}`, async () => {
+            const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "ratingAndLocation", "", limit + 1, offset);
+
+            const processedResults = await Promise.all(
+                result.slice(0, limit).map(async vendor => ({
+                    ...vendor,
+                    shopImageUrlPath: vendor.shopImageUrlPath 
+                        ? await getPresignedViewUrl(vendor.shopImageUrlPath)
+                        : null
+                }))
+            );
+
+            return {
+                data: processedResults,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(result.length / limit),
+                    hasMore: result.length > limit,
+                    nextPage: result.length > limit ? page + 1 : null
                 }
-                return vendor;
-            }))
-            if(resultWithPresignedUrl.length !== 0) 
-                return resultWithPresignedUrl;
-            return {"message": "no Vendors found"};
+            };
         }, 60);
     } catch (err) {
         logger.error(err);
@@ -147,19 +205,32 @@ export const searchVendorsByRatingAndLocation = async (params) => {
 
 export const searchVendorsByShopName = async (params) => {
     try {
-        const { serviceType, query, lng, lat, radiusKm, limit = 10, offset = 0 } = params;
+        const { serviceType, query, lng, lat, radiusKm, page = 1 } = params;
 
-        return cacheOrFetch(`searchVendorsByShopName:${serviceType.toLowerCase()}:${query}:${lng}:${lat}:${radiusKm}:${limit}:${offset}`, async () => {
-            const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit, offset);
-            const resultWithPresignedUrl = await Promise.all(result.map(async vendor => {
-                if(vendor.shopImageUrlPath) {
-                    vendor.shopImageUrlPath = await getPresignedViewUrl(vendor.shopImageUrlPath)
+        const limit = 5;
+        const offset = (page - 1) * limit;
+
+        return cacheOrFetch(`searchVendorsByShopName:${serviceType.toLowerCase()}:${query}:${lng}:${lat}:${radiusKm}:${page}:${limit}`, async () => {
+            const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit + 1, offset);
+
+            const processedResults = await Promise.all(
+                result.slice(0, limit).map(async vendor => ({
+                    ...vendor,
+                    shopImageUrlPath: vendor.shopImageUrlPath 
+                        ? await getPresignedViewUrl(vendor.shopImageUrlPath)
+                        : null
+                }))
+            );
+
+            return {
+                data: processedResults,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(result.length / limit),
+                    hasMore: result.length > limit,
+                    nextPage: result.length > limit ? page + 1 : null
                 }
-                return vendor;
-            }))
-            if(resultWithPresignedUrl.length !== 0) 
-                return resultWithPresignedUrl;
-            return {"message": "No vendors found"};
+            };
         }, 60);
     } catch (err) {
         logger.error(err);

@@ -5,7 +5,7 @@ import * as searchService from '../services/searchService.mjs';
 
 export const searchVendorsByRating = async (req, res, next) => {
     try {
-        const params = req.params;
+        const params = {serviceType: req.params.serviceType, page: parseInt(req.params.page)};
         const response = await searchService.searchVendorsByRating(params);
         if (!response) {
             throw new Error(formatError("Vendors not found", response));
@@ -19,7 +19,7 @@ export const searchVendorsByRating = async (req, res, next) => {
 
 export const searchVendorsByNearestLocation = async (req, res, next) => {
     try {
-        const params = req.params;
+        const params = {serviceType: req.params.serviceType, lng: req.params.lng, lat: req.params.lat, radiusKm: req.params.radiusKm, page: parseInt(req.params.page)};
         const response = await searchService.searchVendorByNearestLocation(params);
         if (!response) {
             throw new Error(formatError("Vendors not found", response));
@@ -33,7 +33,7 @@ export const searchVendorsByNearestLocation = async (req, res, next) => {
 
 export const searchVendorsByRatingAndLocation = async (req, res, next) => {
     try {
-        const params = req.params;
+        const params = {serviceType: req.params.serviceType, lng: req.params.lng, lat: req.params.lat, radiusKm: req.params.radiusKm, page: parseInt(req.params.page)};
         const response = await searchService.searchVendorsByRatingAndLocation(params);
         if (!response) {
             throw new Error(formatError("Vendors not found", response));
@@ -47,7 +47,7 @@ export const searchVendorsByRatingAndLocation = async (req, res, next) => {
 
 export const searchVendorsByShopName = async (req, res, next) => {
     try {
-        const params = req.params;
+        const params = {serviceType: req.params.serviceType, query: req.params.query, lng: req.params.lng, lat: req.params.lat, radiusKm: req.params.radiusKm, page: parseInt(req.params.page)};
         const response = await searchService.searchVendorsByShopName(params);
         if (!response) {
             throw new Error(formatError("Vendors not found", response));
