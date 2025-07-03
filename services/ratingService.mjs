@@ -84,11 +84,11 @@ export const updateVendorRating = async (data) => {
 //
 export const getDailyLeadershipBoard = async (data) => {
     try {
-        const { serviceType, limit = 25 } = data;
+        const { limit = 25 } = data;
 
-        return cacheOrFetch(`getDailyLeadershipBoard:${serviceType.toLowerCase()}`, async () => {
-            if(!serviceType) throw sendError("Enter service type");
-            const vendors = await vendorRepo.find({ where: { status: "VERIFIED", serviceType: serviceType.toLowerCase(), currentMonthRating: Not(0) } });
+        return cacheOrFetch(`getDailyLeadershipBoard`, async () => {
+           
+            const vendors = await vendorRepo.find({ where: { status: "VERIFIED", currentMonthRating: Not(0) } });
 
             const standings = vendors.sort((a, b) => b.currentMonthBayesianScore - a.currentMonthBayesianScore).slice(0, limit);
             return standings.map(vendor => ({
