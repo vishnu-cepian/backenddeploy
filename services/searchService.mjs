@@ -2,6 +2,7 @@ import { AppDataSource } from "../config/data-source.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { logger } from "../utils/logger-utils.mjs";
 import { cacheOrFetch } from "../utils/cache.mjs";
+import { getPresignedViewUrl } from "./s3service.mjs";
 
 // --------------------------------------------SEARCH HELPER FUNCTIONS----------------------------------------------------------------------------------------------
 
@@ -82,8 +83,14 @@ export const searchVendorsByRating = async (params) => {
         const { serviceType, limit = 10, offset = 0 } = params;
         return cacheOrFetch(`searchVendorsByRating:${serviceType.toLowerCase()}:${limit}:${offset}`, async () => {
         const result = await searchResults( serviceType.toLowerCase(),0, 0, 0, "rating", "",limit, offset);
-        if(result.length !== 0) 
-            return result;
+        const resultWithPresignedUrl = await Promise.all(result.map(async vendor => {
+            if(vendor.shopImageUrlPath) {
+                vendor.shopImageUrlPath = await getPresignedViewUrl(vendor.shopImageUrlPath)
+            }
+            return vendor;
+        }))
+        if(resultWithPresignedUrl.length !== 0) 
+            return resultWithPresignedUrl;  
         return {"message": "no Vendors found"};
         }, 300);
     } catch (err) {
@@ -99,8 +106,15 @@ export const searchVendorByNearestLocation = async (params) => {
         return cacheOrFetch(`searchVendorsByLocation:${serviceType.toLowerCase()}:${lng}:${lat}:${radiusKm}:${limit}:${offset}`, async () => {
         const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "location", "", limit, offset);
 
-        if(result.length !== 0) 
-            return result;
+        const resultWithPresignedUrl = await Promise.all(result.map(async vendor => {
+            if(vendor.shopImageUrlPath) {
+                vendor.shopImageUrlPath = await getPresignedViewUrl(vendor.shopImageUrlPath)
+            }
+            return vendor;
+        }))
+
+        if(resultWithPresignedUrl.length !== 0) 
+            return resultWithPresignedUrl;
         return {"message": "no Vendors found"};
         }, 60);
     } catch (err) {
@@ -115,8 +129,14 @@ export const searchVendorsByRatingAndLocation = async (params) => {
 
         return cacheOrFetch(`searchVendorsByRatingAndLocation:${serviceType.toLowerCase()}:${lng}:${lat}:${radiusKm}:${limit}:${offset}`, async () => {
             const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "ratingAndLocation", "", limit, offset);
-            if(result.length !== 0) 
-                return result;
+            const resultWithPresignedUrl = await Promise.all(result.map(async vendor => {
+                if(vendor.shopImageUrlPath) {
+                    vendor.shopImageUrlPath = await getPresignedViewUrl(vendor.shopImageUrlPath)
+                }
+                return vendor;
+            }))
+            if(resultWithPresignedUrl.length !== 0) 
+                return resultWithPresignedUrl;
             return {"message": "no Vendors found"};
         }, 60);
     } catch (err) {
@@ -131,8 +151,14 @@ export const searchVendorsByShopName = async (params) => {
 
         return cacheOrFetch(`searchVendorsByShopName:${serviceType.toLowerCase()}:${query}:${lng}:${lat}:${radiusKm}:${limit}:${offset}`, async () => {
             const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit, offset);
-            if(result.length !== 0) 
-                return result;
+            const resultWithPresignedUrl = await Promise.all(result.map(async vendor => {
+                if(vendor.shopImageUrlPath) {
+                    vendor.shopImageUrlPath = await getPresignedViewUrl(vendor.shopImageUrlPath)
+                }
+                return vendor;
+            }))
+            if(resultWithPresignedUrl.length !== 0) 
+                return resultWithPresignedUrl;
             return {"message": "No vendors found"};
         }, 60);
     } catch (err) {
