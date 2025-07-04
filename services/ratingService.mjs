@@ -9,6 +9,7 @@ import { ORDER_STATUS } from "../types/enums/index.mjs";
 import { LeaderboardHistory } from "../entities/LeaderboardHistory.mjs";
 import { Not } from "typeorm";
 import { cacheOrFetch } from "../utils/cache.mjs";
+import { getPresignedViewUrl } from "./s3Service.mjs";
 
 const ratingRepo = AppDataSource.getRepository(Rating);
 const vendorRepo = AppDataSource.getRepository(Vendors);
@@ -84,22 +85,41 @@ export const updateVendorRating = async (data) => {
 //
 export const getDailyLeadershipBoard = async () => {
     try {
-        const limit = 25;
+        const limit = 10;
 
         return cacheOrFetch(`getDailyLeadershipBoard`, async () => {
            
-            const vendors = await vendorRepo.find({ where: { status: "VERIFIED", currentMonthRating: Not(0) } });
+            const vendors = await vendorRepo.find({ where: {
+                status: "VERIFIED",
+                currentMonthRating: Not(0),
+                },
+                order: {
+                    currentMonthBayesianScore: "DESC"
+                },
+                take: limit,
+                select: {
+                    id: true,
+                    shopName: true,
+                    currentMonthRating: true,
+                    currentMonthBayesianScore: true,
+                    serviceType: true,
+                    vendorAvatarUrlPath: true,
+                }
+             });
 
-            const standings = vendors.sort((a, b) => b.currentMonthBayesianScore - a.currentMonthBayesianScore).slice(0, limit);
-            return standings.map(vendor => ({
+            const standings = await Promise.all(
+                vendors.map(async vendor => ({
                 id: vendor.id,
                 shopName: vendor.shopName,
                 currentMonthRating: vendor.currentMonthRating,
-                currentMonthReviewCount: vendor.currentMonthReviewCount,
                 currentMonthBayesianScore: vendor.currentMonthBayesianScore,
                 serviceType: vendor.serviceType,
-                vendorShopImageUrl: vendor.vendorShopImageUrl
-            }));
+                vendorAvatarUrl: vendor.vendorAvatarUrlPath 
+                    ? await getPresignedViewUrl(vendor.vendorAvatarUrlPath) 
+                    : null
+            })));
+
+            return standings;
         }, 86400);
     } catch (error) {
         logger.error("Error in getDailyLeadershipBoard", error);
