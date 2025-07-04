@@ -57,9 +57,18 @@ export const searchResults = async (serviceType, lng, lat, radiusKm, searchType,
             break;
 
         case "shopName":
-            conditions.push(`"shopName" ILIKE $5`);
-            orderClause = "ORDER BY hybrid_score DESC, distance ASC";
-            params.push(`%${searchValue}%`);
+            baseQuery = `
+            SELECT vendors.id, "user".name, vendors."serviceType", vendors."shopName", vendors."shopType", vendors.city, vendors."allTimeRating", vendors."allTimeReviewCount", vendors."shopImageUrlPath"
+            FROM vendors
+            INNER JOIN "user" ON vendors."userId" = "user".id
+            WHERE vendors.location IS NOT NULL
+            AND vendors.status = 'VERIFIED'
+            AND "user"."isBlocked" = false
+            AND vendors."serviceType" = $1
+            AND vendors."shopName" ILIKE $2
+            `;
+            params = [];
+            params.push(serviceType, `%${searchValue}%`);
             break;
 
         default:
@@ -83,7 +92,7 @@ export const searchVendorsByRating = async (params) => {
     try {
         const { serviceType, page = 1 } = params;
 
-        const limit = 5;
+        const limit = 10;
         const offset = (page - 1) * limit;
 
         if (!serviceType || typeof serviceType !== 'string') {
@@ -137,7 +146,7 @@ export const searchVendorByNearestLocation = async (params) => {
     try {
         const { serviceType, lng, lat, radiusKm, page = 1 } = params;
 
-        const limit = 5;
+        const limit = 10;
         const offset = (page - 1) * limit;
 
         return cacheOrFetch(`searchVendorsByLocation:${serviceType.toLowerCase()}:${lng}:${lat}:${radiusKm}:${page}:${limit}`, async () => {
@@ -172,7 +181,7 @@ export const searchVendorsByRatingAndLocation = async (params) => {
     try {
         const { serviceType, lng, lat, radiusKm, page = 1 } = params;
 
-        const limit = 5;
+        const limit = 10;
         const offset = (page - 1) * limit;
 
         return cacheOrFetch(`searchVendorsByRatingAndLocation:${serviceType.toLowerCase()}:${lng}:${lat}:${radiusKm}:${page}:${limit}`, async () => {
@@ -205,13 +214,13 @@ export const searchVendorsByRatingAndLocation = async (params) => {
 
 export const searchVendorsByShopName = async (params) => {
     try {
-        const { serviceType, query, lng, lat, radiusKm, page = 1 } = params;
+        const { serviceType, query, page = 1 } = params;
 
-        const limit = 5;
+        const limit = 10;
         const offset = (page - 1) * limit;
 
-        return cacheOrFetch(`searchVendorsByShopName:${serviceType.toLowerCase()}:${query}:${lng}:${lat}:${radiusKm}:${page}:${limit}`, async () => {
-            const result = await searchResults(serviceType.toLowerCase(), parseFloat(lng), parseFloat(lat), parseFloat(radiusKm), "shopName", query, limit + 1, offset);
+        return cacheOrFetch(`searchVendorsByShopName:${serviceType.toLowerCase()}:${query}:${page}:${limit}`, async () => {
+            const result = await searchResults(serviceType.toLowerCase(), 0, 0, 0, "shopName", query, limit + 1, offset);
 
             const processedResults = await Promise.all(
                 result.slice(0, limit).map(async vendor => ({

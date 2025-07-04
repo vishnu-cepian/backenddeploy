@@ -47,7 +47,7 @@ export const searchVendorsByRatingAndLocation = async (req, res, next) => {
 
 export const searchVendorsByShopName = async (req, res, next) => {
     try {
-        const params = {serviceType: req.params.serviceType, query: req.params.query, lng: req.params.lng, lat: req.params.lat, radiusKm: req.params.radiusKm, page: parseInt(req.params.page)};
+        const params = {serviceType: req.params.serviceType, query: req.params.query, page: parseInt(req.params.page)};
         const response = await searchService.searchVendorsByShopName(params);
         if (!response) {
             throw new Error(formatError("Vendors not found", response));
