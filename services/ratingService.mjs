@@ -9,7 +9,7 @@ import { ORDER_STATUS } from "../types/enums/index.mjs";
 import { LeaderboardHistory } from "../entities/LeaderboardHistory.mjs";
 import { Not } from "typeorm";
 import { cacheOrFetch } from "../utils/cache.mjs";
-import { getPresignedViewUrl } from "./s3Service.mjs";
+import { getPresignedViewUrl } from "./s3service.mjs";
 
 const ratingRepo = AppDataSource.getRepository(Rating);
 const vendorRepo = AppDataSource.getRepository(Vendors);
