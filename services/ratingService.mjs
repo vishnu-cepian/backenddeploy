@@ -82,9 +82,9 @@ export const updateVendorRating = async (data) => {
 //   CACHE TTL IS 1 DAY
 //
 //
-export const getDailyLeadershipBoard = async (data) => {
+export const getDailyLeadershipBoard = async () => {
     try {
-        const { limit = 25 } = data;
+        const limit = 25;
 
         return cacheOrFetch(`getDailyLeadershipBoard`, async () => {
            

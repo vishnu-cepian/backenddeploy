@@ -19,8 +19,7 @@ export const updateVendorRating = async (req, res, next) => {
 
 export const getDailyLeadershipBoard = async (req, res, next) => {
     try {
-      const data = req.body;
-      const response = await ratingService.getDailyLeadershipBoard(data);
+      const response = await ratingService.getDailyLeadershipBoard();
       if (!response) {
         throw new Error(formatError("Daily leadership board not found", response));
       }
