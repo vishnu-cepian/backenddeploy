@@ -8,6 +8,7 @@ import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { sendEmail } from "./notificationService.mjs";
+import { emailQueue } from "../queues/index.mjs";
 
 //===================JWT UTILS====================
 
@@ -123,9 +124,13 @@ export const signup = async (data) => {
 
                 if (!newCustomer) throw sendError("Customer profile creation failed", 400);
             }
-            const response = await sendEmail(email, "Nexs", "global_otp", { text: "WELCOME" });
 
-            if (response.status !== "success") throw sendError("Failed to send email", 500);
+            emailQueue.add('sendEmailnewReg', {
+                email,
+                name: "Nexs",
+                template_id: "global_otp",
+                variables: { text: "WELCOME" }
+            });
               
             return {
                 message: "User created successfully",
@@ -347,14 +352,16 @@ export const sendEmailOtp = async (data) => {
         // "global_otp" is the template name
         // { otp: otp } is the data to be sent to the template (variables)
         
-        const response = await sendEmail(email, "Nexs", "global_otp", { otp: otp });
-        if (response.status === "success") {
-            return {
-                message: "OTP sent successfully",
-                status: true
-            }
-        } else {
-            throw sendError("Failed to send email", 500);
+        emailQueue.add('sendEmailOtp', {
+            email,
+            name: "Nexs",
+            template_id: "global_otp",
+            variables: { otp: otp }
+        });
+
+        return {
+            message: "OTP sent successfully",
+            status: true
         }
     } catch (err) {
         logger.error(err);
