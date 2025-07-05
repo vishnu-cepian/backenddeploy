@@ -50,7 +50,7 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
     try {
     const decoded = verifyRefreshToken(refreshToken);
     if (!decoded) {
-        throw sendError('Invalid refresh token', 401);
+        throw sendError('Invalid refresh token, please login again', 401);
     }
     const userRepository = AppDataSource.getRepository(User);
     const user = await userRepository.findOne({ where: { id: decoded.id } });
@@ -58,7 +58,7 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
         throw sendError('User not found', 404);
     }
     if (user.refreshToken !== refreshToken) {
-        throw sendError('Invalid refresh token', 401);
+        throw sendError('Invalid refresh token, please login again', 401);
     }
     const newAccessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
     const newRefreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
