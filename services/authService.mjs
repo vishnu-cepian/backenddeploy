@@ -13,11 +13,11 @@ import { emailQueue } from "../queues/index.mjs";
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
-  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '1m' });
 };
 
 export const generateRefreshToken = (payload) => {
-  return jwt.sign(payload, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+  return jwt.sign(payload, REFRESH_TOKEN_SECRET, { expiresIn: '5m' });
 };
 
 export const verifyAccessToken = (token) => {
