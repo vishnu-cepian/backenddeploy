@@ -144,7 +144,6 @@ export const broadcastPushNotification = async (role, title, body) => {
  * 
  */
 export const sendEmail = async (email, name, template_id, variables) => {
-    console.log(variables)
     try {
     const url = new URL(
         'https://control.msg91.com/api/v5/email/send'
