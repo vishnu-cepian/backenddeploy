@@ -17,7 +17,7 @@ import { Payments } from '../entities/Payments.mjs';
 import { Rating } from '../entities/Rating.mjs';
 import { LeaderboardHistory } from '../entities/LeaderboardHistory.mjs';
 import { PaymentFailures } from '../entities/PaymentFailures.mjs';  
-
+import { QueueLogs } from '../entities/queueLogs.mjs';
 import 'dotenv/config'
 
 export const AppDataSource = new DataSource({
@@ -30,7 +30,7 @@ export const AppDataSource = new DataSource({
     // database: process.env.DB_DATABASE,
     schema: "public",
     synchronize: true,
-    entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, OrderVendors, ChatRoom, ChatMessage, VendorAudit, VendorImages, OrderQuotes, Payments, Rating, LeaderboardHistory, PaymentFailures],
+    entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, OrderVendors, ChatRoom, ChatMessage, VendorAudit, VendorImages, OrderQuotes, Payments, Rating, LeaderboardHistory, PaymentFailures, QueueLogs],
 
 //     ssl: true,
 //     extra: {
