@@ -1,43 +1,94 @@
 import Redis from 'ioredis';
 
-const redisOptions = {
-  host: process.env.REDIS_HOST || 'redis-18909.c305.ap-south-1-1.ec2.redns.redis-cloud.com',
-  port: parseInt(process.env.REDIS_PORT || '18909'), 
-  password: process.env.REDIS_PASSWORD || "qsWG3H1WQZO6Gz71iaSHUC7lH4y3QgMR",
-  maxRetriesPerRequest: 3, // Fail fast on connection issues
-  enableReadyCheck: true, // Verify Redis is ready
-  reconnectOnError: (err) => {
-    // Reconnect only on non-network errors
-    const targetErrors = [/READONLY/, /ETIMEDOUT/];
-    return targetErrors.some(pattern => pattern.test(err.message));
-  }
-};
+class RedisManager {
+  constructor() {
+    this.options = {
+      host: process.env.REDIS_HOST || 'redis-18909.c305.ap-south-1-1.ec2.redns.redis-cloud.com',
+      port: parseInt(process.env.REDIS_PORT || '18909'), 
+      password: process.env.REDIS_PASSWORD || "qsWG3H1WQZO6Gz71iaSHUC7lH4y3QgMR",
+      enableReadyCheck: true, // Verify Redis is ready
+      reconnectOnError: (err) => {
+        // Reconnect only on non-network errors
+        const targetErrors = [/READONLY/, /ETIMEDOUT/];
+        return targetErrors.some(pattern => pattern.test(err.message));
+      }
+    };
+    this.clients = {};
+    this.initialize();
+}
 
-export const redis = new Redis(redisOptions);
-export const pubClient = new Redis(redisOptions);
-export const subClient = pubClient.duplicate();
+initialize() {
+  this.clients.redis = new Redis({
+    ...this.options,
+    maxRetriesPerRequest: 3,
+  });
 
-// Handle connection events
-['connect', 'ready', 'error', 'close', 'reconnecting'].forEach(event => {
-  redis.on(event, () => console.log(`[Redis] ${event}`));
-  pubClient.on(event, () => console.log(`[Redis-Pub] ${event}`));
-  subClient.on(event, () => console.log(`[Redis-Sub] ${event}`));
-});
+  // Pub/Sub clients
+  this.clients.pubClient = new Redis(this.options);
+  this.clients.subClient = this.clients.pubClient.duplicate();
 
-// Graceful shutdown handler
-const shutdown = async () => {
-  await Promise.all([
-    redis.quit(),
-    pubClient.quit(),
-    subClient.quit()
-  ]);
-  console.log('Redis connections closed');
-};
+  // BullMQ-specific client
+  this.clients.bullRedis = new Redis({
+    ...this.options,
+    maxRetriesPerRequest: null // Critical for BullMQ
+  });
 
-subClient.on('error', (err) => {
-  console.error('Redis sub error:', err);
-  setTimeout(() => subClient.connect(), 1000);
-});
+   this.setupEventHandlers();
+   this.setupGracefulShutdown()
+}
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+setupEventHandlers() {
+  const clientTypes = ['redis', 'pubClient', 'subClient', 'bullRedis'];
+        
+        clientTypes.forEach(type => {
+            const client = this.clients[type];
+            
+            ['connect', 'ready', 'error', 'close', 'reconnecting', 'end'].forEach(event => {
+                client.on(event, () => {
+                    console.log(`[Redis-${type}] ${event}`, 
+                        event === 'error' ? client.lastError : '');
+                });
+            });
+
+            // Enhanced error handling
+            client.on('error', (err) => {
+                console.error(`[Redis-${type}] Error:`, err);
+                if (!['ECONNREFUSED', 'ENOTFOUND'].includes(err.code)) {
+                    setTimeout(() => client.connect(), 5000);
+                }
+            });
+        });
+    }
+
+    setupGracefulShutdown() {
+      const shutdown = async () => {
+        console.log('\nStarting Redis connection shutdown...');
+
+        try {
+          await Promise.all([
+              this.clients.redis.quit(),
+              this.clients.pubClient.quit(),
+              this.clients.subClient.quit(),
+              this.clients.bullRedis.quit()
+          ].map(p => p.catch(e => console.error('Error closing connection:', e))));
+          
+          console.log('All Redis connections closed gracefully');
+          process.exit(0);
+        } catch (err) {
+          console.error('Shutdown error:', err);
+          process.exit(1);
+        }
+        };
+
+        process.on('SIGTERM', shutdown);
+        process.on('SIGINT', shutdown);
+        process.on('SIGHUP', shutdown);
+      }
+
+    getClients() {
+      return this.clients;
+    }
+}
+
+export const redisManager = new RedisManager();
+export const { redis, pubClient, subClient, bullRedis } = redisManager.getClients();
