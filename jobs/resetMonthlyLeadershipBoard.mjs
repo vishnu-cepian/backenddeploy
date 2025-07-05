@@ -9,8 +9,8 @@ import { deleteByPattern } from "../utils/cache.mjs";
 const vendorRepo = AppDataSource.getRepository(Vendors);
 
 // Run at midnight on the first day of every month
-// const cronTime = "0 0 1 * *";
-const cronTime = "*/1 * * * *"; //for testing
+const cronTime = "0 0 1 * *";
+// const cronTime = "*/1 * * * *"; //for testing
 
 cron.schedule(cronTime, async () => {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -18,7 +18,12 @@ cron.schedule(cronTime, async () => {
     await queryRunner.startTransaction();
 
     try {
-        const serviceTypes = ["tailoring", "laundry"];
+        /**
+         * 
+         * ADD ENUMS 
+         * 
+         */
+        const serviceTypes = ["tailors", "laundry"];
         const now = new Date();
         
         // now.getMonth() is 0-indexed, so leave it without subtracting 1 to get previous month
