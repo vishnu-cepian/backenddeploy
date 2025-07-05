@@ -120,7 +120,7 @@ export const getDailyLeadershipBoard = async () => {
             })));
 
             return standings;
-        }, 86400);
+        }, 3600); // 1 hr
     } catch (error) {
         logger.error("Error in getDailyLeadershipBoard", error);
         throw error;
@@ -137,7 +137,7 @@ export const getMonthlyLeadershipBoard = async (data) => {
         return cacheOrFetch(`getMonthlyLeadershipBoard:${serviceType.toLowerCase()}:${monthYear}`, async () => {
             const history = await leaderBoardHistoryRepo.find({ where: { serviceType: serviceType.toLowerCase(), monthYear }, order: { bayesianScore: "DESC" }, take: limit });
             return history;
-        }, 86400); // 24 hr
+        }, 3600); // 1 hr
     } catch (error) {
         logger.error("Error in getMonthlyLeadershipBoard", error);
         throw error;
