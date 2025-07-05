@@ -1,10 +1,10 @@
 import jwt from "jsonwebtoken";
-import { sendMessage, markAsRead, getChatRoom, getUser } from "../services/chatService.mjs";
-import { sendPushNotification } from "../services/notificationService.mjs";
+import { markAsRead, getChatRoom, getUser } from "../services/chatService.mjs";
 import { ACCESS_TOKEN_SECRET } from '../config/auth-config.mjs';
 import { pubClient, subClient } from '../config/redis-config.mjs';
 import { createAdapter  } from "@socket.io/redis-adapter";
 import { sendError } from "../utils/core-utils.mjs";
+import { chatQueue, pushQueue } from "../queues/index.mjs";
 
 export const initializeSocket = (io) => {
 
@@ -63,23 +63,19 @@ export const initializeSocket = (io) => {
                 if(!roomId || !content?.trim()) {
                     throw sendError("Invalid message");
                 }
-                // saving msg to db
-                /**
-                 * 
-                 * 
-                 * USE BULL MQ TO SAVE MESSAGE TO DB
-                 *  const message = await messageQueue.add('save_message', {
-                    roomId,
-                    senderId: socket.userId,
-                    content
-                });
-                 * 
-                 */
-                message = await sendMessage({
+ 
+                // USE BULL MQ TO SAVE MESSAGE TO DB
+                await chatQueue.add('sendMessage', {
                     chatRoomId: roomId,
                     senderId: Socket.userId,
                     content,
                 });
+
+                message = {
+                    chatRoomId: roomId,
+                    senderId: Socket.userId,
+                    content,
+                }
 
                 io.to(roomId).emit("newMessage", message);
 
@@ -99,7 +95,12 @@ export const initializeSocket = (io) => {
                         const title = "New message";
                         const body = message.content;
                         const url = '/chat/' + roomId;    // CHANGE IT LATER
-                        await sendPushNotification(fcmToken, title, body, url);
+                        await pushQueue.add('sendPushNotification', {
+                            token: fcmToken,
+                            title,
+                            message: body,
+                            url
+                        });
                     }
                 }
 
@@ -109,7 +110,7 @@ export const initializeSocket = (io) => {
             } catch (error) {
                 console.error("Error sending message", error);
                 Socket.emit("error", "Failed to send message");
-                acknowledge?.({ status: 'error', tempId: message.id, message: "Failed to send message"});
+                acknowledge?.({ status: 'error', message: "Failed to send message"});
             }
         });
         Socket.on("disconnect", async () => {
