@@ -17,8 +17,9 @@ logResponse = true;
 router.get("/stats",verifyAdminAccessToken, controllerWrapper(adminController.stats, {logRequest, logResponse}))
 router.get("/getAllVendors",verifyAdminAccessToken, controllerWrapper(adminController.getAllVendors, {logRequest, logResponse}))
 router.get("/getVendorById/:id",verifyAdminAccessToken, controllerWrapper(adminController.getVendorById, {logRequest, logResponse}))
+router.post("/searchByEmailorPhoneNumber",verifyAdminAccessToken, controllerWrapper(adminController.searchByEmailorPhoneNumber, {logRequest, logResponse}))
 router.post("/blockorUnblockVendor/:id",verifyAdminAccessToken, controllerWrapper(adminController.blockOrUnblockVendor, {logRequest, logResponse}))
 router.post("/verifyVendor/:id",verifyAdminAccessToken, controllerWrapper(adminController.verifyVendor, {logRequest, logResponse}))
-router.post("/rejectVendor/:id",verifyAdminAccessToken, controllerWrapper(adminController.rejectVendor, {logRequest, logResponse}))
+router.delete("/rejectVendor/:id",verifyAdminAccessToken, controllerWrapper(adminController.rejectVendor, {logRequest, logResponse}))
 
 export default router;

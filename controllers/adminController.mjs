@@ -46,15 +46,29 @@ export const stats = async (req, res, next) => {
 
 export const getAllVendors = async (req, res, next) => {
     try {
-        const {page, limit, status, service} = req.query;
-        const pageNumber = page ? parseInt(page) : 1;
-        const limitNumber = limit ? parseInt(limit) : 10;
+        const {pageNumber, limitNumber, status, serviceType} = req.query;
+        const page = pageNumber ? parseInt(pageNumber) : 1;
+        const limit = limitNumber ? parseInt(limitNumber) : 10;
         let response;
-        if ( status || service) {
-            response = await adminService.getAllVendorsByFilter(parseInt(pageNumber), parseInt(limitNumber), status, service);
+        if ( status || serviceType) {
+            response = await adminService.getAllVendorsByFilter(parseInt(page), parseInt(limit), status, serviceType);
         } else {
-            response = await adminService.getAllVendors(parseInt(pageNumber), parseInt(limitNumber));
+            response = await adminService.getAllVendors(parseInt(page), parseInt(limit));
         }
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const searchByEmailorPhoneNumber = async (req, res, next) => {
+    try {
+        const {email, phoneNumber} = req.body;
+        const response = await adminService.searchByEmailorPhoneNumber(email, phoneNumber);
         if (!response) {
             throw new Error(formatError("No response", response));
         }

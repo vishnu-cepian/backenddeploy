@@ -22,7 +22,7 @@ const userRepo = AppDataSource.getRepository(User);
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
-    return jwt.sign(payload, ADMIN_ACCESS_TOKEN_SECRET, { expiresIn: '1m' }); 
+    return jwt.sign(payload, ADMIN_ACCESS_TOKEN_SECRET, { expiresIn: '1d' }); 
   };
   
   export const generateRefreshToken = (payload) => {
@@ -178,88 +178,146 @@ export const stats = async () => {
 };
 
 
-  export const getAllVendors = async (pageNumber, limitNumber) => {
+export const getAllVendors = async (pageNumber = 1, limitNumber = 10) => {
   try {
-    const vendors = await vendorRepo
+    // Validate inputs
+    pageNumber = Math.max(1, parseInt(pageNumber));
+    limitNumber = Math.max(1, Math.min(parseInt(limitNumber), 100)); // Enforce max limit of 100
+
+    // Create query
+    const query = vendorRepo
       .createQueryBuilder("vendors")
       .leftJoinAndSelect("vendors.user", "user")
       .select([
         "vendors.id",
         "vendors.status",
         "vendors.createdAt",
+        "vendors.serviceType",
         "user.email",
         "user.name",
         "user.phoneNumber",
         "user.isBlocked"
       ])
-      .orderBy("vendors.createdAt", "DESC")
-      .skip((pageNumber - 1) * limitNumber)
-      .take(limitNumber)
-      .getMany();
+      .orderBy("vendors.createdAt", "DESC");
 
-    return { vendors };
+    // Get both results and total count in single query
+    const [vendors, totalCount] = await Promise.all([
+      query
+        .skip((pageNumber - 1) * limitNumber)
+        .take(limitNumber)
+        .getMany(),
+      query.getCount()
+    ]);
+
+    return {
+      data: vendors,
+      pagination: {
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        totalItems: totalCount,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        hasMore: pageNumber * limitNumber < totalCount
+      }
+    };
   } catch (err) {
     logger.error(err);
     throw err;
   }
 }
 
-export const getAllVendorsByFilter = async (pageNumber, limitNumber, status, service) => {
+export const getAllVendorsByFilter = async (pageNumber = 1, limitNumber = 10,status,serviceType) => {
   try {
-    const baseQuery = vendorRepo
+    // Input validation and normalization
+    pageNumber = Math.max(1, parseInt(pageNumber));
+    limitNumber = Math.max(1, Math.min(parseInt(limitNumber), 100)); // Max 100 items per page
+
+    // Base query construction
+    const query = vendorRepo
       .createQueryBuilder("vendors")
       .leftJoinAndSelect("vendors.user", "user")
       .select([
         "vendors.id",
-        "vendors.status", 
+        "vendors.status",
+        "vendors.serviceType",
         "vendors.createdAt",
         "user.email",
         "user.name",
         "user.phoneNumber",
         "user.isBlocked"
       ])
-      .orderBy("vendors.createdAt", "DESC")
-      .skip((pageNumber - 1) * limitNumber)
-      .take(limitNumber);
+      .orderBy("vendors.createdAt", "DESC");
 
-    if (service && status) {
-      if (status === "BLOCKED") {
-      const vendors = await baseQuery
-          .where("vendors.serviceType = :service", { service })
-          .andWhere("user.isBlocked = :isBlocked", { isBlocked: true })
-          .getMany();
-        return { vendors };
-      }
-      const vendors = await baseQuery
-        .where("vendors.status = :status", { status })
-        .andWhere("vendors.serviceType = :service", { service })
-        .getMany();
-      return { vendors };
-    }
-
-    if (service) {
-      const vendors = await baseQuery
-        .where("vendors.serviceType = :service", { service })
-        .getMany();
-      return { vendors };
+    // Apply filters
+    if (serviceType) {
+      query.andWhere("vendors.serviceType = :serviceType", { serviceType });
     }
 
     if (status === "BLOCKED") {
-      const vendors = await baseQuery
-        .where("user.isBlocked = :isBlocked", { isBlocked: true })
-        .getMany();
-      return { vendors };
+      query.andWhere("user.isBlocked = :isBlocked", { isBlocked: true });
+    } else if (status) {
+      query.andWhere("vendors.status = :status", { status });
     }
 
-    const vendors = await baseQuery
-      .where("vendors.status = :status", { status })
-      .getMany();
+    // Execute both queries in parallel
+    const [vendors, totalCount] = await Promise.all([
+      query
+        .skip((pageNumber - 1) * limitNumber)
+        .take(limitNumber)
+        .getMany(),
+      query.getCount()
+    ]);
 
-    return { vendors };
+    return {
+      data: vendors,
+      pagination: {
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        totalItems: totalCount,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        hasMore: pageNumber * limitNumber < totalCount,
+        filters: {
+          status,
+          serviceType
+        }
+      }
+    };
   } catch (err) {
     logger.error(err);
     throw err;
   }
+}
+
+export const searchByEmailorPhoneNumber = async (email, phoneNumber) => {
+  try {
+    const query =  await vendorRepo.createQueryBuilder("vendors")
+    .leftJoinAndSelect("vendors.user", "user")
+    .select([
+      "vendors.id",
+      "vendors.status",
+      "vendors.serviceType",
+      "vendors.createdAt",
+      "user.email",
+      "user.name",
+      "user.phoneNumber",
+      "user.isBlocked"
+    ])
+    if (email && !phoneNumber) {
+      query.where("user.email LIKE :email", { email: `%${email}%` })
+      .getMany();
+    } else if (!email && phoneNumber) {
+      query.where("user.phoneNumber LIKE :phoneNumber", { phoneNumber: `%${phoneNumber}%` })
+      .getMany();
+    } else {
+      query.where("user.email LIKE :email", { email: `%${email}%` })
+      .andWhere("user.phoneNumber LIKE :phoneNumber", { phoneNumber: `%${phoneNumber}%` })
+      .getMany();
+    }
+    const vendors = await query.getMany();
+    return {vendors};
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  } 
 }
 
 export const getVendorById = async (id) => {
@@ -355,13 +413,21 @@ export const verifyVendor = async (id) => {
   }
 }
 
-export const rejectVendor = async (id) => {
+export const rejectVendor = async (id) => { //DELETE VENDOR
   try {
     const vendor = await vendorRepo.findOne({ where: { id } });
     if (!vendor) {
       throw sendError('Vendor not found', 404);
     }
-    await vendorRepo.update(id, { status: "REJECTED" });
+    await vendorRepo.delete(id);
+    /**
+     * 
+     * 
+     * 
+     * log this 
+     * 
+     * 
+     */
     return { message: "Vendor rejected successfully" };
   } catch (err) {
     logger.error(err);
