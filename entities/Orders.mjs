@@ -53,16 +53,7 @@ export const Orders = new EntitySchema({
         },
         orderStatusTimestamp: {
             type: "jsonb",
-            default: {
-                paid: null,
-                orderConfirmed: null,
-                orderInProgress: null,
-                readyForDelivery: null,
-                delivered: null,
-                cancelled: null,
-                refunded: null,
-                completed: null
-            }
+            nullable: true
         },
         createdAt: {
             type: "timestamp",
