@@ -30,10 +30,12 @@ import { AppDataSource } from "./config/data-source.mjs";
 import { initChatWorker } from "./queues/chat/chatWorker.mjs";
 import { initPushWorker } from "./queues/notification/push/pushWorker.mjs";
 import { initEmailWorker } from "./queues/notification/email/emailWorker.mjs";
+import { initOutboxWorker } from "./queues/outbox/outboxWorker.mjs";
 
 let chatWorker;
 let pushWorker;
 let emailWorker;
+let outboxWorker;
 let isShuttingDown = false;
 
 async function startWorker() {
@@ -47,6 +49,8 @@ async function startWorker() {
         console.log("Push worker started");
         emailWorker = initEmailWorker();
         console.log("Email worker started");
+        outboxWorker = initOutboxWorker();
+        console.log("Outbox worker started")
 
         setupGracefulShutdown();
 
@@ -74,6 +78,7 @@ function setupGracefulShutdown() {
                 chatWorker.close(),
                 pushWorker.close(),
                 emailWorker.close(),
+                outboxWorker.close(),
                 new Promise((_, reject) => 
                     setTimeout(() => reject(new Error('Worker close timeout')), 5000)
                 )
