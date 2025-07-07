@@ -13,12 +13,16 @@ import Razorpay from "razorpay";
 import crypto from "crypto";
 import { ORDER_VENDOR_STATUS, ORDER_STATUS } from "../types/enums/index.mjs";
 import { calculateVendorPayoutAmount, calculateOrderAmount } from "../utils/pricing_utils.mjs";
+import { PaymentFailures } from "../entities/PaymentFailures.mjs";
+import { Outbox } from "../entities/Outbox.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
 const customerRepo = AppDataSource.getRepository(Customers);
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
+const paymentRepo = AppDataSource.getRepository(Payments);
+const paymentFailureRepo = AppDataSource.getRepository(PaymentFailures);
 
 export const createOrder = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -43,6 +47,56 @@ export const createOrder = async (data) => {
         const customer = await customerRepo.findOne({ where: { userId: userId } });
         if (!customer) throw sendError("Customer not found");
 
+        let orderStatusTimestamp = null;
+
+        if (clothProvided === true) {
+            orderStatusTimestamp = {
+                paid: null,
+                orderConfirmed: null,
+              
+                cancelled: false,                                     // if cancelled
+                cancelledAt: null,
+
+                readyForPickupFromCustomer: false,                    // a flag, set true when assigned for pickup
+                itemPickedFromCustomerAt: null,                      // timestamp when delivery partner picks it
+                itemDeliveredToVendorAt: null,                       // timestamp when vendor receives it
+                vendorAcknowledgedItemAt: null,                      // vendor confirms receipt
+              
+                orderInProgress: null,                               // vendor starts task
+                taskCompletedAt: null,                               // vendor finishes tailoring/laundry
+              
+                readyForPickupFromVendor: false,                      // a flag, set true when vendor marks ready
+                itemPickedFromVendorAt: null,                        // delivery partner picks it up
+                itemDeliveredToCustomerAt: null,                     // customer receives it
+              
+
+                refundRequestedAt: null,                             // if refund was requested
+                refundProcessedAt: null,                              // refund complete
+
+                completed: null,                                     // After the refund time is over
+
+            }
+        } else {
+            orderStatusTimestamp = {
+                paid: null,
+                orderConfirmed: null,
+
+                cancelled: false,                                  
+                cancelledAt: null,
+                
+                orderInProgress: null,
+                taskCompletedAt: null,
+                
+                readyForPickupFromVendor: false,
+                itemPickedFromVendorAt: null,
+                itemDeliveredToCustomerAt: null,
+                
+                refundRequestedAt: null,
+                refundProcessedAt: null,  
+
+                completed: null, 
+            }
+        }
 
         const order = await queryRunner.manager.save(Orders, {
             customerId: customer.id,
@@ -50,6 +104,7 @@ export const createOrder = async (data) => {
             clothProvided: clothProvided,
             orderStatus: ORDER_STATUS.PENDING,
             isPaid: false,
+            orderStatusTimestamp: orderStatusTimestamp
         });
         
         if (!order) throw sendError("Order not created");
@@ -217,7 +272,7 @@ export const vendorOrderResponse = async (data) => {
 
             const vendorPayoutAfterCommission = calculateVendorPayoutAmount(quotedPrice);
             const priceAfterPlatformFee = calculateOrderAmount(quotedPrice);
-            const deliveryCharge = 40;
+            const deliveryCharge = 40;          ////////////////////////////// TO BE CHANGED
             const finalPrice = priceAfterPlatformFee + deliveryCharge;
 
             await queryRunner.manager.save(OrderQuotes, {
@@ -313,15 +368,24 @@ export const createRazorpayOrder = async (data) => {
 
 
 export const refundRazorpayPayment = async (paymentId, reason) => {
+    /*
+    *
+    *
+    *   
+    *   CREATE A TABLE TO TRACK THE REFUNDS (FAILURE AND SUCCESS)
+    * 
+    * 
+    */ 
     try {
         const razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID,
             key_secret: process.env.RAZORPAY_KEY_SECRET
         });
-        await razorpay.payments.refund(paymentId, {
+        const refund = await razorpay.payments.refund(paymentId, {
             speed: "normal",
             notes: { reason: reason }
         });
+        console.log(refund)
         logger.info(`Refunded payment ${paymentId} for reason ${reason}`);
     } catch(err) {
         logger.error(`Error refunding payment ${paymentId} for reason ${reason}`);
@@ -353,6 +417,7 @@ export const handleRazorpayWebhook = async (req, res) => {
         if (signature !== expectedSignature) throw sendError("Invalid signature");
 
         event = req.body.event;
+        paymentId = req.body.payload.payment.entity.id;
 
         if (event === "payment.captured") {
             const payment = req.body.payload.payment.entity;
@@ -373,7 +438,6 @@ export const handleRazorpayWebhook = async (req, res) => {
             if (Number(amount) !== Number(quote.finalPrice)) throw sendError("Payment amount does not match the order amount");
 
             const paymentDate = new Date(payment.created_at * 1000);
-            paymentId = payment.id;
 
             const paymentDetails = await queryRunner.manager.save(Payments, {
                 orderId: orderId,
@@ -394,10 +458,36 @@ export const handleRazorpayWebhook = async (req, res) => {
             order.orderStatus = ORDER_STATUS.ORDER_CONFIRMED;
             order.isPaid = true;  
             // UPDATE THE VENDOR ADDRESS ALSO 
+            order.orderStatusTimestamp.paid = paymentDate;
             order.orderStatusTimestamp.orderConfirmed = paymentDate;
 
             quote.isProcessed = true;
             await queryRunner.manager.save(OrderQuotes, quote);
+
+            const {address: vendorAddress} = await vendorRepo.findOne({ where: { id: vendorId }, select: { address: true } });
+
+            if(order.clothProvided === true) {
+                order.orderStatusTimestamp.readyForPickupFromCustomer = true;
+
+                // INITIATE CLOTH PICKUP FROM CUSTOMER, use OUTBOX pattern as this block is in a transaction
+
+                await queryRunner.manager.save(Outbox, {
+                eventType: "SEND_ITEM_PICKUP",
+                payload: {
+                      orderId,
+                      vendorId,
+                      customerId,
+                      pickupAddress: "test address 1",
+                      deliveryAddress: vendorAddress,
+                 },
+                 status: "PENDING",
+                 createdAt: new Date()
+                })
+            } else {
+                order.orderStatusTimestamp.orderInProgress = paymentDate;
+                // send notification to vendor 
+            }
+
 
             await queryRunner.manager.save(Orders, order);
 
@@ -415,11 +505,6 @@ export const handleRazorpayWebhook = async (req, res) => {
                 status: ORDER_VENDOR_STATUS.FROZEN
             });
 
-            // INITIATE CLOTH PICKUP FROM CUSTOMER
-            // if(order.clothProvided) {
-            // }
-
-
             await queryRunner.commitTransaction();
             res.status(200).json({
                 message: "Order confirmed successfully",
@@ -432,12 +517,13 @@ export const handleRazorpayWebhook = async (req, res) => {
                 orderId: orderId,
                 quoteId: quoteId,
                 customerId: customerId,
+                paymentId: payment.id,
                 amount: amount,
                 reason: payment.error_description || "unknown",
                 status: payment.status,
                 timestamp: new Date(payment.created_at * 1000),
             });
-            
+            await queryRunner.commitTransaction();
             // send notification to customer
 
             return res.status(200).json({
@@ -445,6 +531,7 @@ export const handleRazorpayWebhook = async (req, res) => {
             })
         }
     } catch(err) {
+        console.log(paymentId, event)
         if (paymentId && event === "payment.captured") {
             await refundRazorpayPayment(paymentId, "Order Validation failed after payment");
         }
