@@ -19,6 +19,7 @@ import { LeaderboardHistory } from '../entities/LeaderboardHistory.mjs';
 import { PaymentFailures } from '../entities/PaymentFailures.mjs';  
 import { QueueLogs } from '../entities/queueLogs.mjs';
 import { Outbox } from '../entities/Outbox.mjs';
+import { DeliveryTracking } from '../entities/DeliveryTracking.mjs';
 import 'dotenv/config'
 
 export const AppDataSource = new DataSource({
@@ -31,7 +32,10 @@ export const AppDataSource = new DataSource({
     // database: process.env.DB_DATABASE,
     schema: "public",
     synchronize: true,
-    entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, OrderVendors, ChatRoom, ChatMessage, VendorAudit, VendorImages, OrderQuotes, Payments, Rating, LeaderboardHistory, PaymentFailures, QueueLogs, Outbox],
+    entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, 
+        OrderVendors, ChatRoom, ChatMessage, VendorAudit, VendorImages, OrderQuotes, 
+        Payments, Rating, LeaderboardHistory, PaymentFailures, QueueLogs, Outbox, 
+        DeliveryTracking],
 
 //     ssl: true,
 //     extra: {
