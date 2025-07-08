@@ -187,3 +187,17 @@ export const freezeOrderVendors = async (req, res, next) => {
         next(error);
     }
 };
+
+export const updateOrderStatus = async (req, res, next) => {
+    try {
+        const data = { userId: req.user.id, orderId: req.body.orderId, status: req.body.status };
+        const response = await orderService.updateOrderStatus(data);
+        if (!response) {
+            throw new Error(formatError("Order status not updated", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};

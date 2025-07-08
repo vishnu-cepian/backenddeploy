@@ -10,7 +10,7 @@ const router = Router();
 
 router.post("/createOrder", verifyAccessToken, controllerWrapper(orderController.createOrder, { logRequest: true, logResponse: true }));
 // router.get("/getOrders", verifyAccessToken, controllerWrapper(orderController.getOrders, { logRequest: true, logResponse: true }));
-// router.get("/getOrderById/:orderId", verifyAccessToken, controllerWrapper(orderController.getOrderById, { logRequest: true, logResponse: true }));
+router.get("/getOrderById/:orderId", verifyAccessToken, controllerWrapper(orderController.getOrderById, { logRequest: true, logResponse: true }));
 // router.delete("/deleteOrder/:orderId", verifyAccessToken, controllerWrapper(orderController.deleteOrder, { logRequest: true, logResponse: true }));
 
 router.post("/sendOrderToVendor", verifyAccessToken, controllerWrapper(orderController.sendOrderToVendor, { logRequest: true, logResponse: true }));
@@ -28,6 +28,8 @@ router.post("/vendorOrderResponse", verifyAccessToken, controllerWrapper(orderCo
 router.post("/createRazorpayOrder", verifyAccessToken, controllerWrapper(orderController.createRazorpayOrder, { logRequest: true, logResponse: true }));
 
 router.post("/handleRazorpayWebhook", handleRazorpayWebhook);
+
+router.post("/updateOrderStatus", verifyAccessToken, controllerWrapper(orderController.updateOrderStatus, { logRequest: true, logResponse: true }));
 // router.post("/confirmVendorPayment/:paymentId", verifyAccessToken, controllerWrapper(orderController.confirmVendorPayment, { logRequest: true, logResponse: true }));
 
 // router.post("/freezeOrderVendors/:orderId/:vendorId", verifyAccessToken, controllerWrapper(orderController.freezeOrderVendors, { logRequest: true, logResponse: true }));
