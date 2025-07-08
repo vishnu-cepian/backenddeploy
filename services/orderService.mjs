@@ -15,6 +15,7 @@ import { ORDER_VENDOR_STATUS, ORDER_STATUS } from "../types/enums/index.mjs";
 import { calculateVendorPayoutAmount, calculateOrderAmount } from "../utils/pricing_utils.mjs";
 import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
+import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -22,7 +23,7 @@ const customerRepo = AppDataSource.getRepository(Customers);
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
 const paymentRepo = AppDataSource.getRepository(Payments);
-const paymentFailureRepo = AppDataSource.getRepository(PaymentFailures);
+// const paymentFailureRepo = AppDataSource.getRepository(PaymentFailures);
 
 export const createOrder = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -58,6 +59,7 @@ export const createOrder = async (data) => {
                 cancelledAt: null,
 
                 readyForPickupFromCustomer: false,                    // a flag, set true when assigned for pickup
+                outForPickupFromCustomerAt: null,                     // timestamp when delivery partner picks it
                 itemPickedFromCustomerAt: null,                      // timestamp when delivery partner picks it
                 itemDeliveredToVendorAt: null,                       // timestamp when vendor receives it
                 vendorAcknowledgedItemAt: null,                      // vendor confirms receipt
@@ -66,6 +68,7 @@ export const createOrder = async (data) => {
                 taskCompletedAt: null,                               // vendor finishes tailoring/laundry
               
                 readyForPickupFromVendor: false,                      // a flag, set true when vendor marks ready
+                outForPickupFromVendorAt: null,                       // timestamp when delivery partner picks it
                 itemPickedFromVendorAt: null,                        // delivery partner picks it up
                 itemDeliveredToCustomerAt: null,                     // customer receives it
               
@@ -88,6 +91,7 @@ export const createOrder = async (data) => {
                 taskCompletedAt: null,
                 
                 readyForPickupFromVendor: false,
+                outForPickupFromVendorAt: null,
                 itemPickedFromVendorAt: null,
                 itemDeliveredToCustomerAt: null,
                 
@@ -458,8 +462,8 @@ export const handleRazorpayWebhook = async (req, res) => {
             order.orderStatus = ORDER_STATUS.ORDER_CONFIRMED;
             order.isPaid = true;  
             // UPDATE THE VENDOR ADDRESS ALSO 
-            order.orderStatusTimestamp.paid = paymentDate;
-            order.orderStatusTimestamp.orderConfirmed = paymentDate;
+            order.orderStatusTimestamp.paid = paymentDate.toString();
+            order.orderStatusTimestamp.orderConfirmed = paymentDate.toString();
 
             quote.isProcessed = true;
             await queryRunner.manager.save(OrderQuotes, quote);
@@ -469,11 +473,24 @@ export const handleRazorpayWebhook = async (req, res) => {
             if(order.clothProvided === true) {
                 order.orderStatusTimestamp.readyForPickupFromCustomer = true;
 
+                // GENERATE DELIVERY TRACKING ID 
+                // IF THE DELIVERY SERVICE NEED TO AVOID CHARACTERS, THEN ADD AN RANDOM/SEQUENTIAL NUMBER BY SETTING THE FIELD AS UNIQUE
+                const deliveryTracking = await queryRunner.manager.save(DeliveryTracking, {
+                    orderId: orderId,
+                    deliveryType: "TO_VENDOR",
+                    from: "CUSTOMER",
+                    to: "VENDOR",
+                    status: "PENDING",
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                })
+
                 // INITIATE CLOTH PICKUP FROM CUSTOMER, use OUTBOX pattern as this block is in a transaction
 
                 await queryRunner.manager.save(Outbox, {
                 eventType: "SEND_ITEM_PICKUP",
                 payload: {
+                      deliveryTrackingId: deliveryTracking.id, //deliveryTrackingId or order_id depends on delivery service
                       orderId,
                       vendorId,
                       customerId,
@@ -484,7 +501,8 @@ export const handleRazorpayWebhook = async (req, res) => {
                  createdAt: new Date()
                 })
             } else {
-                order.orderStatusTimestamp.orderInProgress = paymentDate;
+                order.orderStatusTimestamp.orderInProgress = paymentDate.toString();
+                order.orderStatus = ORDER_STATUS.IN_PROGRESS;
                 // send notification to vendor 
             }
 
@@ -566,62 +584,174 @@ export const cancelOrder = async (data) => {
 }
 
 export const updateOrderStatus = async (data) => {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
     try {
-        const { orderId, status } = data;
+        await queryRunner.startTransaction();
 
-        if (!orderId || !status) throw sendError("Order ID and status are required");
+        const { userId, orderId, status } = data;
 
-        const order = await orderRepo.findOne({ where: { id: orderId } });
+        if (!userId || !orderId || !status) {
+            throw sendError("Missing required fields: userId, orderId, or status");
+        }
+
+        const { id: vendorId, address: vendorAddress } = await vendorRepo.findOne({ 
+            where: { userId: userId },
+            select: { id: true, address: true } 
+        });
+        if (!vendorId) throw sendError("Vendor not found");
+
+        const order = await orderRepo.findOne({ 
+            where: { id: orderId }, 
+        });
+  
         if (!order) throw sendError("Order not found");
         
-        switch (order.orderStatus) {
-            case ORDER_STATUS.ORDER_CONFIRMED:
-                if (status === ORDER_STATUS.IN_PROGRESS) {
-                    order.orderStatus = ORDER_STATUS.IN_PROGRESS;
-                    await orderRepo.save(order);
+        if (order.selectedVendorId !== vendorId) throw sendError("Order is not assigned to this vendor");
 
-                    // notify 
+        const timestamp = new Date().toString();
 
-                    return {
-                        message: "Order status updated to IN_PROGRESS successfully",
-                        newStatus: ORDER_STATUS.IN_PROGRESS
-                    }
-                }
-                break;
+        switch (status) {
+            case "ITEM_RECEIVED":
+                        // 2 way and if the itemDeliveredToVendorAt is null, it means that the item is yet to be delivered to the vendor (hence the first phase of delivery is not yet finished)
+                        if (!order.clothProvided) {
+                            throw sendError("no Item is provided by the customer");
+                        }
 
-            case ORDER_STATUS.IN_PROGRESS:
-                if (status === ORDER_STATUS.READY_FOR_PICKUP) {
-                    order.orderStatus = ORDER_STATUS.READY_FOR_PICKUP;
-                    await orderRepo.save(order);
+                        if (!order.orderStatusTimestamp.itemDeliveredToVendorAt) {
+                            throw sendError("Item is not yet delivered to the vendor or please wait for the delivery partner to update the status");
+                        }
+                        
+                        if (order.orderStatusTimestamp.vendorAcknowledgedItemAt) {
+                            throw sendError("Item is already delivered to the vendor and vendor has acknowledged it");
+                        }
 
-                    // notify 
+                        order.orderStatusTimestamp.vendorAcknowledgedItemAt = timestamp;
+                        order.orderStatusTimestamp.orderInProgress = timestamp;
+                        order.orderStatus = ORDER_STATUS.IN_PROGRESS;
+                        
+                        break;
 
-                    return {
-                        message: "Order status updated to READY_FOR_PICKUP successfully",
-                        newStatus: ORDER_STATUS.READY_FOR_PICKUP
-                    }
-                }
-                break;
-            default:
-                throw sendError(`Invalid current order status: ${order.orderStatus}`);
+            case "READY_FOR_PICKUP":
+
+                        if (order.orderStatus !== ORDER_STATUS.IN_PROGRESS) {
+                            throw sendError("Order is not in IN_PROGRESS status");
+                        }
+                        
+                        if (order.orderStatusTimestamp.readyForPickupFromVendor) {
+                            throw sendError("Item is already in the ready for pickup state");
+                        }
+                        
+                        order.orderStatusTimestamp.readyForPickupFromVendor = true;
+                        order.orderStatusTimestamp.taskCompletedAt = timestamp;
+                        order.orderStatus = ORDER_STATUS.OUT_FOR_DELIVERY;
+
+                        // GENERATE DELIVERY TRACKING ID 
+                        // IF THE DELIVERY SERVICE NEED TO AVOID CHARACTERS, THEN ADD AN RANDOM/SEQUENTIAL NUMBER BY SETTING THE FIELD AS UNIQUE
+                        const deliveryTracking = await queryRunner.manager.save(DeliveryTracking, {
+                            orderId: orderId,
+                            deliveryType: "TO_CUSTOMER",
+                            from: "VENDOR",
+                            to: "CUSTOMER",
+                            status: "PENDING",
+                            createdAt: new Date(),
+                            updatedAt: new Date()
+                        })
+
+                        // INITIATE CLOTH PICKUP FROM VENDOR, use OUTBOX pattern as this block is in a transaction
+
+                        await queryRunner.manager.save(Outbox, {
+                        eventType: "SEND_ITEM_DELIVERY",
+                        payload: {
+                            deliveryTrackingId: deliveryTracking.id, //deliveryTrackingId or order_id depends on delivery service
+                            orderId,
+                            vendorId,
+                            customerId: order.customerId,
+                            pickupAddress: "test address 1",
+                            deliveryAddress: vendorAddress,
+                        },
+                        status: "PENDING",
+                        createdAt: new Date()
+                        })
+
+                        break;
+            default: throw sendError("Invalid status");
         }
-        throw sendError(`Invalid status transition from ${order.orderStatus} to ${status}`);
 
+        await queryRunner.manager.save(Orders, order);
 
-
-        ////    IF WEBHOOK AVAILABLE FOR DELIVERY THEN USE ORDER_STATUS.COMPLTED $ ORDER_STATUS.OUT_FOR_DELIVERY  IN THAT
-    
-    
-    
-    
-    
-    
-    
+        await queryRunner.commitTransaction();
+        return {
+            message: "Order status updated successfully",
+        }
     } catch (err) {
         logger.error(err);
+        if (queryRunner.isTransactionActive) {
+            await queryRunner.rollbackTransaction();
+        }
         throw err;
+    } finally {
+        await queryRunner.release();
     }
 }
+
+// export const updateOrderStatus = async (data) => {
+//     try {
+//         const { orderId, status } = data;
+
+//         if (!orderId || !status) throw sendError("Order ID and status are required");
+
+//         const order = await orderRepo.findOne({ where: { id: orderId } });
+//         if (!order) throw sendError("Order not found");
+        
+//         switch (order.orderStatus) {
+//             case ORDER_STATUS.ORDER_CONFIRMED:
+//                 if (status === ORDER_STATUS.IN_PROGRESS) {
+//                     order.orderStatus = ORDER_STATUS.IN_PROGRESS;
+//                     await orderRepo.save(order);
+
+//                     // notify 
+
+//                     return {
+//                         message: "Order status updated to IN_PROGRESS successfully",
+//                         newStatus: ORDER_STATUS.IN_PROGRESS
+//                     }
+//                 }
+//                 break;
+
+//             case ORDER_STATUS.IN_PROGRESS:
+//                 if (status === ORDER_STATUS.READY_FOR_PICKUP) {
+//                     order.orderStatus = ORDER_STATUS.READY_FOR_PICKUP;
+//                     await orderRepo.save(order);
+
+//                     // notify 
+
+//                     return {
+//                         message: "Order status updated to READY_FOR_PICKUP successfully",
+//                         newStatus: ORDER_STATUS.READY_FOR_PICKUP
+//                     }
+//                 }
+//                 break;
+//             default:
+//                 throw sendError(`Invalid current order status: ${order.orderStatus}`);
+//         }
+//         throw sendError(`Invalid status transition from ${order.orderStatus} to ${status}`);
+
+
+
+//         ////    IF WEBHOOK AVAILABLE FOR DELIVERY THEN USE ORDER_STATUS.COMPLTED $ ORDER_STATUS.OUT_FOR_DELIVERY  IN THAT
+    
+    
+    
+    
+    
+    
+    
+//     } catch (err) {
+//         logger.error(err);
+//         throw err;
+//     }
+// }
 
 
 // export const getOrders = async (data) => {
@@ -642,19 +772,20 @@ export const updateOrderStatus = async (data) => {
 //     }
 // }
 
-// export const getOrderById = async (data) => {
-//     try {
-//         const { orderId } = data;
-//         const orderItems = await orderItemRepo.find({ where: { orderId: orderId } });
-//         if (!orderItems) {
-//             throw sendError("Order items not found");
-//         }
-//         return orderItems;
-//     } catch (err) {
-//         logger.error(err);
-//         throw err;
-//     }
-// }
+export const getOrderById = async (data) => {
+    try {
+        const { orderId } = data;
+        const order = await orderRepo.findOne({ where: { id: orderId } });
+        if (!order) {
+            throw sendError("Order not found");
+        }
+        console.log(order);
+        return order;
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
 
 // export const deleteOrder = async (data) => {
 //     try {
