@@ -7,10 +7,10 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import os from "os";
 // import jobs
-import "./jobs/expirePendingVendors.mjs"
-import "./jobs/resetMonthlyLeadershipBoard.mjs"
-import "./jobs/dailyRefreshLeadershipBoard.mjs"
-import "./jobs/expireAcceptedQuotes.mjs"
+// import "./jobs/expirePendingVendors.mjs"
+// import "./jobs/resetMonthlyLeadershipBoard.mjs"
+// import "./jobs/dailyRefreshLeadershipBoard.mjs"
+// import "./jobs/expireAcceptedQuotes.mjs"
 
 // Import routes
 import authRoutes from "./routes/authRoutes.mjs";
@@ -22,6 +22,7 @@ import notificationRoutes from "./routes/notificationRoutes.mjs"
 import chatRoutes from "./routes/chatRoutes.mjs"
 import adminRoutes from "./routes/adminRoutes.mjs"
 import ratingRoutes from "./routes/ratingRoutes.mjs"
+import deliveryRoutes from "./routes/deliveryRoutes.mjs"
 
 // Import Utils and config files
 import { MESSAGE } from "./types/enums/index.mjs";
@@ -69,6 +70,7 @@ app.use("/api/notification", notificationRoutes)
 app.use("/api/chat", chatRoutes)
 app.use("/api/admin",adminRoutes)
 app.use("/api/rating", ratingRoutes)
+app.use("/api/delivery", deliveryRoutes)
 app.get("/api/health", (req, res) => {
   res.json({
     env: process.env.NODE_ENV,
