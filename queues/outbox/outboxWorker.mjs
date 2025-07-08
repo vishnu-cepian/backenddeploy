@@ -21,7 +21,7 @@ export function initOutboxWorker() {
 
         for (const message of pendingMessages) {
             try {
-                if (message.eventType === "SEND_ITEM_PICKUP") {
+                if (message.eventType === "SEND_ITEM_PICKUP" || message.eventType === "SEND_ITEM_DELIVERY") {
                     await sendDeliveryRequest(message.payload);
                 }
                 message.status= "SENT";
