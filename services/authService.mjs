@@ -104,18 +104,18 @@ export const signup = async (data) => {
             if (existingUser) throw sendError('User already exists with this email',400);
 
             
-            const hashedPassword = await hashPassword(password);
+            const hashedPassword = await hashPassword(password.trim());
             // Save user to database 
             const newUser = userRepository.create({
                 email,
                 name,
-                password: hashedPassword,
-                role,
+                password: hashedPassword,   
+                role: role.toLowerCase().trim(),
                 phoneNumber,
             });
             await userRepository.save(newUser);
 
-            if (role.toLowerCase() === "customer") {
+            if (role.toLowerCase().trim() === "customer") {
                 const customerRepo = AppDataSource.getRepository(Customers);
                 const newCustomer = customerRepo.create({
                     userId: newUser.id,
@@ -167,7 +167,7 @@ export const loginWithEmail = async (data) => {
             if (user.isBlocked) throw sendError('User is blocked', 403);
 
             // Check if password is correct
-            const isPasswordValid = await comparePassword(password, user.password);
+            const isPasswordValid = await comparePassword(password.trim(), user.password.trim());
             if (!isPasswordValid) throw sendError('Invalid password',401);
 
             // Generate JWT token
