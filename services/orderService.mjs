@@ -52,8 +52,8 @@ export const createOrder = async (data) => {
 
         if (clothProvided === true) {
             orderStatusTimestamp = {
-                paid: null,
-                orderConfirmed: null,
+                paidAt: null,
+                orderConfirmedAt: null,
               
                 cancelled: false,                                     // if cancelled
                 cancelledAt: null,
@@ -64,7 +64,7 @@ export const createOrder = async (data) => {
                 itemDeliveredToVendorAt: null,                       // timestamp when vendor receives it
                 vendorAcknowledgedItemAt: null,                      // vendor confirms receipt
               
-                orderInProgress: null,                               // vendor starts task
+                orderInProgressAt: null,                               // vendor starts task
                 taskCompletedAt: null,                               // vendor finishes tailoring/laundry
               
                 readyForPickupFromVendor: false,                      // a flag, set true when vendor marks ready
@@ -76,18 +76,18 @@ export const createOrder = async (data) => {
                 refundRequestedAt: null,                             // if refund was requested
                 refundProcessedAt: null,                              // refund complete
 
-                completed: null,                                     // After the refund time is over
+                completedAt: null,                                     // After the refund time is over
 
             }
         } else {
             orderStatusTimestamp = {
-                paid: null,
-                orderConfirmed: null,
+                paidAt: null,
+                orderConfirmedAt: null,
 
                 cancelled: false,                                  
                 cancelledAt: null,
                 
-                orderInProgress: null,
+                orderInProgressAt: null,
                 taskCompletedAt: null,
                 
                 readyForPickupFromVendor: false,
@@ -98,7 +98,7 @@ export const createOrder = async (data) => {
                 refundRequestedAt: null,
                 refundProcessedAt: null,  
 
-                completed: null, 
+                completedAt: null, 
             }
         }
 
@@ -462,8 +462,8 @@ export const handleRazorpayWebhook = async (req, res) => {
             order.orderStatus = ORDER_STATUS.ORDER_CONFIRMED;
             order.isPaid = true;  
             // UPDATE THE VENDOR ADDRESS ALSO 
-            order.orderStatusTimestamp.paid = paymentDate.toString();
-            order.orderStatusTimestamp.orderConfirmed = paymentDate.toString();
+            order.orderStatusTimestamp.paidAt = paymentDate.toString();
+            order.orderStatusTimestamp.orderConfirmedAt = paymentDate.toString();
 
             quote.isProcessed = true;
             await queryRunner.manager.save(OrderQuotes, quote);
@@ -501,7 +501,7 @@ export const handleRazorpayWebhook = async (req, res) => {
                  createdAt: new Date()
                 })
             } else {
-                order.orderStatusTimestamp.orderInProgress = paymentDate.toString();
+                order.orderStatusTimestamp.orderInProgressAt = paymentDate.toString();
                 order.orderStatus = ORDER_STATUS.IN_PROGRESS;
                 // send notification to vendor 
             }
@@ -627,7 +627,7 @@ export const updateOrderStatus = async (data) => {
                         }
 
                         order.orderStatusTimestamp.vendorAcknowledgedItemAt = timestamp;
-                        order.orderStatusTimestamp.orderInProgress = timestamp;
+                        order.orderStatusTimestamp.orderInProgressAt = timestamp;
                         order.orderStatus = ORDER_STATUS.IN_PROGRESS;
                         
                         break;

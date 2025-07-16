@@ -36,30 +36,56 @@ export const handleDeliveryWebhook = async (req, res) => {
         const order = await queryRunner.manager.findOne(Orders, { where: { id: deliveryTracking.orderId } });
         if (!order) throw sendError("Order not found");
 
+        const statusChanges = [];
+
         switch(deliveryTracking.deliveryType) {
             case "TO_VENDOR":
                 if (status === "OUT_FOR_PICKUP") {
+                    if (!order.orderStatusTimestamp.outForPickupFromCustomerAt) {   
                     order.orderStatus = "OUT_FOR_PICKUP";
-                    order.orderStatusTimestamp.outForPickupFromCustomerAt = new Date().toString();
+                        order.orderStatusTimestamp.outForPickupFromCustomerAt = new Date().toString();
+                        statusChanges.push("OUT_FOR_PICKUP");
+                    } 
                 } else if (status === "PICKUP_COMPLETED") {
-                    order.orderStatusTimestamp.itemPickedFromCustomerAt = new Date().toString();
+                    if (!order.orderStatusTimestamp.itemPickedFromCustomerAt) {
+                        order.orderStatusTimestamp.itemPickedFromCustomerAt = new Date().toString();
+                        statusChanges.push("PICKUP_COMPLETED");
+                    }
                 } else if (status === "DELIVERED") {
-                    order.orderStatusTimestamp.itemDeliveredToVendorAt = new Date().toString();
+                    if (!order.orderStatusTimestamp.itemDeliveredToVendorAt) {
+                        order.orderStatusTimestamp.itemDeliveredToVendorAt = new Date().toString();
+                        statusChanges.push("DELIVERED");
+                    }
                 } 
                 break;
             
             case "TO_CUSTOMER":
                 if (status === "OUT_FOR_PICKUP") {
-                    order.orderStatusTimestamp.outForPickupFromVendorAt = new Date().toString();
+                    if (!order.orderStatusTimestamp.outForPickupFromVendorAt) {
+                        order.orderStatusTimestamp.outForPickupFromVendorAt = new Date().toString();
+                        statusChanges.push("OUT_FOR_PICKUP");
+                    }
                 } else if (status === "PICKUP_COMPLETED") {
-                    order.orderStatusTimestamp.itemPickedFromVendorAt = new Date().toString();
+                    if (!order.orderStatusTimestamp.itemPickedFromVendorAt) {
+                        order.orderStatusTimestamp.itemPickedFromVendorAt = new Date().toString();
+                        statusChanges.push("PICKUP_COMPLETED");
+                    }
                 } else if (status === "DELIVERED") {
-                    order.orderStatusTimestamp.itemDeliveredToCustomerAt = new Date().toString();
+                    if (!order.orderStatusTimestamp.itemDeliveredToCustomerAt) {
+                        order.orderStatusTimestamp.itemDeliveredToCustomerAt = new Date().toString();
+                        statusChanges.push("DELIVERED");
+                    }
                 }
                 break;
 
             default:
                 throw sendError("Invalid delivery type");
+        }
+
+        if (statusChanges.length > 0) {
+            logger.info(`Order ${order.id} status changed to ${statusChanges.join(", ")}`);
+        } else {
+            logger.info(`No status changes for order ${order.id}, status: ${status} already processed`);
         }
 
         await queryRunner.manager.save(Orders, order);
