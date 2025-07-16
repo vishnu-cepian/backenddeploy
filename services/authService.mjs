@@ -738,42 +738,61 @@ export const verifyPhoneOtp = async (data) => {
     }
 }
 
+/**
+ * Zod schema for password reset data.
+ */
+const resetPasswordSchema = z.object({
+    email: z.string().email(),
+    newPassword: z.string().min(8, { message: "Password must be at least 8 characters long" }),
+  });
 
 /**
- * 
+ * Securely resets a user's password after they have verified an OTP.
+ * This function MUST be protected by the `verifyOtpToken` middleware.
  * @param {Object} data 
- * @param {string} data.email 
+ * @param {string} data.email - The email from the decoded, verified OTP token.
  * @param {string} data.newPassword 
- * @returns {Promise<Object>} { message: "Password reset successfully", status: true } or { message: "User not found", statusCode: 404 }
+ * @returns {Promise<Object>} 
  */
 export const resetPassword = async (data) => {
     try {
-        const { email, newPassword } = data;
+        const { email, newPassword } = resetPasswordSchema.parse(data);
     
-        if (!email || !newPassword) throw sendError('Email and new password are required',400);
-
-        // Check if user exists
         const userRepository = AppDataSource.getRepository(User);
-        const user = await userRepository.findOne({ where: { email } });
-        if (!user) throw sendError('User not found',404);
-
-        // Hash the new password
+    
         const hashedPassword = await hashPassword(newPassword);
-
-        // Update user's password
-        await userRepository.update(
-            { email },
-            { password: hashedPassword }
+    
+        const updateResult = await userRepository.update(
+          { email },
+          {
+            password: hashedPassword,
+            refreshToken: null, // Invalidate all sessions
+          }
         );
+    
+        if (updateResult.affected === 0) throw sendError('User not found.', 404);
+        
 
-        return ({
-            message: "Password reset successfully",
-            status: true
+        emailQueue.add('sendPasswordChangeNotification', {
+            email: email,
+            name: "Nexs User",
+            template_id: "password_changed_notification",
+            variables: { timestamp: new Date().toUTCString() }
         });
-    } catch (err) {
-        logger.error(err);
+    
+        return {
+          message: "Password has been reset successfully. Please log in again.",
+          status: true,
+        };
+      } catch (err) {
+        if (err instanceof z.ZodError) {
+          logger.warn("resetPassword validation failed", { errors: err.flatten().fieldErrors });
+          throw sendError("Invalid data provided.", 400, err.flatten().fieldErrors);
+        }
+    
+        logger.error("Error in resetPassword service:", err);
         throw err;
-    }
+      }
 }
 
 /**
