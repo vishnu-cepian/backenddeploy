@@ -489,6 +489,17 @@ export const sendEmailOtp = async (data) => {
 }
 
 /**
+ * Zod schema for OTP verification data.
+ */
+const verifyOtpSchema = z.object({
+    email: z.string().email({ message: "Invalid email format" }),
+    otp: z.string().length(6, { message: "OTP must be 6 digits" }).regex(/^\d+$/, { message: "OTP must only contain digits" }),
+  });
+
+const MAX_OTP_ATTEMPTS = 5;
+const LOCKOUT_DURATION_SECONDS = 300; // 5 minutes
+const ATTEMPT_WINDOW_SECONDS = 300; // 5 mins window for counting attempts
+/**
  * Verifies an email OTP
  * 
  * @param {Object} data 
@@ -498,31 +509,67 @@ export const sendEmailOtp = async (data) => {
  */
 export const verifyEmailOtp = async (data) => {
     try {
-        const { email, otp } = data;
-    
-        if (!email || !otp) throw sendError('Email and OTP are required',400);
+        const { email, otp } = verifyOtpSchema.parse(data);
 
-        const otpEmailRepository = AppDataSource.getRepository('OtpEmail');
+        //Check for an existing lockout
+        const lockoutKey = `otp-lockout:${email}`;
+        const isLockedOut = await redis.get(lockoutKey);
+        if (isLockedOut) throw sendError(`Too many incorrect attempts. Please try again in ${LOCKOUT_DURATION_SECONDS / 60} minutes.`, 429);
+
+
+        const otpEmailRepository = AppDataSource.getRepository(OtpEmail);
         const otpRecord = await otpEmailRepository.findOne({ where: { email } });
 
-        if (!otpRecord) throw sendError('OTP Record not found');
+        if (!otpRecord) throw sendError('Invalid or expired OTP. Please request a new one.', 400);
 
-        if (otpRecord.otp !== otp) throw sendError('Invalid OTP',400);
 
-        if (new Date() > otpRecord.expiresAt) throw sendError('OTP expired');
-
-        if(otpRecord.otp === otp) {
+        if (new Date() > otpRecord.expiresAt) {
+            // Clean up the expired record
             await otpEmailRepository.delete({ email });
+            throw sendError('This OTP has expired. Please request a new one.', 400);
         }
-        // OTP is valid
+
+        if (otpRecord.otp !== otp) {
+            // Handle incorrect OTP attempt
+            const attemptKey = `otp-attempt:${email}`;
+            const attempts = await redis.incr(attemptKey);
+
+            if (attempts === 1) {
+                await redis.expire(attemptKey, ATTEMPT_WINDOW_SECONDS);
+            }
+
+            if (attempts >= MAX_OTP_ATTEMPTS) {
+                // If max attempts reached, lock the user out and delete the OTP record
+                await redis.set(lockoutKey, 'locked', 'EX', LOCKOUT_DURATION_SECONDS);
+                await otpEmailRepository.delete({ email }); // Invalidate the current OTP
+                await redis.del(attemptKey); // Clean up the attempt counter
+                logger.warn(`OTP verification locked for email: ${email}`);
+                throw sendError(`Too many incorrect attempts. Please try again in ${LOCKOUT_DURATION_SECONDS / 60} minutes.`, 429);
+            }
+        
+            throw sendError('Invalid OTP.', 400);
+        }
+
+        // Success! OTP is valid.
+        // Clean up the OTP record and any attempt counters from Redis.
+        await otpEmailRepository.delete({ email });
+        const attemptKey = `otp-attempt:${email}`;
+        await redis.del(attemptKey);
+
         const verificationToken = jwt.sign({ email }, OTP_TOKEN_SECRET, { expiresIn: '5m' });
-        return ({
-            message: "OTP verified successfully",
-            verificationToken,
-            status: true
-        });
+
+        return {
+        message: "OTP verified successfully",
+        verificationToken,
+        status: true
+        };
     } catch (err) {
-        logger.error(err);
+        if (err instanceof z.ZodError) {
+            logger.warn("verifyEmailOtp validation failed", { errors: err.flatten().fieldErrors });
+            throw sendError("Invalid data format.", 400, err.flatten().fieldErrors);
+        }
+
+        logger.error("Error in verifyEmailOtp service:", err);
         throw err;
     }
 }
