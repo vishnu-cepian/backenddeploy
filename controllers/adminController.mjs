@@ -134,3 +134,138 @@ export const rejectVendor = async (req, res, next) => {
         next(error);
     }
 };
+
+export const getOrders = async (req, res, next) => {
+    try {
+        const {pageNumber, limitNumber, sort, id, customerId, selectedVendorId, isPaid, isRefunded, orderStatus} = req.query;
+        const page = pageNumber ? parseInt(pageNumber) : 1;
+        const limit = limitNumber ? parseInt(limitNumber) : 10;
+        const response = await adminService.getOrders(parseInt(page), parseInt(limit), sort, id, customerId, selectedVendorId, isPaid, isRefunded, orderStatus);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const getAllCustomers = async (req, res, next) => {
+    try {
+        const {pageNumber, limitNumber, status} = req.query;
+        const page = pageNumber ? parseInt(pageNumber) : 1;
+        const limit = limitNumber ? parseInt(limitNumber) : 10;
+        let response;
+        if ( status) {
+            response = await adminService.getAllCustomersByFilter(parseInt(page), parseInt(limit), status);
+        } else {
+            response = await adminService.getAllCustomers(parseInt(page), parseInt(limit));
+        }
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const searchCustomerByEmailorPhoneNumber = async (req, res, next) => {
+    try {
+        const {email, phoneNumber} = req.body;
+        const response = await adminService.searchCustomerByEmailorPhoneNumber(email, phoneNumber);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const getCustomerById = async (req, res, next) => {
+    try {
+        const customerId = req.params.id;
+        const response = await adminService.getCustomerById(customerId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const blockOrUnblockCustomer = async (req, res, next) => {
+    try {
+        const customerId = req.params.id;
+        const response = await adminService.blockOrUnblockCustomer(customerId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const getOrderById = async (req, res, next) => {
+    try {
+        const orderId = req.params.id;
+        const response = await adminService.getOrderById(orderId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const getVendorResponse = async (req, res, next) => {
+    try {
+        const orderId = req.params.id;
+        const response = await adminService.getVendorResponse(orderId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const getQuotes = async (req, res, next) => {
+    try {
+        const orderId = req.params.id;
+        const response = await adminService.getQuotes(orderId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const getPayments = async (req, res, next) => {
+    try {
+        const orderId = req.params.id;
+        const response = await adminService.getPayments(orderId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};

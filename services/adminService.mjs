@@ -8,16 +8,21 @@ import { User } from "../entities/User.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { Orders } from "../entities/Orders.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
+import { OrderVendors } from "../entities/OrderVendors.mjs";
+import { OrderQuotes } from "../entities/OrderQuote.mjs"
+import { Payments } from "../entities/Payments.mjs"
 import { In } from 'typeorm';
+import { paginateListDirectoryBuckets } from "@aws-sdk/client-s3";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 // const orderItemRepo = AppDataSource.getRepository(OrderItems);
-// const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
+const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
+const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
 // const orderItemMeasurementByVendorRepo = AppDataSource.getRepository(OrderItemMeasurementByVendor);
 const customerRepo = AppDataSource.getRepository(Customers);
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const userRepo = AppDataSource.getRepository(User);
-// const paymentRepo = AppDataSource.getRepository(Payments);
+const paymentRepo = AppDataSource.getRepository(Payments);
 
 //===================JWT UTILS====================
 
@@ -429,6 +434,280 @@ export const rejectVendor = async (id) => { //DELETE VENDOR
      * 
      */
     return { message: "Vendor rejected successfully" };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getOrders = async (pageNumber = 1, limitNumber = 10, sort = 'createdAt:desc', id, customerId, selectedVendorId, isPaid, isRefunded, orderStatus) => {
+  try {
+    const [sortField, sortOrder] = sort.split(':');
+
+    const query = orderRepo.createQueryBuilder("orders")
+    .select([
+      "orders.id",
+      "orders.customerId",
+      "orders.selectedVendorId",
+      "orders.isPaid",
+      "orders.isRefunded",
+      "orders.orderStatus",
+      "orders.createdAt",
+    ])
+    if (id) query.andWhere("orders.id = :id", { id });
+    if (customerId) query.andWhere("orders.customerId = :customerId", { customerId });
+    if (selectedVendorId) query.andWhere("orders.selectedVendorId = :selectedVendorId", { selectedVendorId });
+    if (isPaid) query.andWhere("orders.isPaid = :isPaid", { isPaid });
+    if (isRefunded) query.andWhere("orders.isRefunded = :isRefunded", { isRefunded });
+    if (orderStatus) query.andWhere("orders.orderStatus = :orderStatus", { orderStatus });
+
+    if (sortField) {
+      query.orderBy(`orders.${sortField}`, sortOrder === 'asc' ? 'ASC' : 'DESC');
+    }
+
+    const [data, total] = await query
+    .skip((pageNumber - 1) * limitNumber)
+    .take(limitNumber)
+    .getManyAndCount();
+
+    return {
+      data,
+      pagination: {
+        totalItems: total,
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        totalPages: Math.ceil(total / limitNumber),
+    }
+  }
+  } catch (error) {
+    logger.error(error);
+    throw error;
+  }
+}
+
+
+export const getAllCustomers = async (pageNumber = 1, limitNumber = 10) => {
+  try {
+    // Validate inputs
+    pageNumber = Math.max(1, parseInt(pageNumber));
+    limitNumber = Math.max(1, Math.min(parseInt(limitNumber), 100)); // Enforce max limit of 100
+
+    // Create query
+    const query = customerRepo
+      .createQueryBuilder("customers")
+      .leftJoinAndSelect("customers.user", "user")
+      .select([
+        "customers.id",
+        "customers.createdAt",
+        "user.email",
+        "user.name",
+        "user.phoneNumber",
+        "user.isBlocked"
+      ])
+      .orderBy("customers.createdAt", "DESC");
+
+    // Get both results and total count in single query
+    const [customers, totalCount] = await Promise.all([
+      query
+        .skip((pageNumber - 1) * limitNumber)
+        .take(limitNumber)
+        .getMany(),
+      query.getCount()
+    ]);
+
+    return {
+      data: customers,
+      pagination: {
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        totalItems: totalCount,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        hasMore: pageNumber * limitNumber < totalCount
+      }
+    };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getAllCustomersByFilter = async (pageNumber = 1, limitNumber = 10,status) => {
+  try {
+    // Input validation and normalization
+    pageNumber = Math.max(1, parseInt(pageNumber));
+    limitNumber = Math.max(1, Math.min(parseInt(limitNumber), 100)); // Max 100 items per page
+
+    // Base query construction
+    const query = customerRepo
+      .createQueryBuilder("customers")
+      .leftJoinAndSelect("customers.user", "user")
+      .select([
+        "customers.id",
+        "customers.createdAt",
+        "user.email",
+        "user.name",
+        "user.phoneNumber",
+        "user.isBlocked"
+      ])
+      .orderBy("customers.createdAt", "DESC");
+
+    // Apply filters
+    if (status === "BLOCKED") {
+      query.andWhere("user.isBlocked = :isBlocked", { isBlocked: true });
+    } else if (status) {
+      query.andWhere("customers.status = :status", { status });
+    }
+
+    // Execute both queries in parallel
+    const [customers, totalCount] = await Promise.all([
+      query
+        .skip((pageNumber - 1) * limitNumber)
+        .take(limitNumber)
+        .getMany(),
+      query.getCount()
+    ]);
+
+    return {
+      data: customers,
+      pagination: {
+        currentPage: pageNumber,
+        itemsPerPage: limitNumber,
+        totalItems: totalCount,
+        totalPages: Math.ceil(totalCount / limitNumber),
+        hasMore: pageNumber * limitNumber < totalCount
+      }
+    };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+
+export const searchCustomerByEmailorPhoneNumber = async (email, phoneNumber) => {
+  try {
+    const query =  await customerRepo.createQueryBuilder("customers")
+    .leftJoinAndSelect("customers.user", "user")
+    .select([
+      "customers.id",
+      "customers.createdAt",
+      "user.email",
+      "user.name",
+      "user.phoneNumber",
+      "user.isBlocked"
+    ])
+    if (email && !phoneNumber) {
+      query.where("user.email LIKE :email", { email: `%${email}%` })
+      .getMany();
+    } else if (!email && phoneNumber) {
+      query.where("user.phoneNumber LIKE :phoneNumber", { phoneNumber: `%${phoneNumber}%` })
+      .getMany();
+    } else {
+      query.where("user.email LIKE :email", { email: `%${email}%` })
+      .andWhere("user.phoneNumber LIKE :phoneNumber", { phoneNumber: `%${phoneNumber}%` })
+      .getMany();
+    }
+    const customers = await query.getMany();
+    return {customers};
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  } 
+}
+
+export const getCustomerById = async (id) => {
+  try {
+    const customer = await customerRepo
+    .createQueryBuilder("customers")
+    .leftJoinAndSelect("customers.user", "user")
+    .select([
+      "customers.id",
+      "customers.userId",
+      "customers.createdAt",
+      "user.email",
+      "user.name",
+      "user.phoneNumber",
+      "user.isBlocked"
+    ])
+    .where("customers.id = :id", { id })
+    .getOne();
+    return { customer };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const blockOrUnblockCustomer = async (id) => {
+  try {
+    const customer = await customerRepo.findOne({ where: { id } });
+    if (!customer) {
+      throw sendError('Customer not found', 404);
+    }
+    const blockStatus = await userRepo.findOne({ where: { id: customer.userId }, select: ["isBlocked"] });
+    await userRepo.update(customer.userId, { isBlocked: !blockStatus.isBlocked });
+    return { message: "Customer blocked successfully" };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getOrderById = async (id) => {
+  try {
+    const order = await orderRepo
+    .createQueryBuilder("orders")
+    // .leftJoinAndSelect("orders.customer", "customer")
+    // .leftJoinAndSelect("orders.selectedVendor", "vendor")
+    .select([
+      "orders.id",
+      "orders.customerId",
+      "orders.selectedVendorId",
+      "orders.finalQuoteId",
+      "orders.paymentId",
+      "orders.requiredByDate",
+      "orders.clothProvided",
+      "orders.isPaid",
+      "orders.isRefunded",
+      "orders.orderStatus",
+      "orders.orderStatusTimestamp",
+      "orders.createdAt",
+    ])
+    .where("orders.id = :id", { id })
+    .getOne();
+    console.log(order)
+    return { order };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getVendorResponse = async (id) => {
+  try{
+    const orderVendor = await orderVendorRepo.find({ where: { orderId: id } });
+    return orderVendor;
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getQuotes = async (id) => {
+  try{
+    const quote = await orderQuoteRepo.findOne({ where: { orderVendorId: id } });
+    return quote;
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getPayments = async (id) => {
+  try{
+    const payments = await paymentRepo.find({ where: { orderId: id } });
+ 
+    return payments;
   } catch (err) {
     logger.error(err);
     throw err;
