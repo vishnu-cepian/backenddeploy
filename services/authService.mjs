@@ -796,6 +796,13 @@ export const resetPassword = async (data) => {
 }
 
 /**
+ * Zod schema for logout data validation.
+ */
+const logoutSchema = z.object({
+    userId: z.string().uuid({ message: "Invalid User ID format" }),
+  });
+/**
+ * This function MUST be called after the `verifyAccessToken` middleware.
  * 
  * @param {Object} data 
  * @param {string} data.userId 
@@ -803,27 +810,33 @@ export const resetPassword = async (data) => {
  */
 export const logout = async (data) => {
     try {
-        const { userId } = data;
+        const { userId } = logoutSchema.parse(data);
     
-        if (!userId) throw sendError('User ID is required',400);
-
-        // Check if user exists
         const userRepository = AppDataSource.getRepository(User);
-        const user = await userRepository.findOne({ where: { id: userId } });
-        if (!user) throw sendError('User not found',404);
-
-        // Invalidate the refresh token
-        await userRepository.update(
-            { id: userId },
-            { refreshToken: null, pushToken: null }
+    
+        const updateResult = await userRepository.update(
+          { id: userId },
+          {
+            refreshToken: null,
+            pushToken: null,
+          }
         );
-
-        return ({
-            message: "Logout successful",
-            status: true
-        });
-    } catch (err) {
-        logger.error(err);
+    
+        if (updateResult.affected === 0) {
+          throw sendError('User not found or no active session to log out.', 404);
+        }
+    
+        return {
+          message: "Logout successful",
+          status: true,
+        };
+      } catch (err) {
+        if (err instanceof z.ZodError) {
+          logger.warn("logout validation failed", { errors: err.flatten().fieldErrors });
+          throw sendError("Invalid data provided.", 400, err.flatten().fieldErrors);
+        }
+    
+        logger.error("Error during logout:", err);
         throw err;
-    }
+      }
 }

@@ -120,7 +120,7 @@ export const verifyPhoneOtp = async (req, res, next) => {
 
 export const resetPassword = async (req, res, next) => {
   try {
-    const data = req.body;
+    const data = { email: req.user.email, newPassword: req.body.newPassword };
     const response = await authService.resetPassword(data);
     if (!response) {
       throw new Error(formatError("Authentication Failed!", response));
