@@ -10,6 +10,12 @@ export const MESSAGE = {
   UNPROCESSABLE_ENTITY: "Unprocessable Entity",
 };
 
+export const ROLE = {
+  CUSTOMER: "customer",
+  VENDOR: "vendor",
+  ADMIN: "admin",
+};
+
 export const ORDER_VENDOR_STATUS = {
   PENDING: "PENDING",
   ACCEPTED: "ACCEPTED",
