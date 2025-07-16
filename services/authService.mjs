@@ -1,12 +1,12 @@
 import { z } from "zod";
+import jwt from 'jsonwebtoken';
 import crypto from "crypto";
+import { OAuth2Client } from "google-auth-library";
+
 import { ROLE } from "../types/enums/index.mjs";
 import { logger } from "../utils/logger-utils.mjs";
-import { hashPassword, comparePassword } from "../utils/auth-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
-import jwt from 'jsonwebtoken';
-import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET, OTP_TOKEN_SECRET } from '../config/auth-config.mjs';
-import { OAuth2Client } from "google-auth-library";
+import { hashPassword, comparePassword } from "../utils/auth-utils.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
 import { Customers } from "../entities/Customers.mjs";
@@ -14,7 +14,72 @@ import { OtpEmail } from "../entities/OtpEmail.mjs";
 import { OtpPhone } from "../entities/OtpPhone.mjs";
 import { emailQueue, phoneQueue } from "../queues/index.mjs";
 import { redis } from "../config/redis-config.mjs";
-//===================JWT UTILS====================
+import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET, OTP_TOKEN_SECRET } from '../config/auth-config.mjs';
+
+//============================ ZOD VALIDATION SCHEMAS ==============================================
+/**
+ * Zod schema for data validation.
+ * Ensures that all incoming data is in the correct format.
+ */
+
+const refreshTokenSchema = z.string().min(1, { message: "Refresh token cannot be empty" });
+
+const signupSchema = z.object({
+    email: z.string().email({ message: "Invalid email address" }),
+    name: z.string().min(2, { message: "Name must be at least 2 characters long" }),
+    password: z.string().min(8, { message: "Password must be at least 8 characters long" }),
+    role: z.enum([ROLE.CUSTOMER, ROLE.VENDOR], { message: "Role must be either 'customer' or 'vendor'" }),
+    phoneNumber: z.string().regex(/^(?:\+91|91)?[6789]\d{9}$/, { message: "Invalid phone number format" }), 
+});
+
+const loginSchema = z.object({
+    email: z.string().email({ message: "Invalid email address" }),
+    password: z.string().min(8, { message: "Password must be at least 8 characters long" }),
+});
+
+const checkEmailSchema = z.object({
+    email: z.string().email({ message: "Invalid email format" }),
+});
+
+const googleLoginSchema = z.string().min(1, { message: "ID token cannot be empty" });
+
+const emailSchema = z.object({
+    email: z.string().email({ message: "Invalid email format" }),
+});
+
+const verifyOtpSchema = z.object({
+    email: z.string().email({ message: "Invalid email format" }),
+    otp: z.string().length(6, { message: "OTP must be 6 digits" }).regex(/^\d+$/, { message: "OTP must only contain digits" }),
+});
+
+const phoneSchema = z.object({
+    phone: z.string().min(10, { message: "Phone number must be at least 10 digits" }).max(15, { message: "Phone number must be less than 15 digits" }),
+});
+
+const verifyPhoneOtpSchema = z.object({
+    phone: z.string().min(10, { message: "Phone number must be at least 10 digits" }).max(15, { message: "Phone number must be less than 15 digits" }),
+    otp: z.string().length(6, { message: "OTP must be 6 digits" }).regex(/^\d+$/, { message: "OTP must only contain digits" }),
+});
+
+const resetPasswordSchema = z.object({
+    email: z.string().email(),
+    newPassword: z.string().min(8, { message: "Password must be at least 8 characters long" }),
+});
+
+const logoutSchema = z.object({
+    userId: z.string().uuid({ message: "Invalid User ID format" }),
+});
+
+//========================================CONSTANTS=====================================================
+
+const RATE_LIMIT_WINDOW_SECONDS = 60; // 1 minute window
+const RATE_LIMIT_MAX_REQUESTS = 2;   // Max 2 requests per minute per email
+const MAX_OTP_ATTEMPTS = 5;
+const LOCKOUT_DURATION_SECONDS = 300; // 5 minutes
+const ATTEMPT_WINDOW_SECONDS = 300; // 5 mins window for counting attempts
+
+
+//========================================JWT HELPERS=====================================================
 
 export const generateAccessToken = (payload) => {
   return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
@@ -24,8 +89,8 @@ export const generateRefreshToken = (payload) => {
   return jwt.sign(payload, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
 };
 
+//=================================REFRESH TOKEN SERVICES=====================================================
 
-const refreshTokenSchema = z.string().min(1, { message: "Refresh token cannot be empty" });
 /**
  * 
  * @param {string} refreshToken 
@@ -104,19 +169,7 @@ export const refreshAccessToken = async (refreshToken) => {
 };
 
 
-//===================AUTH UTILS====================
-
-/**
- * Zod schema for signup data validation.
- * Ensures that all incoming data is in the correct format.
- */
-const signupSchema = z.object({
-    email: z.string().email({ message: "Invalid email address" }),
-    name: z.string().min(2, { message: "Name must be at least 2 characters long" }),
-    password: z.string().min(8, { message: "Password must be at least 8 characters long" }),
-    role: z.enum([ROLE.CUSTOMER, ROLE.VENDOR], { message: "Role must be either 'customer' or 'vendor'" }),
-    phoneNumber: z.string().regex(/^(?:\+91|91)?[6789]\d{9}$/, { message: "Invalid phone number format" }), 
-  });
+//=======================================AUTHENTICATION SERVICES=====================================================
 
 /**
  * Creates a new user and, if the role is 'customer', a corresponding customer profile.
@@ -136,8 +189,7 @@ export const signup = async (data) => {
     await queryRunner.startTransaction();
 
     try {
-        const validatedData = signupSchema.parse(data);     // validating incoming data against zod schema
-        const { email, name, password, role, phoneNumber } = validatedData;
+        const { email, name, password, role, phoneNumber } = signupSchema.parse(data);
 
         // Check if user already exists
         const existingUser = await queryRunner.manager.exists(User, { where: { email } });
@@ -169,11 +221,11 @@ export const signup = async (data) => {
         await queryRunner.commitTransaction();
 
         // welcome email
-        emailQueue.add('sendEmailnewReg', {
+        emailQueue.add('sendWelcomeEmail', {
             email,
             name: "Nexs",
-            template_id: "global_otp",
-            variables: { text: "WELCOME" }
+            template_id: "welcome_email",
+            variables: { name: name }
         });
             
         return {
@@ -194,14 +246,6 @@ export const signup = async (data) => {
         await queryRunner.release();
     } 
 };
-
-/**
- * Zod schema for login data validation.
- */
-const loginSchema = z.object({
-    email: z.string().email({ message: "Invalid email address" }),
-    password: z.string().min(8, { message: "Password must be at least 8 characters long" }),
-});
 
 /**
  * 
@@ -278,13 +322,6 @@ export const loginWithEmail = async (data) => {
 };
 
 /**
- * Zod schema for email validation.
- */
-const checkEmailSchema = z.object({
-    email: z.string().email({ message: "Invalid email format" }),
-  });
-
-/**
  * Checks if a user exists in the database
  * 
  * @param {Object} data 
@@ -316,10 +353,6 @@ export const checkEmail = async (data) => {
     }
 }
 
-/**
- * Zod schema for the Google ID token.
- */
-const googleLoginSchema = z.string().min(1, { message: "ID token cannot be empty" });
 /**
  * If the user exists, it returns their details and JWTs.
  * If the user does not exist, it returns the verified Google email to initiate a signup flow.
@@ -411,16 +444,6 @@ export const loginWithGoogle = async (idToken) => {
 };
 
 /**
- * Zod schema for email validation.
- */
-const emailSchema = z.object({
-    email: z.string().email({ message: "Invalid email format" }),
-  });
-
-const RATE_LIMIT_WINDOW_SECONDS = 60; // 1 minute window
-const RATE_LIMIT_MAX_REQUESTS = 2;   // Max 2 requests per minute per email
-
-/**
  * A 6 digit OTP will be generated and sent to the user's email and also the OTP will be saved in OtpEmail table with an expiration time of 10 minutes
  * If the OTP is send mutliple times then the last send otp will remain in database
  * 
@@ -488,17 +511,7 @@ export const sendEmailOtp = async (data) => {
     }
 }
 
-/**
- * Zod schema for OTP verification data.
- */
-const verifyOtpSchema = z.object({
-    email: z.string().email({ message: "Invalid email format" }),
-    otp: z.string().length(6, { message: "OTP must be 6 digits" }).regex(/^\d+$/, { message: "OTP must only contain digits" }),
-  });
 
-const MAX_OTP_ATTEMPTS = 5;
-const LOCKOUT_DURATION_SECONDS = 300; // 5 minutes
-const ATTEMPT_WINDOW_SECONDS = 300; // 5 mins window for counting attempts
 /**
  * Verifies an email OTP
  * 
@@ -575,17 +588,6 @@ export const verifyEmailOtp = async (data) => {
 }
 
 /**
- * Zod schema for phone number validation.
- */
-const phoneSchema = z.object({
-    phone: z.string().min(10, { message: "Phone number must be at least 10 digits" }).max(15, { message: "Phone number must be less than 15 digits" }),
-  });
-
-// same as email rate limit
-// const RATE_LIMIT_WINDOW_SECONDS = 60; // 1 minute window
-// const RATE_LIMIT_MAX_REQUESTS = 2;   // Max 2 requests per minute per phone number
-
-/**
  * A 6 digit OTP will be generated and sent to the user's phone and also the OTP will be saved in OtpPhone table with an expiration time of 10 minutes
  * If the OTP is send mutliple times then the last send otp will remain in database
  * 
@@ -651,18 +653,6 @@ export const sendPhoneOtp = async (data) => {
     }
 }
 
-/**
- * Zod schema for OTP verification data.
- */
-const verifyPhoneOtpSchema = z.object({
-    phone: z.string().min(10, { message: "Phone number must be at least 10 digits" }).max(15, { message: "Phone number must be less than 15 digits" }),
-    otp: z.string().length(6, { message: "OTP must be 6 digits" }).regex(/^\d+$/, { message: "OTP must only contain digits" }),
-  });
-
-// same as email lockout duration and attempt window
-// const MAX_OTP_ATTEMPTS = 5;
-// const LOCKOUT_DURATION_SECONDS = 300; // 5 minutes (same as email)
-// const ATTEMPT_WINDOW_SECONDS = 300; // 5 mins window for counting attempts (same as email)
 /**
  * Verifies a phone OTP
  * 
@@ -739,14 +729,6 @@ export const verifyPhoneOtp = async (data) => {
 }
 
 /**
- * Zod schema for password reset data.
- */
-const resetPasswordSchema = z.object({
-    email: z.string().email(),
-    newPassword: z.string().min(8, { message: "Password must be at least 8 characters long" }),
-  });
-
-/**
  * Securely resets a user's password after they have verified an OTP.
  * This function MUST be protected by the `verifyOtpToken` middleware.
  * @param {Object} data 
@@ -795,12 +777,6 @@ export const resetPassword = async (data) => {
       }
 }
 
-/**
- * Zod schema for logout data validation.
- */
-const logoutSchema = z.object({
-    userId: z.string().uuid({ message: "Invalid User ID format" }),
-  });
 /**
  * This function MUST be called after the `verifyAccessToken` middleware.
  * 
