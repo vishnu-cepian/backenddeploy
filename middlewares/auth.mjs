@@ -1,81 +1,62 @@
-import jwt from 'jsonwebtoken'; // Import JWT library
+import jwt from 'jsonwebtoken';
+import { sendError } from '../utils/core-utils.mjs';
 import { ACCESS_TOKEN_SECRET, ADMIN_ACCESS_TOKEN_SECRET, OTP_TOKEN_SECRET } from '../config/auth-config.mjs';
 
-// Middleware to verify JWT token
-export const verifyAccessToken = (req, res, next) => {
-    // Check if the token is present in the request headers
-  const token = req.headers['authorization']?.split(' ')[1]; // Get token from Authorization header
-  
-  if (!token) {
-    return res.sendStatus(401).json({ message: 'No token provided' });
-  }
+/**
+ * A factory function that creates a reusable JWT verification middleware.
+ *
+ * @param {string} secret - The JWT secret key to use for verification.
+ * @param {object} options - Configuration options for the middleware.
+ * @param {string} [options.requiredRole] - The role the user must have (e.g., 'ADMIN').
+ * @param {boolean} [options.checkBlockedStatus=true] - Whether to check if the user is blocked.
+ * @returns {function} An Express middleware function.
+ */
 
-  try {
-  jwt.verify(token, ACCESS_TOKEN_SECRET, (err, decoded) => {
-    if (err) {
-    if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: 'Token expired' });
-    }
-    return res.status(403).json({ message: 'Invalid token' });
-    }
-    if(decoded.isBlocked) {
-      return res.status(403).json({ message: 'User is blocked' });
-    }
-    req.user = decoded; // Attach user data to request object
-    next(); // Proceed to the next middleware or route handler
-  });
-  } catch (error) {
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-}
+const createAuthMiddleware = (secret, options = {}) => {
+  const { requiredRole, checkBlockedStatus = true } = options;
 
-export const verifyAdminAccessToken = (req, res, next) => {
-  // Check if the token is present in the request headers
-  const token = req.headers['authorization']?.split(' ')[1]; // Get token from Authorization header
+  return (req, res, next) => {
+    try {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
 
-  if (!token) {
-    return res.sendStatus(401).json({ message: 'No token provided' });
-  }
-
-  try {
-  jwt.verify(token, ADMIN_ACCESS_TOKEN_SECRET, (err, decoded) => {
-    if (err) {
-    if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: 'Token expired' });
-    }
-    return res.status(403).json({ message: 'Invalid token' });
-    }
-    req.user = decoded; // Attach user data to request object
-    if (req.user.role.toUpperCase() !== 'ADMIN') {
-      return res.status(403).json({ message: 'Unauthorized' });
-    }
-    next(); // Proceed to the next middleware or route handler
-  });
-  } catch (error) {
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-}
-
-export const verifyOtpToken = (req, res, next) => {
-  // Check if the token is present in the request headers
-  const token = req.headers['authorization']?.split(' ')[1]; // Get token from Authorization header
-  if (!token) {
-    return res.sendStatus(401).json({ message: 'No Otp token provided' });
-  }
-
-  try {
-    jwt.verify(token, OTP_TOKEN_SECRET, (err, decoded) => {
-      if (err) {
-      if (err.name === 'TokenExpiredError') {
-        return res.status(401).json({ message: 'Token expired' });
+      if (!token) {
+        return next(sendError('A token is required for authentication', 401));
       }
-      return res.status(403).json({ message: 'Invalid token' });
+
+      const decoded = jwt.verify(token, secret);
+
+      if (checkBlockedStatus && decoded.isBlocked) {
+        return next(sendError('This account has been suspended.', 403));
       }
-      req.user = decoded; // Attach user data to request object
-      next(); // Proceed to the next middleware or route handler
-    });
-  } catch (error) {
-    console.log("error", error);
-    return res.status(500).json({ message: 'Internal server error' });
-  }
-}
+
+      if (requiredRole && decoded.role?.toLowerCase() !== requiredRole.toLowerCase()) {
+        return next(sendError('You do not have permission to perform this action.', 403));
+      }
+
+      req.user = decoded;
+
+      next();
+    } catch (err) {
+      if (err instanceof jwt.TokenExpiredError) {
+        return next(sendError('Your session has expired. Please log in again.', 401));
+      }
+      if (err instanceof jwt.JsonWebTokenError) {
+        return next(sendError('Invalid token. Please log in again.', 403));
+      }
+
+      return next(err);
+    }
+  };
+};
+
+export const verifyAccessToken = createAuthMiddleware(ACCESS_TOKEN_SECRET);
+
+export const verifyAdminAccessToken = createAuthMiddleware(ADMIN_ACCESS_TOKEN_SECRET, {
+  requiredRole: 'admin',
+  checkBlockedStatus: true // Ensure blocked admin cannot operate
+});
+
+export const verifyOtpToken = createAuthMiddleware(OTP_TOKEN_SECRET, {
+  checkBlockedStatus: false // OTP tokens likely don't need this check
+});
