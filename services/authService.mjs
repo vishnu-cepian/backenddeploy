@@ -1,4 +1,5 @@
 import { z } from "zod";
+import crypto from "crypto";
 import { ROLE } from "../types/enums/index.mjs";
 import { logger } from "../utils/logger-utils.mjs";
 import { hashPassword, comparePassword } from "../utils/auth-utils.mjs";
@@ -9,8 +10,10 @@ import { OAuth2Client } from "google-auth-library";
 import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
 import { Customers } from "../entities/Customers.mjs";
+import { OtpEmail } from "../entities/OtpEmail.mjs";
+import { OtpPhone } from "../entities/OtpPhone.mjs";
 import { emailQueue } from "../queues/index.mjs";
-
+import { redis } from "../config/redis-config.mjs";
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
@@ -407,45 +410,63 @@ export const loginWithGoogle = async (idToken) => {
     }
 };
 
+/**
+ * Zod schema for email validation.
+ */
+const emailSchema = z.object({
+    email: z.string().email({ message: "Invalid email format" }),
+  });
+
+const RATE_LIMIT_WINDOW_SECONDS = 60; // 1 minute window
+const RATE_LIMIT_MAX_REQUESTS = 2;   // Max 2 requests per minute per email
 
 /**
- * Sends an email OTP to the user
+ * A 6 digit OTP will be generated and sent to the user's email and also the OTP will be saved in OtpEmail table with an expiration time of 10 minutes
+ * If the OTP is send mutliple times then the last send otp will remain in database
  * 
  * @param {Object} data 
- * @param {string} data.email 
+ * @param {string} data.email - The recipient's email address.
  * @returns {Promise<Object>} { message: "OTP sent successfully", status: true } or { message: "Failed to send email", statusCode: 500 }
  */
 export const sendEmailOtp = async (data) => {
-    /*
-        - A 6 digit OTP will be generated and sent to the user's email and also the OTP will be saved in OtpEmail table with an expiration time of 10 minutes
-        - If the OTP is send mutliple times then the last send otp will remain in database
-    */
     try {
-        const { email } = data;
-    
-        if (!email) throw sendError('Email is required',400);
+        const { email } = emailSchema.parse(data);
         
-        const otp = Math.floor(100000 + Math.random() * 900000); // Generate a 6-digit OTP
+        const rateLimitKey = `otp-limit:${email}`;
+        const currentRequests = await redis.incr(rateLimitKey);
+
+        if (currentRequests === 1) {
+            await redis.expire(rateLimitKey, RATE_LIMIT_WINDOW_SECONDS);
+        }
+
+        if (currentRequests > RATE_LIMIT_MAX_REQUESTS) {
+            logger.warn(`Rate limit exceeded for email: ${email}`);
+            throw sendError('Too many requests. Please wait a minute before trying again.', 429);
+        }
+
+        const otp = crypto.randomInt(100000, 999999).toString(); // Generate a 6-digit OTP
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
 
-        const otpEmailRepository = AppDataSource.getRepository('OtpEmail');
+        const otpEmailRepository = AppDataSource.getRepository(OtpEmail);
+
+        /**
+         *  TypeOrm save method is giving unique constraint error when the email is already in the database in development
+         *  So using findOne and update method to update the otp and expiresAt
+         */
+
         let otpRecord = await otpEmailRepository.findOne({ where: { email } });
         if (otpRecord) {
-            otpRecord.otp = otp.toString();
+            otpRecord.otp = otp;
             otpRecord.expiresAt = expiresAt;
             await otpEmailRepository.save(otpRecord);
         } else {
             await otpEmailRepository.save({
             email,
-            otp: otp.toString(),
+            otp,
             expiresAt
             });
         }
 
-        // "Nexs" is the name of the sender
-        // "global_otp" is the template name
-        // { otp: otp } is the data to be sent to the template (variables)
-        
         emailQueue.add('sendEmailOtp', {
             email,
             name: "Nexs",
@@ -454,11 +475,15 @@ export const sendEmailOtp = async (data) => {
         });
 
         return {
-            message: "OTP sent successfully",
+            message: "An OTP has been sent to your email address.",
             status: true
         }
     } catch (err) {
-        logger.error(err);
+        if (err instanceof z.ZodError) {
+            logger.warn("sendEmailOtp validation failed", { errors: err.flatten().fieldErrors });
+            throw sendError("Invalid email format provided", 400, err.flatten().fieldErrors);
+        }
+        logger.error("Error in sendEmailOtp service:",err);
         throw err;
     }
 }
