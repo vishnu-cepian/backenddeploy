@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { ROLE } from "../types/enums/index.mjs";
 import { logger } from "../utils/logger-utils.mjs";
 import { hashPassword, comparePassword } from "../utils/auth-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
@@ -7,73 +9,93 @@ import { OAuth2Client } from "google-auth-library";
 import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
 import { Customers } from "../entities/Customers.mjs";
-import { sendEmail } from "./notificationService.mjs";
 import { emailQueue } from "../queues/index.mjs";
 
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
-  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '1d' });
+  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
 };
 
 export const generateRefreshToken = (payload) => {
   return jwt.sign(payload, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
 };
 
-export const verifyAccessToken = (token) => {
-  try {
-    return jwt.verify(token, ACCESS_TOKEN_SECRET);
-  } catch (err) {
-    return null;
-  }
-}
 
-export const verifyRefreshToken = (token) => {
-  try {
-    return jwt.verify(token, REFRESH_TOKEN_SECRET);
-  } catch (err) {
-    return null;
-  }
-};
-
+const refreshTokenSchema = z.string().min(1, { message: "Refresh token cannot be empty" });
 /**
  * 
  * @param {string} refreshToken 
- * @returns {Promise<Object>} { accessToken: newAccessToken, refreshToken: newRefreshToken, message: "Token refreshed successfully" } or { error: "Invalid refresh token" }
+ * @returns {Promise<Object>} An object containing the new access token, refresh token, and a message
  */
-export const refreshAccessToken = async (refreshToken) => {  //if token is expired, ie., 401, then refresh token will be used to get new access token
-  /*
-    To get new access token when current one is expired and to extend the validity of refresh token on each function call
-    - if refresh token is valid then generate new access token and refresh token
-    - update the new refresh token in the database
-    - return the new access token, refresh token, message
-  */
+export const refreshAccessToken = async (refreshToken) => { 
     try {
-    const decoded = verifyRefreshToken(refreshToken);
-    if (!decoded) {
-        throw sendError('Invalid refresh token, please login again', 401);
-    }
-    const userRepository = AppDataSource.getRepository(User);
-    const user = await userRepository.findOne({ where: { id: decoded.id } });
-    if (!user) {
-        throw sendError('User not found', 404);
-    }
-    if (user.refreshToken !== refreshToken) {
-        throw sendError('Invalid refresh token, please login again', 401);
-    }
-    const newAccessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
-    const newRefreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
-    await userRepository.update(
-        { id: user.id },
-        { refreshToken: newRefreshToken }
-    );
-    return {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-        message: "Token refreshed successfully",
-    };
+        const validatedToken = refreshTokenSchema.parse(refreshToken);
+
+        const decoded = jwt.decode(validatedToken);
+        if (!decoded || !decoded.id) throw sendError('Invalid token payload', 401);
+
+        const { id: userId } = decoded;
+
+        const userRepository = AppDataSource.getRepository(User);
+
+        const user = await userRepository.createQueryBuilder('user')
+        .select([
+            'user.id',
+            'user.email',
+            'user.role',
+            'user.isBlocked',
+            'user.refreshToken',
+        ])
+        .where('user.id = :userId', { userId })
+        .getOne();
+
+        if (!user || !user.refreshToken) throw sendError('Invalid refresh token. Please log in again.', 401);
+
+        if (user.refreshToken !== validatedToken) {
+            await userRepository.update(
+                { id: user.id },
+                { refreshToken: null }
+            );
+            logger.warn('Invalid refresh token detected. User ID:', userId);
+            throw sendError('Authentication error. Please log in again.', 401);
+        }
+
+        jwt.verify(validatedToken, REFRESH_TOKEN_SECRET, (err, decoded) => {
+            if (err) {
+                logger.warn('Invalid refresh token detected. User ID:', userId);
+                throw sendError('Authentication error. Please log in again.', 401);
+            }
+        });
+
+        if (user.isBlocked) throw sendError('This account has been blocked', 403);
+
+        // Generate new tokens
+        const newAccessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
+        const newRefreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
+        await userRepository.update(
+            { id: user.id },
+            { refreshToken: newRefreshToken }
+        );
+        return {
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken,
+            message: "Token refreshed successfully",
+        };
     } catch (err) {
-        logger.error(err);
+        if (err instanceof jwt.TokenExpiredError) {
+            logger.warn('Expired refresh token used.', { error: err.message });
+            throw sendError('Refresh token has expired. Please log in again.', 401);
+        }
+        if (err instanceof jwt.JsonWebTokenError) {
+            logger.warn('Malformed refresh token used.', { error: err.message });
+            throw sendError('Invalid refresh token. Please log in again.', 401);
+        }
+         if (err instanceof z.ZodError) {
+            logger.error("Refresh token validation failed", { errors: err.flatten().fieldErrors });
+            throw sendError("Validation failed", 400, err.flatten().fieldErrors);
+        }
+        logger.error("Error during refresh access token:",err);
         throw err;
     }
 };
@@ -82,6 +104,19 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
 //===================AUTH UTILS====================
 
 /**
+ * Zod schema for signup data validation.
+ * Ensures that all incoming data is in the correct format.
+ */
+const signupSchema = z.object({
+    email: z.string().email({ message: "Invalid email address" }),
+    name: z.string().min(2, { message: "Name must be at least 2 characters long" }),
+    password: z.string().min(8, { message: "Password must be at least 8 characters long" }),
+    role: z.enum([ROLE.CUSTOMER, ROLE.VENDOR], { message: "Role must be either 'customer' or 'vendor'" }),
+    phoneNumber: z.string().regex(/^(?:\+91|91)?[6789]\d{9}$/, { message: "Invalid phone number format" }), 
+  });
+
+/**
+ * Creates a new user and, if the role is 'customer', a corresponding customer profile.
  * 
  * @param {Object} data 
  * @param {string} data.email 
@@ -89,200 +124,251 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
  * @param {string} data.password 
  * @param {string} data.role 
  * @param {string} data.phoneNumber 
- * @returns {Promise<Object>} { message: "User created successfully", status: true } or { message: "User already exists with this email", statusCode: 400 }
+ * @returns {Promise<Object>}
  */
 export const signup = async (data) => { 
+
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
-            const { email, name, password, role, phoneNumber } = data;
+        const validatedData = signupSchema.parse(data);     // validating incoming data against zod schema
+        const { email, name, password, role, phoneNumber } = validatedData;
 
-            if (!email || !name || !password || !role || !phoneNumber) {
-                throw sendError('Email, name, password, role, and phoneNumber are required', 400);
-            }
-            // // Check if user already exists
-            const userRepository = AppDataSource.getRepository(User);
-            const existingUser = await userRepository.findOne({ where: { email } });
-            if (existingUser) throw sendError('User already exists with this email',400);
+        // Check if user already exists
+        const existingUser = await queryRunner.manager.exists(User, { where: { email } });
+        if (existingUser) throw sendError('User already exists with this email',400);
 
+        // Hash the password
+        const hashedPassword = await hashPassword(password);
+
+        // Save user to db 
+        const newUser = queryRunner.manager.create(User, {
+            email,
+            name,
+            password: hashedPassword,   
+            role,
+            phoneNumber,
+        });
+        await queryRunner.manager.save(User, newUser);
+
+        // If the role is customer, create a customer profile
+        if (role === ROLE.CUSTOMER) {   
+            const newCustomer = queryRunner.manager.create(Customers, {
+                userId: newUser.id,
+            });
+            await queryRunner.manager.save(Customers, newCustomer);
+
+            if (!newCustomer) throw sendError("Customer profile creation failed", 400);
+        }
+
+        await queryRunner.commitTransaction();
+
+        // welcome email
+        emailQueue.add('sendEmailnewReg', {
+            email,
+            name: "Nexs",
+            template_id: "global_otp",
+            variables: { text: "WELCOME" }
+        });
             
-            const hashedPassword = await hashPassword(password.trim());
-            // Save user to database 
-            const newUser = userRepository.create({
-                email,
-                name,
-                password: hashedPassword,   
-                role: role.toLowerCase().trim(),
-                phoneNumber,
-            });
-            await userRepository.save(newUser);
-
-            if (role.toLowerCase().trim() === "customer") {
-                const customerRepo = AppDataSource.getRepository(Customers);
-                const newCustomer = customerRepo.create({
-                    userId: newUser.id,
-                });
-                await customerRepo.save(newCustomer);
-
-                if (!newCustomer) throw sendError("Customer profile creation failed", 400);
-            }
-
-            emailQueue.add('sendEmailnewReg', {
-                email,
-                name: "Nexs",
-                template_id: "global_otp",
-                variables: { text: "WELCOME" }
-            });
-              
-            return {
-                message: "User created successfully",
-                status: true,
-            };
+        return {
+            message: "User created successfully",
+            status: true,
+        };
     } catch (err) {
-        logger.error(err);
+        await queryRunner.rollbackTransaction();
+
+        if (err instanceof z.ZodError) {
+            logger.error("Signup validation failed", { errors: err.flatten().fieldErrors });
+            throw sendError("Validation failed", 400, err.flatten().fieldErrors);
+        }
+
+        logger.error("Error during signup:",err);
         throw err;
-    }
+    } finally {
+        await queryRunner.release();
+    } 
 };
+
+/**
+ * Zod schema for login data validation.
+ */
+const loginSchema = z.object({
+    email: z.string().email({ message: "Invalid email address" }),
+    password: z.string().min(8, { message: "Password must be at least 8 characters long" }),
+});
 
 /**
  * 
  * @param {Object} data 
  * @param {string} data.email 
  * @param {string} data.password 
- * @returns {Promise<Object>} { message: "Login successful", status: true } or { message: "User not found", status: false }
+ * @returns {Promise<Object>} User details, accessToken, refreshToken, message
  */
 export const loginWithEmail = async (data) => {
     /*
         - The user dashboard will be rendered by the ROLE
-        - If the user is blocked then the user will not be able to login
     */
     try {
-            const {email, password } = data;
+        const validatedData = loginSchema.parse(data);
+        const { email, password } = validatedData;
             
-            if (!email || !password) throw sendError('Email and password are required',400);
-            
-            const userRepository = AppDataSource.getRepository(User);
-            const user = await userRepository.findOne({ where: { email } });
+        const userRepository = AppDataSource.getRepository(User);
 
-            if (!user) throw sendError('User not found', 404);
+        const user = await userRepository.createQueryBuilder('user')
+        .select([
+            'user.id',
+            'user.email',
+            'user.password',
+            'user.role',
+            'user.isBlocked',
+            'user.name',
+            'user.phoneNumber',
+            'user.createdAt',
+            'user.updatedAt',
+        ])
+        .where('user.email = :email', { email })
+        .getOne();
 
-            if (user.isBlocked) throw sendError('User is blocked', 403);
+        if (!user) throw sendError('User not found', 404);
 
-            // Check if password is correct
-            const isPasswordValid = await comparePassword(password.trim(), user.password.trim());
-            if (!isPasswordValid) throw sendError('Invalid password',401);
+        if (user.isBlocked) throw sendError('This account has been blocked', 403);
 
-            // Generate JWT token
-            const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
-            const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
+        // Check if password is correct
+        const isPasswordValid = await comparePassword(password, user.password);
+        if (!isPasswordValid) throw sendError('Invalid password',401);
 
-            await userRepository.update(
-                { id: user.id },
-                { refreshToken } // add refreshToken field to User entity
-            );
+        // Generate JWT token
+        const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
+        const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
 
-            return {
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    role: user.role,
-                    name: user.name,
-                    phoneNumber: user.phoneNumber,
-                    createdAt: user.createdAt,
-                    lastLogin: user.updatedAt,
-                },
-                accessToken,
-                refreshToken,
-                message: "Login successful",
-            };
+        await userRepository.update(
+            { id: user.id },
+            { refreshToken }
+        );
+
+        return {
+            user: {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                name: user.name,
+                phoneNumber: user.phoneNumber,
+                createdAt: user.createdAt,
+                lastLogin: user.updatedAt,
+            },
+            accessToken,
+            refreshToken,
+            message: "Login successful",
+        };
     } catch (err) {
-        logger.error(err);
+        if (err instanceof z.ZodError) {
+            logger.error("Login validation failed", { errors: err.flatten().fieldErrors });
+            throw sendError("Validation failed", 400, err.flatten().fieldErrors);
+        }
+
+        logger.error("Error during login:",err.message);
         throw err;
     }
 };
+
+/**
+ * Zod schema for email validation.
+ */
+const checkEmailSchema = z.object({
+    email: z.string().email({ message: "Invalid email format" }),
+  });
 
 /**
  * Checks if a user exists in the database
  * 
  * @param {Object} data 
  * @param {string} data.email 
- * @returns {Promise<Object>} { message: "USER EXISTS", status: true, exist: true } or { message: "NO USER FOUND", status: false, exist: false }
+ * @returns {Promise<Object>} An object with a boolean 'exists' property
  * 
  */
 
 export const checkEmail = async (data) => {
     try {
-            const { email } = data;
+        const validatedData = checkEmailSchema.parse(data);
+        const { email } = validatedData;
         
-            if (!email) throw sendError('Email is required',400);
+        // Check if user already exists
+        const userRepository = AppDataSource.getRepository(User);
+        const existingUser = await userRepository.exists({ where: { email } });
 
-            // Check if user already exists
-            const userRepository = AppDataSource.getRepository(User);
-            const existingUser = await userRepository.findOne({ where: { email } });
-
-            if (!existingUser) return {
-                message: "NO USER FOUND",
-                status: false,
-                exist: false
-            }
-
-            return {
-                message: "USER EXISTS",
-                status: true,
-                exist: true
-            }
+        return {
+            exist: existingUser
+        }
             
     } catch (err) {
-        logger.error(err);
+        if (err instanceof z.ZodError) {
+            logger.warn("checkEmail validation failed", { errors: err.flatten().fieldErrors });
+            throw sendError("Invalid email format provided", 400, err.flatten().fieldErrors);
+        }
+        logger.error("Error in checkEmail service:",err);
         throw err;
     }
 }
 
 /**
+ * Zod schema for the Google ID token.
+ */
+const googleLoginSchema = z.string().min(1, { message: "ID token cannot be empty" });
+/**
+ * If the user exists, it returns their details and JWTs.
+ * If the user does not exist, it returns the verified Google email to initiate a signup flow.
  * 
- * @param {Object} data 
- * @param {string} data.idToken 
+ * @param {Object} idToken 
  * @returns {Promise<Object>} { message: "Login successful", status: true, exist: true } or { message: "User not found", status: false, exist: false }
  */
-export const loginWithGoogle = async (data) => { 
-    /*
-        1. For the first time login the user will need to go through the signup process. (handled by frontend, the server will respond by "No User found" and the email extracted from google payload)
-        2. For the next time login the user will be logged in directly 
-    */
+export const loginWithGoogle = async (idToken) => { 
     try {
-        const idToken  = data;
-       
-        if (!idToken) {
-            throw sendError('ID token is required');
-        }
+        const validatedToken = googleLoginSchema.parse(idToken);
 
         const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
         const ticket = await client.verifyIdToken({
-            idToken,
+            idToken: validatedToken,
             audience: process.env.GOOGLE_CLIENT_ID,
         });
 
         const payload = ticket.getPayload();
+        if (!payload || !payload.email) throw sendError('Invalid Google token: missing email payload',401);
 
         const now = Math.floor(Date.now() / 1000);
-        if (payload.exp < now) {
-            throw sendError('ID token has expired',401);
-        }
+        if (payload.exp < now) throw sendError('ID token has expired',401);
 
         const { email } = payload;
 
         // Check if user already exists
         const userRepository = AppDataSource.getRepository(User);
-        let user = await userRepository.findOne({ where: { email } });
+        
+        const user = await userRepository.createQueryBuilder('user')
+        .select([
+            'user.id',
+            'user.email',
+            'user.role',
+            'user.name',
+            'user.phoneNumber',
+            'user.createdAt',
+            'user.updatedAt',
+            'user.isBlocked',
+        ])
+        .where('user.email = :email', { email })
+        .getOne();
+
         if (!user) {        /// IF THERE IS NO USER THEN THE NEW USER IS NOT CREATED INSTEAD signup ROUTE WILL HANDLE IT /// IT IS USED FOR GIVING USERS FLEXBILITY TO ACCESS WITH NORMAL EMAIL PASSWORD LOGIN WITH THE SAME EMAIL ID EXTRACTED FROM GOOGLE PAYLOAD
             return ({
-                message: "User not found",
+                message: "User not found, Please complete registration.",
                 status: false,
                 email: email,
                 exist: false
             });
         }
-        if (user.isBlocked) {
-            throw sendError('User is blocked', 403);
-        }
+        if (user.isBlocked) throw sendError('This account has been blocked', 403);
+
         // Generate JWT token
         const accessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
         const refreshToken = generateRefreshToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
@@ -308,7 +394,15 @@ export const loginWithGoogle = async (data) => {
         };
 
     } catch (err) {
-        logger.error(err);
+        if (err instanceof z.ZodError) {
+            logger.warn("loginWithGoogle validation failed", { errors: err.flatten().fieldErrors });
+            throw sendError("Invalid ID token format", 400, err.flatten().fieldErrors);
+        }
+        if (err.code === 'ERR_OSSL_PEM_NO_START_LINE' || err.message.includes('Token used too late')) {
+            logger.warn('Google token verification failed', { error: err.message });
+            throw sendError('Invalid or expired Google token.', 401);
+        }
+        logger.error("Error in loginWithGoogle service:",err);
         throw err;
     }
 };
