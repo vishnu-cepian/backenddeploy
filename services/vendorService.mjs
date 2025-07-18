@@ -51,6 +51,7 @@ const completeProfileSchema = z.object({
   vendorServices: z.string().optional(),
   shopDocumentUrlPath: z.string().optional(),
 });
+
 //============================ CONSTANTS ==============================================
 
 const MAX_OTP_ATTEMPTS = 5;
@@ -281,41 +282,58 @@ export const getVendorDetails = async (data) => {
       };
     }, 300);
   } catch (error) {
-    logger.error(error);
+    logger.error("getVendorDetails error", error);
     throw error;
   }
 }
 
+/**
+ * Save the vendor avatar url.
+ * @param {Object} data - The data containing the s3 key and user id.
+ * @returns {Promise<Object>} - The result of the save.
+ */
 export const saveVendorAvatarUrl = async (data) => {
   try {
     const { s3Key, userId } = data;
 
     const vendor = await vendorRepo.findOne({
       where: { userId: userId },
+      select: {
+        id: true,
+      },
     });
 
     if (!vendor) {
       throw sendError('Vendor not found',400);
     }
 
-    vendor.vendorAvatarUrlPath = s3Key;
-    await vendorRepo.save(vendor);
+    await vendorRepo.update(vendor.id, { vendorAvatarUrlPath: s3Key });
+    await delCache(`vendorDetails:${userId}`);
 
     return {
       message: "Vendor avatar url saved successfully",
     };
   } catch (error) {
-    logger.error(error);
+    logger.error("saveVendorAvatarUrl error", error);
     throw error;
   }
 }
 
+/**
+ * Get the vendor avatar url.
+ * @param {Object} data - The data containing the user id.
+ * @returns {Promise<Object>} - The result of the get.
+ */
 export const getVendorAvatarUrl = async (data) => {
   try {
     const { userId } = data;
 
     const vendor = await vendorRepo.findOne({
       where: { userId: userId },
+      select: {
+        id: true,
+        vendorAvatarUrlPath: true,
+      },
     });
 
     if (!vendor) {
@@ -329,65 +347,91 @@ export const getVendorAvatarUrl = async (data) => {
       presignedUrl,
     };
   } catch (error) {
-    logger.error(error);
+    logger.error("getVendorAvatarUrl error", error);
     throw error;
   }
 }
 
+/**
+ * Delete the vendor avatar url.
+ * @param {Object} data - The data containing the user id.
+ * @returns {Promise<Object>} - The result of the delete.
+ */
 export const deleteVendorAvatarUrl = async (data) => {
   try {
     const { userId } = data;
 
     const vendor = await vendorRepo.findOne({
       where: { userId: userId },
+      select: {
+        id: true,
+        vendorAvatarUrlPath: true,
+      },
     });
 
     if (!vendor) {
       throw sendError('Vendor not found',400);
     }
     await deleteFile(vendor.vendorAvatarUrlPath);
-    vendor.vendorAvatarUrlPath = null;
-    await vendorRepo.save(vendor);
+    await vendorRepo.update(vendor.id, { vendorAvatarUrlPath: null });
+    await delCache(`vendorDetails:${userId}`);
 
     return {
       message: "Vendor avatar url deleted successfully",
     };
   } catch (error) {
-    logger.error(error);
+    logger.error("deleteVendorAvatarUrl error", error);
     throw error;
   }
 }
 
+/**
+ * Save the shop image url.
+ * @param {Object} data - The data containing the s3 key and user id.
+ * @returns {Promise<Object>} - The result of the save.
+ */
 export const saveShopImageUrl = async (data) => {
   try {
     const { s3Key, userId } = data;
 
     const vendor = await vendorRepo.findOne({
       where: { userId: userId },
+      select: {
+        id: true,
+      },
     });
 
     if (!vendor) {
       throw sendError('Vendor not found',400);
     }
 
-    vendor.shopImageUrlPath = s3Key;
-    await vendorRepo.save(vendor);
+    await vendorRepo.update(vendor.id, { shopImageUrlPath: s3Key });
+    await delCache(`vendorDetails:${userId}`);
 
     return {
       message: "Shop image url saved successfully",
     };
   } catch (error) {
-    logger.error(error);
+    logger.error("saveShopImageUrl error", error);
     throw error;
   }
 }
 
+/**
+ * Get the shop image url.
+ * @param {Object} data - The data containing the user id.
+ * @returns {Promise<Object>} - The result of the get.
+ */
 export const getShopImageUrl = async (data) => {
   try {
     const { userId } = data;
 
     const vendor = await vendorRepo.findOne({
       where: { userId: userId },
+      select: {
+        id: true,
+        shopImageUrlPath: true,
+      },
     });
 
     if (!vendor) {
@@ -401,17 +445,26 @@ export const getShopImageUrl = async (data) => {
       presignedUrl,
     };
   } catch (error) {
-    logger.error(error);
+    logger.error("getShopImageUrl error", error);
     throw error;
   }
 }
 
+/**
+ * Delete the shop image url.
+ * @param {Object} data - The data containing the user id.
+ * @returns {Promise<Object>} - The result of the delete.
+ */
 export const deleteShopImageUrl = async (data) => {
   try {
     const { userId } = data;
 
     const vendor = await vendorRepo.findOne({
       where: { userId: userId },
+      select: {
+        id: true,
+        shopImageUrlPath: true,
+      },
     });
 
     if (!vendor) {
@@ -419,24 +472,32 @@ export const deleteShopImageUrl = async (data) => {
     }
 
     await deleteFile(vendor.shopImageUrlPath);
-    vendor.shopImageUrlPath = null;
-    await vendorRepo.save(vendor);
+    await vendorRepo.update(vendor.id, { shopImageUrlPath: null });
+    await delCache(`vendorDetails:${userId}`);
 
     return {
       message: "Shop image url deleted successfully",
     };
   } catch (error) {
-    logger.error(error);
+    logger.error("deleteShopImageUrl error", error);
     throw error;
   }
 }
 
+/**
+ * Save the work image url.
+ * @param {Object} data - The data containing the s3 key and user id.
+ * @returns {Promise<Object>} - The result of the save.
+ */
 export const saveWorkImageUrl = async (data) => {
   try {
     const { s3Key, userId } = data;
     
     const vendor = await vendorRepo.findOne({
       where: { userId: userId },
+      select: {
+        id: true,
+      },
     });
 
     if (!vendor) {
@@ -457,17 +518,25 @@ export const saveWorkImageUrl = async (data) => {
       message: "Work image url saved successfully",
     };
   } catch (error) {
-    logger.error(error);
+    logger.error("saveWorkImageUrl error", error);
     throw error;
   }
 }
 
+/**
+ * Get the vendor work images.
+ * @param {Object} data - The data containing the user id.
+ * @returns {Promise<Object>} - The result of the get.
+ */
 export const getVendorWorkImages = async (data) => {
   try {
     const { userId } = data;
     return cacheOrFetch(`vendorWorkImages:${userId}`, async () => {
       const vendor = await vendorRepo.findOne({
         where: { userId: userId },
+        select: {
+          id: true,
+        },
       });
 
       if (!vendor) {
@@ -495,18 +564,26 @@ export const getVendorWorkImages = async (data) => {
       };
     }, 300);
   } catch (error) {
-    logger.error(error);
+    logger.error("getVendorWorkImages error", error);
     throw error;
   }
 }
 
+/**
+ * Delete the vendor work image.
+ * @param {Object} data - The data containing the s3 key and user id.
+ * @returns {Promise<Object>} - The result of the delete.
+ */
 export const deleteVendorWorkImage = async (data) => {
   try {
     const { s3Key, userId } = data;
 
     const vendor = await vendorRepo.findOne({
       where: { userId: userId },
-    });
+      select: {
+        id: true,
+      },
+      });
 
     if (!vendor) {
       throw sendError('Vendor not found',400);
@@ -529,7 +606,7 @@ export const deleteVendorWorkImage = async (data) => {
       message: "Vendor work image deleted successfully",
     };
   } catch (error) {
-    logger.error(error);
+    logger.error("deleteVendorWorkImage error", error);
     throw error;
   }
 }
