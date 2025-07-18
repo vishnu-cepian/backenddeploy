@@ -42,7 +42,7 @@ export const Vendors = new EntitySchema({
         ownershipType: {
             type: "varchar",
             enum: Object.values(OWNERSHIP_TYPE),
-            nullable: false
+            nullable: true
         },
         serviceType: {
             type: "varchar",

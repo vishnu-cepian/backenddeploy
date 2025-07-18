@@ -49,7 +49,7 @@ const completeProfileSchema = z.object({
   ifscCode: z.string().min(1),
   bankPassbookUrlPath: z.string().min(1),
   
-  ownershipType: z.enum(Object.values(OWNERSHIP_TYPE)).optional().nullable().default(null),
+  ownershipType: z.enum(Object.values(OWNERSHIP_TYPE) || []).optional(),
   vendorServices: z.string().optional(),
   shopDocumentUrlPath: z.string().optional(),
 });
