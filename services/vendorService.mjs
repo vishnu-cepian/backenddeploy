@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { logger } from "../utils/logger-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
-import { User } from "../entities/User.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
 import { VendorAudit } from "../entities/VendorAudit.mjs";
@@ -11,10 +10,9 @@ import { getPresignedViewUrl, deleteFile } from "./s3service.mjs";
 import { cacheOrFetch, delCache } from "../utils/cache.mjs";
 import { VENDOR_STATUS, SHOP_TYPE, OWNERSHIP_TYPE, SERVICE_TYPE } from "../types/enums/index.mjs";
 import { redis } from "../config/redis-config.mjs";
+import { emailQueue } from "../queues/notification/email/emailQueue.mjs";
 
-const userRepo = AppDataSource.getRepository(User);
 const vendorRepo = AppDataSource.getRepository(Vendors);
-const vendorAuditRepo = AppDataSource.getRepository(VendorAudit);
 const vendorImagesRepo = AppDataSource.getRepository(VendorImages);
 
 //============================ ZOD VALIDATION SCHEMAS ==============================================
@@ -49,7 +47,7 @@ const completeProfileSchema = z.object({
   ifscCode: z.string().min(1),
   bankPassbookUrlPath: z.string().min(1),
   
-  ownershipType: z.enum(Object.values(OWNERSHIP_TYPE) || []).optional(),
+  ownershipType: z.string().optional(),
   vendorServices: z.string().optional(),
   shopDocumentUrlPath: z.string().optional(),
 });
@@ -220,6 +218,13 @@ export const completeProfile = async (data, deviceInfo) => {
      * 
      * 
      */
+    emailQueue.add('sendVendorApprovalEmail', {
+      email: newVendor.email,
+      name: newVendor.name,
+      template_id: "vendor_approval",
+      variables: { name: newVendor.name }
+    });
+
     return {
       isProfileCompleted: true,
       message: "Vendor profile created successfully, please wait for admin approval",
