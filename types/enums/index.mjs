@@ -41,3 +41,20 @@ export const VENDOR_STATUS = {
   REJECTED: "REJECTED",
   BLOCKED: "BLOCKED"
 }
+
+export const OWNERSHIP_TYPE = {
+  SINGLE: "single",
+  PARTNERSHIP: "partnership",
+  PRIVATE_LIMITED: "private limited"
+}
+
+export const SERVICE_TYPE = {
+  TAILORS: "tailors",
+  LAUNDRY: "laundry",
+  OTHER: "other"
+}
+
+export const SHOP_TYPE = {
+  IN_HOME: "in-home",
+  OUTLET: "outlet"
+}

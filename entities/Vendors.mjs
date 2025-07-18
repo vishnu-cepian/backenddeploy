@@ -1,4 +1,5 @@
 import { EntitySchema } from "typeorm";
+import { SHOP_TYPE, OWNERSHIP_TYPE, SERVICE_TYPE, VENDOR_STATUS } from "../types/enums/index.mjs";
 
 export const Vendors = new EntitySchema({
     name: "Vendors",
@@ -35,17 +36,17 @@ export const Vendors = new EntitySchema({
         },
         shopType: {
             type: "varchar",
-            enum: ["IN-HOME", "OUTLET"],
+            enum: Object.values(SHOP_TYPE),
             nullable: false
         },
         ownershipType: {
             type: "varchar",
-            enum: ["PARTNERSHIP", "SINGLE"],
+            enum: Object.values(OWNERSHIP_TYPE),
             nullable: false
         },
         serviceType: {
             type: "varchar",
-            enum: ["TAILORING", "LAUNDRY"],
+            enum: Object.values(SERVICE_TYPE),
             nullable: false
         },
         vendorServices: {
@@ -142,7 +143,7 @@ export const Vendors = new EntitySchema({
         },
         status: {
             type: "varchar",
-            enum: ["PENDING", "VERIFIED", "REJECTED", "BLOCKED"],
+            enum: Object.values(VENDOR_STATUS),
             default: "PENDING"
         },
         createdAt: {
