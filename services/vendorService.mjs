@@ -31,12 +31,11 @@ const completeProfileSchema = z.object({
   userId: z.string().uuid(),
   phoneNumber: z.string().regex(/^(?:\+91|91)?[6789]\d{9}$/, { message: "Invalid Indian phone number format" }),
   otp: z.string().length(6, { message: "OTP must be 6 digits" }),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
+  latitude: z.string().min(1),
+  longitude: z.string().min(1),
   aadhaarNumber: z.string().length(12, { message: "Aadhaar number must be 12 digits" }),
   aadhaarUrlPath: z.string().min(1),
   shopType: z.enum(Object.values(SHOP_TYPE)),
-  ownershipType: z.enum(Object.values(OWNERSHIP_TYPE)),
   serviceType: z.enum(Object.values(SERVICE_TYPE)),
   shopName: z.string().min(1),
   address: z.string().min(1),
@@ -50,6 +49,7 @@ const completeProfileSchema = z.object({
   ifscCode: z.string().min(1),
   bankPassbookUrlPath: z.string().min(1),
   
+  ownershipType: z.enum(Object.values(OWNERSHIP_TYPE)).optional(),
   vendorServices: z.string().optional(),
   shopDocumentUrlPath: z.string().optional(),
 });
