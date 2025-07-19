@@ -6,11 +6,6 @@ dotenv.config();
 import { createServer } from "http";
 import { Server } from "socket.io";
 import os from "os";
-// import jobs
-// import "./jobs/expirePendingVendors.mjs"
-// import "./jobs/resetMonthlyLeadershipBoard.mjs"
-// import "./jobs/dailyRefreshLeadershipBoard.mjs"
-// import "./jobs/expireAcceptedQuotes.mjs"
 
 // Import routes
 import authRoutes from "./routes/authRoutes.mjs";
@@ -122,10 +117,6 @@ AppDataSource.initialize()
     console.error("Error during Data Source initialization", err);
   });
   
-// app.listen(PORT, () => {
-//   console.log(`Server running at http://localhost:${PORT}`);
-// });
-
 httpServer.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
