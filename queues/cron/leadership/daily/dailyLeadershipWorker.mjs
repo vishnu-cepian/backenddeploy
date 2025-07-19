@@ -1,10 +1,10 @@
 import { Worker } from "bullmq";
-import { bullRedis } from "../../../config/redis-config.mjs";
-import { AppDataSource } from "../../../config/data-source.mjs";
-import { QueueLogs } from "../../../entities/queueLogs.mjs";
-import { logger } from "../../../utils/logger-utils.mjs";
-import { Vendors } from "../../../entities/Vendors.mjs";
-import { deleteByPattern } from "../../../utils/cache.mjs";
+import { bullRedis } from "../../../../config/redis-config.mjs";
+import { AppDataSource } from "../../../../config/data-source.mjs";
+import { QueueLogs } from "../../../../entities/queueLogs.mjs";
+import { logger } from "../../../../utils/logger-utils.mjs";
+import { Vendors } from "../../../../entities/Vendors.mjs";
+import { deleteByPattern } from "../../../../utils/cache.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 

@@ -32,7 +32,7 @@ import { initPushWorker } from "./queues/notification/push/pushWorker.mjs";
 import { initEmailWorker } from "./queues/notification/email/emailWorker.mjs";
 import { initPhoneWorker } from "./queues/notification/phone/phoneWorker.mjs";
 import { initOutboxWorker } from "./queues/outbox/outboxWorker.mjs";
-import { initDailyLeadershipWorker } from "./queues/cron/leadership/dailyLeadershipWorker.mjs";
+import { initDailyLeadershipWorker } from "./queues/cron/leadership/daily/dailyLeadershipWorker.mjs";
 
 let chatWorker;
 let pushWorker;
