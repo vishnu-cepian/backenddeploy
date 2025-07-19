@@ -1,7 +1,7 @@
 import { Queue } from "bullmq";
 import { bullRedis } from "../../../../config/redis-config.mjs";
 
-export const dailyLeadershipQueue = new Queue("dailyLeadershipQueue", {
+export const resetDailyLeadershipQueue = new Queue("resetDailyLeadershipQueue", {
     connection: bullRedis,
     streams: {
         events: {
@@ -17,18 +17,18 @@ export const dailyLeadershipQueue = new Queue("dailyLeadershipQueue", {
     }
 });
 
-const repeatJobs = await dailyLeadershipQueue.getRepeatableJobs();
-const alreadyScheduled = repeatJobs.some(job => job.name === "processDailyLeadership");
+const repeatJobs = await resetDailyLeadershipQueue.getRepeatableJobs();
+const alreadyScheduled = repeatJobs.some(job => job.name === "processResetDailyLeadership");
 
 if (!alreadyScheduled) {
-    await dailyLeadershipQueue.add("processDailyLeadership", {}, {
+    await resetDailyLeadershipQueue.add("processResetDailyLeadership", {}, {
     repeat: {
         cron: "0 0 * * *" // every day at midnight (00:00)
         // cron: "*/1 * * * *" // for testing
         },
-        jobId: "processDailyLeadership"
+        jobId: "processResetDailyLeadership"
     });
 }
 
-// await dailyLeadershipQueue.clean(1000 * 60 * 60 * 24, "completed");
-// await dailyLeadershipQueue.clean(1000 * 60 * 60 * 24, "failed");
+// await resetDailyLeadershipQueue.clean(1000 * 60 * 60 * 24, "completed");
+// await resetDailyLeadershipQueue.clean(1000 * 60 * 60 * 24, "failed");

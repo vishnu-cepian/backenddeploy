@@ -8,11 +8,11 @@ import { deleteByPattern } from "../../../../utils/cache.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 
-let dailyLeadershipWorker;
+let resetDailyLeadershipWorker;
 
-export function initDailyLeadershipWorker() {
-    dailyLeadershipWorker = new Worker("dailyLeadershipQueue", async (job) => {
-        if (job.name !== "processDailyLeadership") return;
+export function initResetDailyLeadershipWorker() {
+    resetDailyLeadershipWorker = new Worker("resetDailyLeadershipQueue", async (job) => {
+        if (job.name !== "processResetDailyLeadership") return;
         try {
             const globalStats = await vendorRepo.createQueryBuilder("vendor")
             .where("vendor.status = :status", { status: "VERIFIED" })
@@ -36,7 +36,7 @@ export function initDailyLeadershipWorker() {
 
             await deleteByPattern('getDailyLeadershipBoard:*'); //clear all cache for getDailyLeadershipBoard
         } catch (error) {
-            logger.error(`Daily leadership processing failed: ${error.message}`, {
+            logger.error(`Reset daily leadership processing failed: ${error.message}`, {
                 error,
                 jobId: job.id
             })
@@ -57,17 +57,17 @@ export function initDailyLeadershipWorker() {
         }
     );
 
-    dailyLeadershipWorker.on("error", (error) => {
-        logger.error("Error in daily leadership worker:", error);
+    resetDailyLeadershipWorker.on("error", (error) => {
+        logger.error("Error in reset daily leadership worker:", error);
     });
 
-    dailyLeadershipWorker.on("completed", (job) => {
+    resetDailyLeadershipWorker.on("completed", (job) => {
         logger.info(`Job ${job.queueName} ${job.id} completed`, {
             duration: job.finishedOn - job.processedOn,
         });
     });
 
-    dailyLeadershipWorker.on("failed", (job, error) => {
+    resetDailyLeadershipWorker.on("failed", (job, error) => {
         logger.error(`Job ${job.queueName} ${job.id} failed: ${error.message}`);
         if(job.attemptsMade >= job.opts.attempts) {
             (async () => {
@@ -83,9 +83,9 @@ export function initDailyLeadershipWorker() {
         }
     });
 
-    dailyLeadershipWorker.on('drained', () => {
-        logger.info('All jobs in dailyLeadershipQueue have been processed.');
+    resetDailyLeadershipWorker.on('drained', () => {
+        logger.info('All jobs in resetDailyLeadershipQueue have been processed.');
     });
       
-    return dailyLeadershipWorker;
+    return resetDailyLeadershipWorker;
 }

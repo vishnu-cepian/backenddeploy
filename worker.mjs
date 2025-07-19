@@ -32,7 +32,7 @@ import { initPushWorker } from "./queues/notification/push/pushWorker.mjs";
 import { initEmailWorker } from "./queues/notification/email/emailWorker.mjs";
 import { initPhoneWorker } from "./queues/notification/phone/phoneWorker.mjs";
 import { initOutboxWorker } from "./queues/outbox/outboxWorker.mjs";
-import { initDailyLeadershipWorker } from "./queues/cron/leadership/daily/dailyLeadershipWorker.mjs";
+import { initResetDailyLeadershipWorker } from "./queues/cron/leadership/daily/resetDailyLeadershipWorker.mjs";
 import { initResetMonthlyLeadershipBoardWorker } from "./queues/cron/leadership/monthly/resetMonthlyLeadershipBoardWorker.mjs";
 import { initExpireAcceptedQuotesWorker } from "./queues/cron/expiringJobs/acceptedQuotes/expireAcceptedQuotesWorker.mjs";
 import { initExpirePendingVendorsWorker } from "./queues/cron/expiringJobs/pendingVendors/expirePendingVendorsWorker.mjs";
@@ -42,7 +42,7 @@ let pushWorker;
 let emailWorker;
 let phoneWorker;
 let outboxWorker;
-let dailyLeadershipWorker;
+let resetDailyLeadershipWorker;
 let resetMonthlyLeadershipBoardWorker;
 let expireAcceptedQuotesWorker;
 let expirePendingVendorsWorker;
@@ -63,8 +63,8 @@ async function startWorker() {
         console.log("Phone worker started");
         outboxWorker = initOutboxWorker();
         console.log("Outbox worker started")
-        dailyLeadershipWorker = initDailyLeadershipWorker();
-        console.log("Daily leadership worker started")
+        resetDailyLeadershipWorker = initResetDailyLeadershipWorker();
+        console.log("Reset daily leadership worker started")
         resetMonthlyLeadershipBoardWorker = initResetMonthlyLeadershipBoardWorker();
         console.log("Reset monthly leadership board worker started")
         expireAcceptedQuotesWorker = initExpireAcceptedQuotesWorker();
@@ -99,7 +99,7 @@ function setupGracefulShutdown() {
                 emailWorker.close(),
                 phoneWorker.close(),
                 outboxWorker.close(),
-                dailyLeadershipWorker.close(),
+                resetDailyLeadershipWorker.close(),
                 resetMonthlyLeadershipBoardWorker.close(),
                 expireAcceptedQuotesWorker.close(),
                 expirePendingVendorsWorker.close(),
