@@ -33,6 +33,7 @@ import { initEmailWorker } from "./queues/notification/email/emailWorker.mjs";
 import { initPhoneWorker } from "./queues/notification/phone/phoneWorker.mjs";
 import { initOutboxWorker } from "./queues/outbox/outboxWorker.mjs";
 import { initDailyLeadershipWorker } from "./queues/cron/leadership/daily/dailyLeadershipWorker.mjs";
+import { initResetMonthlyLeadershipBoardWorker } from "./queues/cron/leadership/monthly/resetMonthlyLeadershipBoardWorker.mjs";
 
 let chatWorker;
 let pushWorker;
@@ -40,6 +41,7 @@ let emailWorker;
 let phoneWorker;
 let outboxWorker;
 let dailyLeadershipWorker;
+let resetMonthlyLeadershipBoardWorker;
 let isShuttingDown = false;
 
 async function startWorker() {
@@ -59,6 +61,8 @@ async function startWorker() {
         console.log("Outbox worker started")
         dailyLeadershipWorker = initDailyLeadershipWorker();
         console.log("Daily leadership worker started")
+        resetMonthlyLeadershipBoardWorker = initResetMonthlyLeadershipBoardWorker();
+        console.log("Reset monthly leadership board worker started")
         setupGracefulShutdown();
 
         setInterval(() => {
@@ -88,6 +92,7 @@ function setupGracefulShutdown() {
                 phoneWorker.close(),
                 outboxWorker.close(),
                 dailyLeadershipWorker.close(),
+                resetMonthlyLeadershipBoardWorker.close(),
                 new Promise((_, reject) => 
                     setTimeout(() => reject(new Error('Worker close timeout')), 5000)
                 )
