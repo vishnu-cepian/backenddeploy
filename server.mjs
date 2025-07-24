@@ -18,6 +18,7 @@ import chatRoutes from "./routes/chatRoutes.mjs"
 import adminRoutes from "./routes/adminRoutes.mjs"
 import ratingRoutes from "./routes/ratingRoutes.mjs"
 import deliveryRoutes from "./routes/deliveryRoutes.mjs"
+import customerRoutes from "./routes/customerRoutes.mjs"
 
 // Import Utils and config files
 import { MESSAGE } from "./types/enums/index.mjs";
@@ -66,6 +67,7 @@ app.use("/api/chat", chatRoutes)
 app.use("/api/admin",adminRoutes)
 app.use("/api/rating", ratingRoutes)
 app.use("/api/delivery", deliveryRoutes)
+app.use("/api/customer", customerRoutes)
 app.get("/api/health", (req, res) => {
   res.json({
     env: process.env.NODE_ENV,
