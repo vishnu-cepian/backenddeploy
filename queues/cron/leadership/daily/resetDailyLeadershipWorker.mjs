@@ -5,6 +5,7 @@ import { QueueLogs } from "../../../../entities/queueLogs.mjs";
 import { logger } from "../../../../utils/logger-utils.mjs";
 import { Vendors } from "../../../../entities/Vendors.mjs";
 import { deleteByPattern } from "../../../../utils/cache.mjs";
+import { VENDOR_STATUS } from "../../../../types/enums/index.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 
@@ -15,7 +16,7 @@ export function initResetDailyLeadershipWorker() {
         if (job.name !== "processResetDailyLeadership") return;
         try {
             const globalStats = await vendorRepo.createQueryBuilder("vendor")
-            .where("vendor.status = :status", { status: "VERIFIED" })
+            .where("vendor.status = :status", { status: VENDOR_STATUS.VERIFIED })
             .andWhere("vendor.currentMonthRating > 0")
             .select("AVG(vendor.currentMonthRating)", "averageRating")
             .addSelect("COUNT(vendor.id)", "totalReviewCount")
@@ -30,7 +31,7 @@ export function initResetDailyLeadershipWorker() {
                 currentMonthBayesianScore: () =>
                     `(currentMonthReviewCount * currentMonthRating + ${m} * ${C}) / (currentMonthReviewCount + ${m})`
             })
-            .where("status = :status", { status: "VERIFIED" })
+            .where("status = :status", { status: VENDOR_STATUS.VERIFIED })
             .andWhere("currentMonthRating > 0")
             .execute();
 
