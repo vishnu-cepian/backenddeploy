@@ -13,22 +13,54 @@ export const OrderItems = new EntitySchema({
             type: "uuid",
             nullable: false
         },
+        itemName: {
+            type: "varchar",
+            nullable: false
+        },
         itemType: {
             type: "varchar",
             nullable: false
         },
-        quantity: {
+        itemCount: {
             type: "integer",
             nullable: false
         },
-        measurements: {
-            type: "jsonb",
-            nullable: true
+        fabricType: {
+            type: "varchar",
+            nullable: false
         },
-        universalSize: {
+        instructions: {
             type: "varchar",
             nullable: true
         },
+        dressCustomisations: {
+            type: "jsonb",
+            nullable: true
+        },
+        measurementType: {
+            type: "varchar",
+            nullable: false
+        },
+        laundryService: {
+            type: "varchar",
+            nullable: true
+        },
+        stdMeasurements: {
+            type: "varchar",
+            nullable: true
+        },
+        customMeasurements: {
+            type: "jsonb",
+            nullable: true
+        },
+        designImage1: {
+            type: "varchar",
+            nullable: true
+        },
+        designImage2: {
+            type: "varchar",
+            nullable: true
+        }
     },
     relations: {
         order: {
