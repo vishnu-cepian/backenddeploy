@@ -1,3 +1,9 @@
+import { z } from "zod";
+import crypto from "crypto";
+import Razorpay from "razorpay";
+import { In, Not } from "typeorm";
+
+// Local imports
 import { logger } from "../utils/logger-utils.mjs";
 import { sendError } from "../utils/core-utils.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
@@ -8,10 +14,7 @@ import { Customers } from "../entities/Customers.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { Payments } from "../entities/Payments.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs";
-import { In, Not } from "typeorm";
-import Razorpay from "razorpay";
-import crypto from "crypto";
-import { ORDER_VENDOR_STATUS, ORDER_STATUS } from "../types/enums/index.mjs";
+import { ORDER_VENDOR_STATUS, ORDER_STATUS, SERVICE_TYPE } from "../types/enums/index.mjs";
 import { calculateVendorPayoutAmount, calculateOrderAmount } from "../utils/pricing_utils.mjs";
 import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
@@ -25,120 +28,152 @@ const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
 const paymentRepo = AppDataSource.getRepository(Payments);
 // const paymentFailureRepo = AppDataSource.getRepository(PaymentFailures);
 
+//========================= ZOD VALIDATION SCHEMAS =========================
+
+const orderItemSchema = z.object({
+    itemName: z.string().min(1, { message: "Item name is required" }),
+    itemType: z.string().min(1, { message: "Item type is required" }),
+    itemCount: z.number().int().positive({ message: "Item count must be a positive number" }),
+    fabricType: z.string().min(1, { message: "Fabric type is required" }),
+    instructions: z.string().optional().nullable().default(null),
+    dressCustomisations: z.any().optional().nullable().default(null),
+    measurementType: z.string().min(1, { message: "Measurement type is required" }),
+    laundryService: z.string().optional().nullable().default(null),
+    stdMeasurements: z.string().optional().nullable().default(null),
+    customMeasurements: z.any().optional().nullable().default(null),
+    designImage1: z.string().optional().nullable().default(null),
+    designImage2: z.string().optional().nullable().default(null),
+}).refine(data => {
+    if (data.stdMeasurements && data.customMeasurements) {
+        return false; // Only one of custom/standard measurements can be provided
+    }
+    if (data.itemCount <= 5 && !data.customMeasurements && !data.stdMeasurements) {
+        return false; // Custom/standard measurements are required for small quantities
+    } else if (data.itemCount > 5 && !data.stdMeasurements) {
+        return false; // Standard measurements are required for large quantities
+    }
+    return true;
+}, {
+    message: "Either custom/standard measurements (for quantity <= 5) or standard measurements (for quantity > 5) must be provided.",
+});
+const createOrderSchema = z.object({
+    userId: z.string().uuid(),
+    orderName: z.string().min(1, { message: "Order name is required" }),
+    orderType: z.string().min(1, { message: "Order type is required" }),
+    serviceType: z.enum(Object.values(SERVICE_TYPE), { message: "Invalid service type" }),
+    orderPreference: z.string().min(1, { message: "Order preference is required" }),
+    requiredByDate: z.string().refine((date) => new Date(date) > new Date(), {
+        message: "Required by date must be in the future",
+    }),
+    clothProvided: z.boolean(),
+    fullName: z.string().min(1, { message: "Full name is required" }),
+    phoneNumber: z.string().regex(/^(?:\+91|91)?[6789]\d{9}$/, { message: "Invalid phone number format" }), // 91XXXXXXXXX
+    addressLine1: z.string().min(1, { message: "Address line 1 is required" }),
+    addressLine2: z.string().optional().nullable(),
+    addressType: z.string().optional().nullable(),
+    street: z.string().min(1, { message: "Street is required" }),
+    city: z.string().min(1, { message: "City is required" }),
+    district: z.string().min(1, { message: "District is required" }),
+    landmark: z.string().optional().nullable(),
+    state: z.string().min(1, { message: "State is required" }),
+    pincode: z.string().regex(/^\d{6}$/, { message: "Invalid pincode format" }),
+    orderItems: z.array(orderItemSchema).min(1, "At least one order item is required").max(5, "Cannot exceed 5 items per order"),
+});
+
+
+//========================= ORDER CREATION AND MANAGEMENT =========================
+
+/**
+ * Creates a new order
+ *
+ * @param {Object} data - The raw order data from the request.
+ * @returns {Promise<Object>} An object containing the new order's ID.
+ */
 export const createOrder = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-        const { userId, requiredByDate, clothProvided, orderItems } = data;
-        
-        if (!userId) throw sendError("User ID is required");
-        if (!requiredByDate) throw sendError("Required by date is required");
-        if (clothProvided === undefined) throw sendError("Cloth provided status is required");
-        if (!Array.isArray(orderItems) || orderItems.length === 0) throw sendError("Order items are required and must be a non-empty array");
+        const { userId, orderName, orderType, serviceType, orderPreference, requiredByDate, clothProvided,
+                fullName, phoneNumber, addressLine1, addressLine2, district, state, street, city, pincode, 
+                landmark, addressType, orderItems } = createOrderSchema.parse(data);
 
+        const customer = await queryRunner.manager.findOne(Customers, { where: { userId: userId }, select: { id: true} });
+        if (!customer) throw sendError("Customer profile not found", 404);
 
-        const requiredDate = new Date(requiredByDate);
+        const initialTimeStamp = {
+            paidAt: null,
+            orderConfirmedAt: null,
+            orderInProgressAt: null,
+            taskCompletedAt: null,
+            completedAt: null,
+            cancelled: false,           // if cancelled
+            cancelledAt: null,
+            refundRequestedAt: null,
+            refundProcessedAt: null,
+            ...(clothProvided ? {
+                readyForPickupFromCustomer: false, // a flag, set true when assigned for pickup
+                outForPickupFromCustomerAt: null, // timestamp when delivery partner picks it
+                itemPickedFromCustomerAt: null, // timestamp when delivery partner picks it
+                itemDeliveredToVendorAt: null, // timestamp when vendor receives it
+                vendorAcknowledgedItemAt: null, // vendor confirms receipt
+            } : {}),
+            readyForPickupFromVendor: false, // a flag, set true when vendor marks ready
+            outForPickupFromVendorAt: null, // timestamp when delivery partner picks it
+            itemPickedFromVendorAt: null, // delivery partner picks it up
+            itemDeliveredToCustomerAt: null, // customer receives it
 
-        if (isNaN(requiredDate.getTime())) throw sendError("Invalid required by date format");
-        if (requiredDate <= new Date()) throw sendError("Required by date must be in the future");
-
-
-        const customer = await customerRepo.findOne({ where: { userId: userId } });
-        if (!customer) throw sendError("Customer not found");
-
-        let orderStatusTimestamp = null;
-
-        if (clothProvided === true) {
-            orderStatusTimestamp = {
-                paidAt: null,
-                orderConfirmedAt: null,
-              
-                cancelled: false,                                     // if cancelled
-                cancelledAt: null,
-
-                readyForPickupFromCustomer: false,                    // a flag, set true when assigned for pickup
-                outForPickupFromCustomerAt: null,                     // timestamp when delivery partner picks it
-                itemPickedFromCustomerAt: null,                      // timestamp when delivery partner picks it
-                itemDeliveredToVendorAt: null,                       // timestamp when vendor receives it
-                vendorAcknowledgedItemAt: null,                      // vendor confirms receipt
-              
-                orderInProgressAt: null,                               // vendor starts task
-                taskCompletedAt: null,                               // vendor finishes tailoring/laundry
-              
-                readyForPickupFromVendor: false,                      // a flag, set true when vendor marks ready
-                outForPickupFromVendorAt: null,                       // timestamp when delivery partner picks it
-                itemPickedFromVendorAt: null,                        // delivery partner picks it up
-                itemDeliveredToCustomerAt: null,                     // customer receives it
-              
-
-                refundRequestedAt: null,                             // if refund was requested
-                refundProcessedAt: null,                              // refund complete
-
-                completedAt: null,                                     // After the refund time is over
-
-            }
-        } else {
-            orderStatusTimestamp = {
-                paidAt: null,
-                orderConfirmedAt: null,
-
-                cancelled: false,                                  
-                cancelledAt: null,
-                
-                orderInProgressAt: null,
-                taskCompletedAt: null,
-                
-                readyForPickupFromVendor: false,
-                outForPickupFromVendorAt: null,
-                itemPickedFromVendorAt: null,
-                itemDeliveredToCustomerAt: null,
-                
-                refundRequestedAt: null,
-                refundProcessedAt: null,  
-
-                completedAt: null, 
-            }
-        }
+        };
 
         const order = await queryRunner.manager.save(Orders, {
             customerId: customer.id,
-            requiredByDate: requiredDate,
+            orderName,
+            orderType,
+            serviceType,
+            orderPreference,
+            requiredByDate: new Date(requiredByDate),
             clothProvided: clothProvided,
+            fullName,
+            phoneNumber,
+            addressLine1,
+            addressLine2,
+            addressType,
+            street,
+            city,
+            district,
+            state,
+            pincode,
+            landmark,
             orderStatus: ORDER_STATUS.PENDING,
             isPaid: false,
-            orderStatusTimestamp: orderStatusTimestamp
+            orderStatusTimestamp: initialTimeStamp
         });
         
         if (!order) throw sendError("Order not created");
 
-        for (const item of orderItems) {
-            const { quantity, measurements, universalSize, itemType } = item;
-            
-            if (!itemType) throw sendError("Item type is required for each order item");
-            if (typeof quantity !== 'number' || quantity <= 0) throw sendError("Quantity must be a positive number");
-            if (quantity > 5 && !universalSize) throw sendError("Universal size is required for quantity greater than 5");
-            if (quantity > 5 && measurements) throw sendError("Measurements are not allowed for quantity greater than 5");
-            if (quantity < 5 && !measurements) throw sendError("Measurements are required for quantity less than 5");
-            if (!measurements && !universalSize) throw sendError("Measurements or universal size are required");
-
-            await queryRunner.manager.save(OrderItems, {
+        const itemToSave = orderItems.map(item => 
+            queryRunner.manager.create(OrderItems, {
                 orderId: order.id,
-                itemType: itemType,
-                quantity: quantity,
-                measurements: measurements || null,
-                universalSize: universalSize || null
-            });
-        }
+                ...item,
+            })
+        );
+
+        await queryRunner.manager.save(OrderItems, itemToSave);
+
         await queryRunner.commitTransaction();
+
         return {
             message: "Order created successfully",
             orderId: order.id
         }
     } catch(err) {
         await queryRunner.rollbackTransaction();
-        logger.error(err);
+        if (err instanceof z.ZodError) {
+            logger.warn("createOrder validation failed", { errors: err.flatten().fieldErrors });
+            throw sendError("Invalid order data provided.", 400, err.flatten().fieldErrors);
+        }
+        logger.error("Error in createOrder service:", err);
         throw err;
     } finally {
         await queryRunner.release();
