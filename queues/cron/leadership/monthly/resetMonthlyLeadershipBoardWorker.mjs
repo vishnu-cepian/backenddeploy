@@ -7,7 +7,7 @@ import { Vendors } from "../../../../entities/Vendors.mjs";
 import { deleteByPattern } from "../../../../utils/cache.mjs";
 import { Not } from "typeorm";
 import { LeaderboardHistory } from "../../../../entities/LeaderboardHistory.mjs";
-import { SERVICE_TYPE } from "../../../../types/enums/index.mjs";
+import { SERVICE_TYPE, VENDOR_STATUS } from "../../../../types/enums/index.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 
@@ -24,7 +24,7 @@ export function initResetMonthlyLeadershipBoardWorker() {
         try {
             const serviceTypes = Object.values(SERVICE_TYPE);
             const now = new Date();
-            
+
             // now.getMonth() is 0-indexed, so leave it without subtracting 1 to get previous month
 
             const previousMonthYear = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -38,7 +38,7 @@ export function initResetMonthlyLeadershipBoardWorker() {
                 // Get vendors with non-zero ratings
                 const vendors = await vendorRepo.find({ 
                     where: { 
-                        status: "VERIFIED", 
+                        status: VENDOR_STATUS.VERIFIED, 
                         serviceType, 
                         currentMonthRating: Not(0) 
                     } 
