@@ -26,6 +26,18 @@ export const Orders = new EntitySchema({
             type: "uuid",
             nullable: true
         },
+        orderName: {
+            type: "varchar",
+            nullable: false
+        },
+        orderType: {
+            type: "varchar",
+            nullable: false
+        },
+        orderPreference: {
+            type: "varchar",
+            nullable: false
+        },
         requiredByDate: {
             type: "date",
             nullable: false
@@ -33,16 +45,61 @@ export const Orders = new EntitySchema({
         clothProvided: {
             type: "boolean",
             default: false,
+        },
+        fullName: {
+            type: "varchar",
             nullable: false
+        },
+        phoneNumber: {
+            type: "varchar",
+            nullable: false
+        },
+        addressLine1: {
+            type: "varchar",
+            nullable: false
+        },
+        addressLine2: {
+            type: "varchar",
+            nullable: true
+        },
+        district: {
+            type: "varchar",
+            nullable: false
+        },
+        state: {
+            type: "varchar",
+            nullable: false
+        },
+        street: {
+            type: "varchar",
+            nullable: false
+        },
+        city: {
+            type: "varchar",
+            nullable: false
+        },
+        pincode: {
+            type: "varchar",
+            nullable: false
+        },
+        landmark: {
+            type: "varchar",
+            nullable: true
+        },
+        addressType: {
+            type: "varchar",
+            nullable: true
         },
         isPaid: {
             type: "boolean",
-            default: false,
-            nullable: false
+            default: false
         },
         isRefunded: {
             type: "boolean",
-            default: false,
+            default: false
+        },
+        serviceType: {
+            type: "varchar",
             nullable: false
         },
         orderStatus: {
