@@ -210,11 +210,12 @@ export const sendOrderToVendor = async (data) => {
         const customer = await queryRunner.manager.findOne(Customers, { where: { userId: userId }, select: { id: true } });
         if (!customer) throw sendError("Customer profile not found", 404);
 
-        const order = await queryRunner.manager.findOne(Orders, { where: { id: orderId}, select: { id: true, customerId: true, orderStatus: true } });
+        const order = await queryRunner.manager.findOne(Orders, { where: { id: orderId}, select: { id: true, customerId: true, orderStatus: true, requiredByDate: true } });
         if (!order) throw sendError("Order not found", 404);
         if (order.customerId !== customer.id) throw sendError("You are not authorized to access this order", 403);
         if (order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("This order is not pending and cannot be sent to vendors", 400);
-        
+        if (new Date(order.requiredByDate) < new Date()) throw sendError("This order's required by date is in the past", 400);
+
         // checking vendor validity and calculating available slots
         const [allAssignments, validVendors] = await Promise.all([
             queryRunner.manager.find(OrderVendors, { where: { orderId: orderId }, select: { vendorId: true, status: true } }),
