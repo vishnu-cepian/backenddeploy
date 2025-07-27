@@ -4,6 +4,10 @@ import { sendError } from "../utils/core-utils.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { CustomerAddress } from "../entities/CustomerAddress.mjs";
+import { Vendors } from "../entities/Vendors.mjs";
+import { VendorImages } from "../entities/VendorImages.mjs";
+import { getPresignedViewUrl } from "../services/s3service.mjs";
+import { cacheOrFetch } from "../utils/cache.mjs";
 
 const customerRepo = AppDataSource.getRepository(Customers);
 const customerAddressRepo = AppDataSource.getRepository(CustomerAddress);
@@ -24,6 +28,10 @@ const addCustomerAddressSchema = z.object({
     state: z.string().min(1, { message: "State is required" }),
     pincode: z.string().regex(/^\d{6}$/, { message: "Invalid pincode format" }), 
     isDefault: z.boolean().optional(),
+})
+
+const vendorIdSchema = z.object({
+    vendorId: z.string().uuid().min(1, { message: "Vendor ID is required" }),
 })
 
 //============================ CUSTOMER SERVICE FUNCTIONS ==============================================
@@ -149,5 +157,103 @@ export const makeAddressDefault = async (data) => {
         throw error;
     } finally {
         await queryRunner.release();
+    }
+}
+
+export const getVendorDetailsByVendorId = async (data) => {
+    try {
+        const { vendorId } = vendorIdSchema.parse(data);
+        return cacheOrFetch(`vendorDetailsByVendorId:${vendorId}`, async () => {
+            const vendor = await AppDataSource.getRepository(Vendors).createQueryBuilder("vendors")
+            .leftJoinAndSelect("vendors.user", "user")
+            .select([
+                "vendors.id",
+                "user.name",
+                "vendors.shopName",
+                "vendors.shopType",
+                "vendors.shopDescription",
+                "vendors.serviceType",
+                "vendors.vendorServices",
+                "vendors.city",
+                "vendors.street",
+                "vendors.location",
+                "vendors.shopImageUrlPath",
+                "vendors.vendorAvatarUrlPath",
+                "vendors.allTimeRating",
+                "vendors.allTimeReviewCount",
+                "vendors.currentMonthRating",
+                "vendors.currentMonthReviewCount",
+                "vendors.currentMonthBayesianScore",
+                "vendors.status",
+            ])
+            .where("vendors.id = :vendorId", { vendorId })
+            .getOne();
+            if (!vendor) throw sendError("Vendor profile not found", 404);
+
+            const [avatarUrl, shopImageUrl] = await Promise.all([
+                vendor.vendorAvatarUrlPath ? getPresignedViewUrl(vendor.vendorAvatarUrlPath) : null,
+                vendor.shopImageUrlPath ? getPresignedViewUrl(vendor.shopImageUrlPath) : null,
+            ]);
+
+            return {
+                vendor: {
+                    id: vendor.id,
+                    name: vendor.user.name,
+                    shopName: vendor.shopName,
+                    shopType: vendor.shopType,
+                    shopDescription: vendor.shopDescription,
+                    serviceType: vendor.serviceType,
+                    city: vendor.city,
+                    street: vendor.street,
+                    location: vendor.location,
+                    shopImageUrl: shopImageUrl,
+                    vendorAvatarUrl: avatarUrl,
+                    allTimeRating: vendor.allTimeRating,
+                    allTimeReviewCount: vendor.allTimeReviewCount,
+                    currentMonthRating: vendor.currentMonthRating,
+                    currentMonthReviewCount: vendor.currentMonthReviewCount,
+                    currentMonthBayesianScore: vendor.currentMonthBayesianScore,
+                    status: vendor.status,
+                }
+            };
+        }, 300);
+    } catch (error) {
+        logger.error("Error getting vendor details by vendor id", error);
+        throw error;
+    }
+}
+
+export const getVendorWorkImagesByVendorId = async (data) => {
+    try {
+        const { vendorId } = vendorIdSchema.parse(data);
+
+        return cacheOrFetch(`vendorWorkImagesByVendorId:${vendorId}`, async () => {
+            const vendor = await AppDataSource.getRepository(Vendors).findOne({ where: { id: vendorId }, select: { id: true } });
+            if (!vendor) throw sendError("Vendor profile not found", 404);
+
+            const vendorImages = await AppDataSource.getRepository(VendorImages).find({
+                where: { vendorId: vendor.id },
+                order: {
+                  uploadedAt: "DESC",
+                },
+            });
+
+            const workImages = await Promise.all(vendorImages.map(async (image) => {
+                const presignedUrl = await getPresignedViewUrl(image.s3Key);
+                return {
+                  ...image,
+                  presignedUrl,
+                };
+            }));
+
+            return {
+                success: true,
+                message: "Vendor work images fetched successfully",
+                workImages,
+            }
+        }, 300);
+    } catch (error) {
+        logger.error("Error getting vendor work images by vendor id", error);
+        throw error;
     }
 }

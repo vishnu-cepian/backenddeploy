@@ -90,3 +90,37 @@ export const addCustomerAddress = async (req, res, next) => {
       next(err);
     }
   };
+
+  export const getVendorDetailsByVendorId = async (req, res, next) => {
+    try {
+      const data = {
+        vendorId: req.params.vendorId
+      };
+
+      const response = await customerService.getVendorDetailsByVendorId(data);
+      if (!response) {
+        throw new Error(formatError("Vendor details not fetched", response));
+      }
+      res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (err) {
+      logger.error(err);
+      next(err);
+    }
+  } 
+
+  export const getVendorWorkImagesByVendorId = async (req, res, next) => {
+    try {
+      const data = {
+        vendorId: req.params.vendorId
+      };
+
+      const response = await customerService.getVendorWorkImagesByVendorId(data);
+      if (!response) {
+        throw new Error(formatError("Vendor work images not fetched", response));
+      }
+      res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (err) {
+      logger.error(err);
+      next(err);
+    }
+  } 
