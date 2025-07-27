@@ -218,6 +218,10 @@ export const getVendorDetailsByVendorId = async (data) => {
             };
         }, 300);
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            logger.error("Get vendor details by vendor id validation failed", { errors: error.flatten().fieldErrors });
+            throw sendError("Validation failed", 400, error.flatten().fieldErrors);
+        }
         logger.error("Error getting vendor details by vendor id", error);
         throw error;
     }
@@ -253,6 +257,10 @@ export const getVendorWorkImagesByVendorId = async (data) => {
             }
         }, 300);
     } catch (error) {
+        if (error instanceof z.ZodError) {
+            logger.error("Get vendor work images by vendor id validation failed", { errors: error.flatten().fieldErrors });
+            throw sendError("Validation failed", 400, error.flatten().fieldErrors);
+        }
         logger.error("Error getting vendor work images by vendor id", error);
         throw error;
     }
