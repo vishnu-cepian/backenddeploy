@@ -831,32 +831,28 @@ export const updateOrderStatus = async (data) => {
 // }
 
 
-// export const getOrders = async (data) => {
-//     try {
-//         const { userId } = data;
-//         const customer = await customerRepo.findOne({ where: { userId: userId } });
-//         if (!customer) {
-//             throw sendError("Customer not found");
-//         }
-//         const orders = await orderRepo.find({ where: { customerId: customer.id } });
-//         if (!orders) {
-//             throw sendError("Orders not found");
-//         }
-//         return orders;
-//     } catch (err) {
-//         logger.error(err);
-//         throw err;
-//     }
-// }
+export const getOrders = async (data) => {
+    try {
+        const { userId } = data;
+        const customer = await customerRepo.findOne({ where: { userId: userId }, select: { id: true } });
+        if (!customer) throw sendError("Customer not found");
+
+        const orders = await orderRepo.find({ where: { customerId: customer.id }, select: { id: true, orderName: true, serviceType: true, orderStatus: true, requiredByDate: true, createdAt: true } });
+        if (!orders) throw sendError("Orders not found");
+
+        return orders;
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
 
 export const getOrderById = async (data) => {
     try {
         const { orderId } = data;
         const order = await orderRepo.findOne({ where: { id: orderId } });
-        if (!order) {
-            throw sendError("Order not found");
-        }
-        console.log(order);
+        if (!order) throw sendError("Order not found");
+
         return order;
     } catch (err) {
         logger.error(err);
