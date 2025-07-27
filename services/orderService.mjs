@@ -19,6 +19,7 @@ import { calculateVendorPayoutAmount, calculateOrderAmount } from "../utils/pric
 import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
+import { pushQueue } from "../queues/notification/push/pushQueue.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -80,6 +81,11 @@ const createOrderSchema = z.object({
     orderItems: z.array(orderItemSchema).min(1, "At least one order item is required").max(5, "Cannot exceed 5 items per order"),
 });
 
+const sendOrderToVendorSchema = z.object({
+    userId: z.string().uuid(),
+    orderId: z.string().uuid(),
+    vendorIds: z.array(z.string().uuid()).min(1, "At least one vendor ID is required").max(10, "Cannot send to more than 10 vendors at a time"),
+});
 
 //========================= ORDER CREATION AND MANAGEMENT =========================
 
@@ -180,74 +186,109 @@ export const createOrder = async (data) => {
     }
 }
 
+//========================= VENDOR INTERACTIONS =========================
+
+/**
+ * Sends a pending order to a list of specified vendors for quoting.
+ * A customer has a pool of 10 "active" vendor slots per order.
+ * A slot is freed if a vendor rejects or their request expires.
+ *
+ * @param {Object} data - The raw data from the request.
+ * @returns {Promise<Object>} A success message with a list of vendors the order was sent to.
+ */
 export const sendOrderToVendor = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
+    let newVendorIdsToSend = [];
+
     try {
-        const { orderId, vendorIds } = data;
-
-        if(!Array.isArray(vendorIds) || vendorIds.length === 0) throw sendError("Vendor ids are required");
-        if (vendorIds.length > 10) throw sendError("Vendor ids cannot be greater than 10");
-
-        const order = await orderRepo.findOne({ where: { id: orderId} });
-
-        if (!order) throw sendError("Order not found");
-        if (order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order cannot be sent. Status is not valid");
-
+        const { userId, orderId, vendorIds } = sendOrderToVendorSchema.parse(data);
         const uniqueVendorIds = [...new Set(vendorIds)];
 
-        const vendors = await vendorRepo.find({
-            where: {
-                id: In(uniqueVendorIds),
-                status: "VERIFIED"
-            }
-        });
+        const customer = await queryRunner.manager.findOne(Customers, { where: { userId: userId }, select: { id: true } });
+        if (!customer) throw sendError("Customer profile not found", 404);
 
-        if (vendors.length !== uniqueVendorIds.length) throw sendError("One or more vendors are invalid.");
+        const order = await queryRunner.manager.findOne(Orders, { where: { id: orderId}, select: { id: true, customerId: true, orderStatus: true } });
+        if (!order) throw sendError("Order not found", 404);
+        if (order.customerId !== customer.id) throw sendError("You are not authorized to access this order", 403);
+        if (order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("This order is not pending and cannot be sent to vendors", 400);
+        
+        // checking vendor validity and calculating available slots
+        const [allAssignments, validVendors] = await Promise.all([
+            queryRunner.manager.find(OrderVendors, { where: { orderId: orderId }, select: { vendorId: true, status: true } }),
+            queryRunner.manager.find(Vendors, { where: { id: In(uniqueVendorIds), status: "VERIFIED" }, select: { id: true } })
+        ]);
 
-        const existingEntries = await orderVendorRepo.find({ where: { orderId: orderId } });
-      
-        const alreadySentVendorIds = existingEntries.map((entry) => entry.vendorId);
-        const newVendorIds = uniqueVendorIds.filter((id) => !alreadySentVendorIds.includes(id));
-   
-        if (alreadySentVendorIds.length + newVendorIds.length > 10) throw sendError(`Customer already sent order to ${alreadySentVendorIds.length} vendor(s) + ${newVendorIds.length} new vendor(s) exceeds maximum limit of 10`);
-        if (newVendorIds.length === 0) throw sendError("All vendors are already assigned to this order");
+        if (validVendors.length !== uniqueVendorIds.length) throw sendError("One or more selected vendors are invalid or not verified.", 400);
 
-        for (const vendorId of newVendorIds) {
-            await queryRunner.manager.save(OrderVendors, {
-                orderId: orderId,
-                vendorId: vendorId,
+        const activeAssignments = allAssignments.filter(a => 
+            a.status === ORDER_VENDOR_STATUS.PENDING || a.status === ORDER_VENDOR_STATUS.ACCEPTED
+        );
+
+        const activeSlotCount = activeAssignments.length;
+        const availableSlots = 10 - activeSlotCount;
+
+        const alreadyContactedVendorIds = new Set(allAssignments.map(a => a.vendorId));
+        newVendorIdsToSend = uniqueVendorIds.filter(id => !alreadyContactedVendorIds.has(id));
+
+        if (newVendorIdsToSend.length === 0) throw sendError("This order is already sent to all the selected vendors", 409);
+
+        if (availableSlots < newVendorIdsToSend.length) throw sendError(`You can only send this order to ${availableSlots} more vendor(s) at this time.`, 409);
+
+        const newAssignments = newVendorIdsToSend.map(vendorId => 
+            queryRunner.manager.create(OrderVendors, {
+                orderId,
+                vendorId,
                 status: ORDER_VENDOR_STATUS.PENDING
-            });
-        }
+            })
+        );
+
+        await queryRunner.manager.save(OrderVendors, newAssignments);
+    
         await queryRunner.commitTransaction();
 
-//         /*
-//         //
-//         //
-//         //
-//         //  send notification to vendors
-//         //
-//         //
-//         //
-//         //
-//         //
-//         //
-//         */
-
-        return {
-            message: `Order sent to ${newVendorIds.length} vendor(s) successfully.`,
-            sentVendorIds: newVendorIds
-        }
     } catch (err) {
         await queryRunner.rollbackTransaction();
-        logger.error(err);
+        if (err instanceof z.ZodError) {
+            logger.warn("sendOrderToVendor validation failed", { errors: err.flatten().fieldErrors });
+            throw sendError("Invalid data provided.", 400, err.flatten().fieldErrors);
+        }
+        logger.error("Error in sendOrderToVendor service:", err);
         throw err;
     } finally {
         await queryRunner.release();
     }
+
+    // SENDING PUSH NOTIFICATION TO VENDORS
+
+    if (newVendorIdsToSend.length > 0) {
+        try {
+            const vendorsToNotify = await AppDataSource.getRepository(Vendors).createQueryBuilder("vendors")
+                .leftJoin("vendors.user", "user")
+                .select(["user.pushToken"])
+                .where("vendors.id IN (:...vendorIds)", { vendorIds: newVendorIdsToSend })
+                .andWhere("user.pushToken IS NOT NULL")
+                .getRawMany();
+
+            vendorsToNotify.forEach(vendor => {
+                pushQueue.add("sendNewOrderNotification", {
+                    token: vendor.user_pushToken,
+                    title: "New Order Request",
+                    message: `You have a new order to quote. Please respond within 24 hours.`,
+                    url: "",
+                });
+            });
+        } catch (notificationError) {
+            logger.error("Failed to queue push notifications for new vendors", notificationError);
+        }
+    }
+
+    return {
+        message: `Order successfully sent to ${newVendorIdsToSend.length} new vendor(s).`,
+        sentTo: newVendorIdsToSend,
+    };
 }
 
 export const vendorOrderResponse = async (data) => {

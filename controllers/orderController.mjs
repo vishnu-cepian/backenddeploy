@@ -64,7 +64,7 @@ export const deleteOrder = async (req, res, next) => {
 
 export const sendOrderToVendor = async (req, res, next) => {
     try {
-        const data = req.body;
+        const data = {userId: req.user.id, ...req.body};
         const response = await orderService.sendOrderToVendor(data);
         if (!response) {
             throw new Error(formatError("Order not sent to vendor", response));
