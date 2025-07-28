@@ -221,19 +221,30 @@ export const signup = async (data) => {
         await queryRunner.commitTransaction();
 
         // welcome email
-        emailQueue.add('sendWelcomeEmail', {
-            email,
-            name: "Nexs",
-            template_id: "welcome_email",
-            variables: { name: name }
-        });
-            
+        if (role === ROLE.CUSTOMER) {
+            emailQueue.add('sendWelcomeEmail', {
+                email,
+                name: "Nexs",
+                template_id: "welcome_email_customer",
+                variables: { name: name }
+            });
+        } else if (role === ROLE.VENDOR) {
+            // send welcome email to vendor
+            emailQueue.add('sendWelcomeEmail', {
+                email,
+                name: "Nexs",
+                template_id: "welcome_email_vendor",
+                variables: { name: name }
+            });
+        }
         return {
             message: "User created successfully",
             status: true,
         };
     } catch (err) {
-        await queryRunner.rollbackTransaction();
+        if (queryRunner.isTransactionActive) {
+            await queryRunner.rollbackTransaction();
+        }
 
         if (err instanceof z.ZodError) {
             logger.error("Signup validation failed", { errors: err.flatten().fieldErrors });
