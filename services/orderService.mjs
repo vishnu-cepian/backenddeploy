@@ -57,6 +57,7 @@ const orderItemSchema = z.object({
 }, {
     message: "Either custom/standard measurements (for quantity <= 5) or standard measurements (for quantity > 5) must be provided.",
 });
+
 const createOrderSchema = z.object({
     userId: z.string().uuid(),
     orderName: z.string().min(1, { message: "Order name is required" }),
@@ -85,6 +86,22 @@ const sendOrderToVendorSchema = z.object({
     userId: z.string().uuid(),
     orderId: z.string().uuid(),
     vendorIds: z.array(z.string().uuid()).min(1, "At least one vendor ID is required").max(10, "Cannot send to more than 10 vendors at a time"),
+});
+
+const vendorOrderResponseSchema = z.object({
+    userId: z.string().uuid(),
+    orderVendorId: z.string().uuid(),
+    action: z.enum([ORDER_VENDOR_STATUS.ACCEPTED, ORDER_VENDOR_STATUS.REJECTED]),
+    quotedPrice: z.number().positive().optional(),
+    quotedDays: z.number().int().positive().optional(),
+    notes: z.string().max(500).optional(),
+}).refine(data => {
+    if (data.action === ORDER_VENDOR_STATUS.ACCEPTED) {
+        return data.quotedPrice !== undefined && data.quotedDays !== undefined;
+    }
+    return true;
+}, {
+    message: "Quoted price and days are required when accepting an order.",
 });
 
 //========================= ORDER CREATION AND MANAGEMENT =========================
@@ -292,54 +309,49 @@ export const sendOrderToVendor = async (data) => {
     };
 }
 
+/**
+ * Allows a vendor to accept or reject an order request.
+ * Creates a quote if the order is accepted.
+ *
+ * @param {Object} data - The raw data from the request.
+ * @returns {Promise<Object>} A success message.
+ */
 export const vendorOrderResponse = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
+    let notificationPayload = null;
+
     try {
-        const { orderId, userId, action, quotedPrice, quotedDays, notes } = data;
+        const { userId, orderVendorId, action, quotedPrice, quotedDays, notes } = vendorOrderResponseSchema.parse(data);
 
-        const vendor = await vendorRepo.findOne({ where: { userId: userId } });
-        if (!vendor) throw sendError("Vendor not found");
-        const vendorId = vendor.id;
+        const vendor = await queryRunner.manager.findOne(Vendors, { where: { userId: userId }, select: { id: true, shopName: true } });
+        if (!vendor) throw sendError("Vendor profile not found", 404);
 
-        if (!orderId) throw sendError("Order ID is required");
-        if (!action) throw sendError("Action is required");
-        if (action === "ACCEPTED" && (!quotedPrice || !quotedDays)) throw sendError("Quoted price and quoted days are required");
+       const orderVendor = await queryRunner.manager.findOne(OrderVendors, { 
+            where: { id: orderVendorId }, 
+            relations: { order: { customer: { user: true } } }
+        });
 
-        const order = await orderRepo.findOne({ where: { id: orderId } });
-        if (!order) throw sendError("Order not found");
-        if (order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is not in PENDING status");
+        if (!orderVendor) throw sendError("Order request not found", 404);
+        if (orderVendor.vendorId !== vendor.id) throw sendError("You are not authorized to respond to this order request", 403);
+        if (orderVendor.order.orderStatus !== ORDER_STATUS.PENDING)  throw sendError("This order is no longer pending", 400);
+        if (orderVendor.status !== ORDER_VENDOR_STATUS.PENDING) throw sendError("You have already responded to this order request with status: " + orderVendor.status, 409);
 
-        if(order.selectedVendorId) throw sendError("Order is already assigned to a vendor");
-        
-        const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
-        if (!orderVendor) throw sendError("Order vendor not found");
+        const hoursElapsed = (new Date() - new Date(orderVendor.createdAt)) / (1000 * 60 * 60);
+        if(hoursElapsed > 24 && orderVendor.status === ORDER_VENDOR_STATUS.PENDING) {
+            // orderVendor.status = ORDER_VENDOR_STATUS.EXPIRED;        // BACKGROUND JOB WILL UPDATE THE STATUS TO EXPIRED
+            // await orderVendorRepo.save(orderVendor);
+            throw sendError("The 24-hour response window has expired. Please contact the customer for a new request.", 403);
+        }   
 
-        const now = new Date();
-        const diff = (now.getTime() - new Date(orderVendor.createdAt).getTime()) / (1000 * 60 * 60);
-        if(diff > 24 && orderVendor.status === ORDER_VENDOR_STATUS.PENDING) {
-            orderVendor.status = ORDER_VENDOR_STATUS.EXPIRED;
-            await orderVendorRepo.save(orderVendor);
-            throw sendError("Response window expired. Order automatically marked as expired.");
-        }
-        if(orderVendor.status !== ORDER_VENDOR_STATUS.PENDING) throw sendError(`Order is in ${orderVendor.status} status`);
+        orderVendor.status = action === ORDER_VENDOR_STATUS.ACCEPTED ? ORDER_VENDOR_STATUS.ACCEPTED : ORDER_VENDOR_STATUS.REJECTED;
+        await queryRunner.manager.save(OrderVendors, orderVendor);
 
-        if(action === "REJECTED") {
-            orderVendor.status = ORDER_VENDOR_STATUS.REJECTED;
-            await orderVendorRepo.save(orderVendor);
-            return {
-                message: "Order rejected successfully",
-            }
-        }
-
-        if(action === "ACCEPTED") {
-            const existingQuote = await orderQuoteRepo.findOne({ where: { orderVendorId: orderVendor.id } });
-            if(existingQuote) throw sendError("Quote already exists");
-
-            orderVendor.status = ORDER_VENDOR_STATUS.ACCEPTED;
-            await queryRunner.manager.save(OrderVendors, orderVendor);
+        if(action === ORDER_VENDOR_STATUS.ACCEPTED) {
+            const existingQuote = await queryRunner.manager.findOne(OrderQuotes, { where: { orderVendorId: orderVendor.id }, select: { id: true } });
+            if(existingQuote) throw sendError("Quote already exists", 409);
 
             /*
             * 
@@ -368,30 +380,45 @@ export const vendorOrderResponse = async (data) => {
             });
         }
 
-        if(action !== "ACCEPTED" && action !== "REJECTED") throw sendError("Invalid action");
-
         await queryRunner.commitTransaction();
-        return {
-            message: "Order vendor response set successfully",
+        
+        const customerUser = orderVendor.order.customer.user;
+        if (customerUser && customerUser.pushToken) {
+            notificationPayload = {
+                token: customerUser.pushToken,
+                title: action === ORDER_VENDOR_STATUS.ACCEPTED ? "You Have a New Quote!" : "Order Update",
+                message: action === ORDER_VENDOR_STATUS.ACCEPTED
+                    ? `${vendor.shopName} has sent you a quote for your order. Please respond within 24 hours.`
+                    : `${vendor.shopName} is unable to take your order at this time.`,
+                orderId: orderVendor.order.id,
+                url: "",
+            };
         }
-
-//         /*
-//         //
-//         //
-//         //
-//         //  send notification to customer
-//         //
-//         //
-//         */
 
         } catch (err) {
             await queryRunner.rollbackTransaction();
-            logger.error(err);
+            if (err instanceof z.ZodError) {
+                logger.warn("vendorOrderResponse validation failed", { errors: err.flatten() });
+                throw sendError("Invalid data provided.", 400, err.flatten());
+            }
+            logger.error("Error in vendorOrderResponse service:", err);
             throw err;
         } finally {
             await queryRunner.release();
         }
-    }
+
+        if (notificationPayload) {
+            try {
+                pushQueue.add("sendVendorResponseNotification", notificationPayload);
+            } catch (notificationError) {
+                logger.error(`Failed to queue notification for order ${notificationPayload.orderId}`, notificationError);
+            }
+        }
+        
+        return {
+            message: `Order vendor response ${data.action.toLowerCase()} set successfully`,
+        }
+}
 
 export const createRazorpayOrder = async (data) => {
     try {
