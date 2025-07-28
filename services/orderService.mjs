@@ -192,7 +192,9 @@ export const createOrder = async (data) => {
             orderId: order.id
         }
     } catch(err) {
-        await queryRunner.rollbackTransaction();
+        if (queryRunner.isTransactionActive) {
+            await queryRunner.rollbackTransaction();
+        }
         if (err instanceof z.ZodError) {
             logger.warn("createOrder validation failed", { errors: err.flatten().fieldErrors });
             throw sendError("Invalid order data provided.", 400, err.flatten().fieldErrors);
@@ -269,7 +271,9 @@ export const sendOrderToVendor = async (data) => {
         await queryRunner.commitTransaction();
 
     } catch (err) {
-        await queryRunner.rollbackTransaction();
+        if (queryRunner.isTransactionActive) {
+            await queryRunner.rollbackTransaction();
+        }
         if (err instanceof z.ZodError) {
             logger.warn("sendOrderToVendor validation failed", { errors: err.flatten().fieldErrors });
             throw sendError("Invalid data provided.", 400, err.flatten().fieldErrors);
@@ -382,7 +386,7 @@ export const vendorOrderResponse = async (data) => {
         }
 
         await queryRunner.commitTransaction();
-        
+
         const customerUser = orderVendor.order.customer.user;
         if (customerUser && customerUser.pushToken) {
             notificationPayload = {
@@ -397,7 +401,9 @@ export const vendorOrderResponse = async (data) => {
         }
 
         } catch (err) {
+            if (queryRunner.isTransactionActive) {
             await queryRunner.rollbackTransaction();
+        }
             if (err instanceof z.ZodError) {
                 logger.warn("vendorOrderResponse validation failed", { errors: err.flatten() });
                 throw sendError("Invalid data provided.", 400, err.flatten());
@@ -881,9 +887,16 @@ export const getOrderById = async (data) => {
     await queryRunner.startTransaction();
 
     try {
-        const { orderId } = data;
+        const { userId, orderId } = data;
+
+        const customer = await queryRunner.manager.findOne(Customers, { where: { userId: userId }, select: { id: true } });
+        if (!customer) throw sendError("Customer not found", 404);
+
         const order = await queryRunner.manager.findOne(Orders, { where: { id: orderId } });
         if (!order) throw sendError("Order not found", 404);
+
+        if (order.customerId !== customer.id) throw sendError("You are not authorized to view this order", 403);
+
         const orderItems = await queryRunner.manager.find(OrderItems, { where: { orderId: orderId } });
         if (!orderItems) throw sendError("Order items not found", 404);
 
@@ -899,7 +912,7 @@ export const getOrderById = async (data) => {
             }
         }));
         const {fullName, phoneNumber, addressLine1, addressLine2, district, state, street, city, pincode, landmark, addressType, ...orderDetailsWithoutAddress } = order;
-        
+
         await queryRunner.commitTransaction();
         
         return {
