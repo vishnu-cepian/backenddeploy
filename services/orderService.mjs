@@ -105,6 +105,12 @@ const vendorOrderResponseSchema = z.object({
     message: "Quoted price and days are required when accepting an order.",
 });
 
+const createRazorpayOrderSchema = z.object({
+    userId: z.string().uuid(),
+    orderId: z.string().uuid(),
+    quoteId: z.string().uuid(),
+});
+
 //========================= ORDER CREATION AND MANAGEMENT =========================
 
 /**
@@ -427,46 +433,56 @@ export const vendorOrderResponse = async (data) => {
         }
 }
 
+/**
+ * Creates a Razorpay order for a customer to pay for a selected quote.
+ *
+ * @param {Object} data - The raw data from the request.
+ * @returns {Promise<Object>} The details required for the client to initiate Razorpay checkout.
+ */
 export const createRazorpayOrder = async (data) => {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
-        const { userId, orderId, quoteId } = data;
+        const { userId, orderId, quoteId } = createRazorpayOrderSchema.parse(data);
+
+        const customer = await queryRunner.manager.findOne(Customers, { where: { userId: userId }, select: { id: true } });
+        if (!customer) throw sendError("Customer profile not found", 404);
+
+        const quote = await queryRunner.manager.getRepository(OrderQuotes).createQueryBuilder("order_quotes")
+            .innerJoinAndSelect("order_quotes.orderVendor", "orderVendors")
+            .innerJoin("orderVendors.order", "orders")
+            .where("order_quotes.id = :quoteId", { quoteId: quoteId })
+            .andWhere("orders.id = :orderId", { orderId: orderId })
+            .andWhere("orders.customerId = :customerId", { customerId: customer.id })
+            .andWhere("orders.orderStatus = :orderStatus", { orderStatus: ORDER_STATUS.PENDING })
+            .andWhere("orderVendors.status = :ovStatus", { ovStatus: ORDER_VENDOR_STATUS.ACCEPTED })
+            .getOne();
+
+        if (!quote) throw sendError("This quote is not valid for payment. It may be expired, or the order may no longer be pending.", 400);
 
         const razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID,
             key_secret: process.env.RAZORPAY_KEY_SECRET
         });
-
-        const customer = await customerRepo.findOne({ where: { userId: userId } });
-        if (!customer) throw sendError("Customer not found");
-
-        const order = await orderRepo.findOne({ where: { id: orderId } });
-        if (!order || order.customerId !== customer.id) throw sendError("Order not found or doesn't belong to the customer");
-
-        if (order.selectedVendorId || order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is already assigned to a vendor or is not in PENDING status");
-
-        const quote = await orderQuoteRepo.findOne({ where: { id: quoteId } });
-        if (!quote) throw sendError("Quote not found");
-
-        const orderVendor = await orderVendorRepo.findOne({ where: { id: quote.orderVendorId } });
-        if (!orderVendor || orderVendor.status !== ORDER_VENDOR_STATUS.ACCEPTED) throw sendError("No accepted quote found for this vendor");
-
-        const quoteAgeHours = (new Date() - new Date(quote.createdAt)) / (1000 * 60 * 60);
-        if (quoteAgeHours > 24) throw sendError("Quote is expired");
      
         const razorpayOrder = await razorpay.orders.create({
-            amount: quote.finalPrice * 100,
+            amount: Math.round(quote.finalPrice * 100),
             currency: "INR",
-            receipt: quoteId,
+            receipt: quote.id,
             notes: {
                 orderId: orderId.toString(),
                 quoteId: quote.id.toString(),
-                vendorId: orderVendor.vendorId.toString(),
+                vendorId: quote.orderVendor.vendorId.toString(),
                 customerId: customer.id.toString(),
                 amount: quote.finalPrice.toString(),
             }
         })
 
-        if (!razorpayOrder) throw sendError("Failed to create Razorpay order");
+        if (!razorpayOrder) throw sendError("Failed to create payment order with Razorpay", 500);
+
+        await queryRunner.commitTransaction();
 
         return {
             message: "Razorpay order created successfully",
@@ -476,8 +492,17 @@ export const createRazorpayOrder = async (data) => {
             key_id: process.env.RAZORPAY_KEY_ID, // FOR TESTING
         }
     } catch(err) {
-        logger.error(err);
+        if (queryRunner.isTransactionActive) {
+            await queryRunner.rollbackTransaction();
+        }
+        if (err instanceof z.ZodError) {
+            logger.warn("createRazorpayOrder validation failed", { errors: err.flatten() });
+            throw sendError("Invalid data provided.", 400, err.flatten());
+        }
+        logger.error("Error in createRazorpayOrder service:", err);
         throw err;
+    } finally {
+        await queryRunner.release();
     }
 }
 
