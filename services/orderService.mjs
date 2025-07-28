@@ -20,6 +20,7 @@ import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
 import { pushQueue } from "../queues/notification/push/pushQueue.mjs";
+import { getPresignedViewUrl } from "../services/s3service.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -875,15 +876,57 @@ export const getOrders = async (data) => {
 }
 
 export const getOrderById = async (data) => {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
         const { orderId } = data;
-        const order = await orderRepo.findOne({ where: { id: orderId } });
-        if (!order) throw sendError("Order not found");
+        const order = await queryRunner.manager.findOne(Orders, { where: { id: orderId } });
+        if (!order) throw sendError("Order not found", 404);
+        const orderItems = await queryRunner.manager.find(OrderItems, { where: { orderId: orderId } });
+        if (!orderItems) throw sendError("Order items not found", 404);
 
-        return order;
+        const processedOrderItems = await Promise.all(orderItems.map(async item => {
+            const [designImage1Url, designImage2Url] = await Promise.all([
+                item.designImage1 ? getPresignedViewUrl(item.designImage1) : null,
+                item.designImage2? getPresignedViewUrl(item.designImage2) : null,
+            ]);
+            return {
+                ...item,
+                designImage1Url,
+                designImage2Url
+            }
+        }));
+        const {fullName, phoneNumber, addressLine1, addressLine2, district, state, street, city, pincode, landmark, addressType, ...orderDetailsWithoutAddress } = order;
+        
+        await queryRunner.commitTransaction();
+        
+        return {
+            order: orderDetailsWithoutAddress,
+            address: {
+                fullName,
+                phoneNumber,
+                addressLine1,
+                addressLine2,
+                district,
+                state,
+                street,
+                city,
+                pincode,
+                landmark,
+                addressType
+            },
+            orderItems: processedOrderItems
+        };
     } catch (err) {
+        if (queryRunner.isTransactionActive) {
+            await queryRunner.rollbackTransaction();
+        }
         logger.error(err);
         throw err;
+    } finally {
+        await queryRunner.release();
     }
 }
 
