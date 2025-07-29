@@ -696,6 +696,7 @@ export const getVendorResponse = async (id) => {
 export const getQuotes = async (id) => {
   try{
     const quote = await orderQuoteRepo.findOne({ where: { orderVendorId: id } });
+    if (!quote) throw sendError('Quote not found', 404);
     return quote;
   } catch (err) {
     logger.error(err);
