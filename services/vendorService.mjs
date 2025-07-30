@@ -232,7 +232,9 @@ export const completeProfile = async (data, deviceInfo) => {
       message: "Vendor profile created successfully, please wait for admin approval",
     };
   } catch (error) {
-    await queryRunner.rollbackTransaction();
+    if (queryRunner.isTransactionActive) {  
+      await queryRunner.rollbackTransaction();
+    }
 
     if (error instanceof z.ZodError) {
       logger.warn("completeProfile validation failed", { errors: error.flatten().fieldErrors });
@@ -271,6 +273,17 @@ export const getVendorDetails = async (data) => {
       .where("vendors.userId = :userId", { userId })
       .getOne();
   
+      const [avatarUrl, shopImageUrl] = await Promise.all([
+        vendor.vendorAvatarUrlPath ? getPresignedViewUrl(vendor.vendorAvatarUrlPath) : null,
+        vendor.shopImageUrlPath ? getPresignedViewUrl(vendor.shopImageUrlPath) : null,
+      ]);
+
+      const processedVendor = {
+        ...vendor,
+        vendorAvatarUrl: avatarUrl,
+        shopImageUrl: shopImageUrl,
+      };
+
       if (!vendor) {
         return {
           message: "Vendor not found",
@@ -278,7 +291,7 @@ export const getVendorDetails = async (data) => {
       }
       return {
         message: "Vendor details fetched successfully",
-        vendor,
+        vendor: processedVendor,
       };
     }, 300);
   } catch (error) {
