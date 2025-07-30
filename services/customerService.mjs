@@ -170,13 +170,11 @@ export const getVendorDetailsByVendorId = async (data) => {
                 "vendors.id",
                 "user.name",
                 "vendors.shopName",
-                "vendors.shopType",
                 "vendors.shopDescription",
                 "vendors.serviceType",
                 "vendors.vendorServices",
                 "vendors.city",
-                "vendors.street",
-                "vendors.location",
+                "vendors.state",
                 "vendors.shopImageUrlPath",
                 "vendors.vendorAvatarUrlPath",
                 "vendors.allTimeRating",
@@ -184,7 +182,6 @@ export const getVendorDetailsByVendorId = async (data) => {
                 "vendors.currentMonthRating",
                 "vendors.currentMonthReviewCount",
                 "vendors.currentMonthBayesianScore",
-                "vendors.status",
             ])
             .where("vendors.id = :vendorId", { vendorId })
             .getOne();
@@ -200,12 +197,11 @@ export const getVendorDetailsByVendorId = async (data) => {
                     id: vendor.id,
                     name: vendor.user.name,
                     shopName: vendor.shopName,
-                    shopType: vendor.shopType,
                     shopDescription: vendor.shopDescription,
                     serviceType: vendor.serviceType,
+                    vendorServices: vendor.vendorServices,
                     city: vendor.city,
-                    street: vendor.street,
-                    location: vendor.location,
+                    state: vendor.state,
                     shopImageUrl: shopImageUrl,
                     vendorAvatarUrl: avatarUrl,
                     allTimeRating: vendor.allTimeRating,
@@ -213,7 +209,6 @@ export const getVendorDetailsByVendorId = async (data) => {
                     currentMonthRating: vendor.currentMonthRating,
                     currentMonthReviewCount: vendor.currentMonthReviewCount,
                     currentMonthBayesianScore: vendor.currentMonthBayesianScore,
-                    status: vendor.status,
                 }
             };
         }, 300);

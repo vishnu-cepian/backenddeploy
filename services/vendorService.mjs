@@ -252,7 +252,7 @@ export const getVendorDetails = async (data) => {
     const { userId } = data;
     return cacheOrFetch(`vendorDetails:${userId}`, async () => {
       const vendor = await vendorRepo.createQueryBuilder("vendors")
-      .leftJoin("vendors.user", "user")
+      .leftJoinAndSelect("vendors.user", "user")
       .select([
         "vendors.id",
         "user.name",
@@ -273,26 +273,32 @@ export const getVendorDetails = async (data) => {
       .where("vendors.userId = :userId", { userId })
       .getOne();
   
-      const [avatarUrl, shopImageUrl] = await Promise.all([
-        vendor.vendorAvatarUrlPath ? getPresignedViewUrl(vendor.vendorAvatarUrlPath) : null,
-        vendor.shopImageUrlPath ? getPresignedViewUrl(vendor.shopImageUrlPath) : null,
-      ]);
+      if (!vendor) throw sendError("Vendor profile not found", 404);
 
-      const processedVendor = {
-        ...vendor,
-        vendorAvatarUrl: avatarUrl,
-        shopImageUrl: shopImageUrl,
-      };
+            const [avatarUrl, shopImageUrl] = await Promise.all([
+                vendor.vendorAvatarUrlPath ? getPresignedViewUrl(vendor.vendorAvatarUrlPath) : null,
+                vendor.shopImageUrlPath ? getPresignedViewUrl(vendor.shopImageUrlPath) : null,
+            ]);
 
-      if (!vendor) {
-        return {
-          message: "Vendor not found",
-        };
-      }
-      return {
-        message: "Vendor details fetched successfully",
-        vendor: processedVendor,
-      };
+            return {
+                vendor: {
+                    id: vendor.id,
+                    name: vendor.user.name,
+                    shopName: vendor.shopName,
+                    shopDescription: vendor.shopDescription,
+                    serviceType: vendor.serviceType,
+                    vendorServices: vendor.vendorServices,
+                    city: vendor.city,
+                    state: vendor.state,
+                    shopImageUrl: shopImageUrl,
+                    vendorAvatarUrl: avatarUrl,
+                    allTimeRating: vendor.allTimeRating,
+                    allTimeReviewCount: vendor.allTimeReviewCount,
+                    currentMonthRating: vendor.currentMonthRating,
+                    currentMonthReviewCount: vendor.currentMonthReviewCount,
+                    currentMonthBayesianScore: vendor.currentMonthBayesianScore,
+                }
+            };
     }, 300);
   } catch (error) {
     logger.error("getVendorDetails error", error);
