@@ -127,7 +127,7 @@ export const getDailyLeadershipBoard = async () => {
             })));
 
             return standings;
-        }, 86400); // 1 day // this cache will be cleared by the resetDailyLeadershipWorker
+        }, 3600); // 1 hr // this cache will be cleared by the resetDailyLeadershipWorker
     } catch (error) {
         logger.error("Error in getDailyLeadershipBoard", error);
         throw error;
