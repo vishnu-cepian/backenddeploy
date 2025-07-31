@@ -82,11 +82,11 @@ const ATTEMPT_WINDOW_SECONDS = 300; // 5 mins window for counting attempts
 //========================================JWT HELPERS=====================================================
 
 export const generateAccessToken = (payload) => {
-  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
+  return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '7d' });
 };
 
 export const generateRefreshToken = (payload) => {
-  return jwt.sign(payload, REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+  return jwt.sign(payload, REFRESH_TOKEN_SECRET, { expiresIn: '30d' });
 };
 
 //=================================REFRESH TOKEN SERVICES=====================================================
@@ -123,15 +123,19 @@ export const refreshAccessToken = async (refreshToken) => {
         if (user.refreshToken !== validatedToken) {
             await userRepository.update(
                 { id: user.id },
-                { refreshToken: null }
+                { refreshToken: null, pushToken: null }
             );
             logger.warn('Invalid refresh token detected. User ID:', userId);
             throw sendError('Authentication error. Please log in again.', 401);
         }
 
-        jwt.verify(validatedToken, REFRESH_TOKEN_SECRET, (err, decoded) => {
+        jwt.verify(validatedToken, REFRESH_TOKEN_SECRET, async (err, decoded) => {
             if (err) {
                 logger.warn('Invalid refresh token detected. User ID:', userId);
+                await userRepository.update(
+                    { id: user.id },
+                    { refreshToken: null, pushToken: null }
+                );
                 throw sendError('Authentication error. Please log in again.', 401);
             }
         });
