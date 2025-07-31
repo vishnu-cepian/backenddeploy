@@ -23,6 +23,6 @@ router.post("/verifyPhoneOtp",controllerWrapper(authController.verifyPhoneOtp, {
 router.post("/refreshToken",controllerWrapper(authController.refreshToken, { logRequest, logResponse }));   // If refresh token expired. redirect user to login
 
 router.post("/resetPassword",verifyOtpToken,controllerWrapper(authController.resetPassword, { logRequest, logResponse }));     // use PUT request
-router.post("/logout",verifyAccessToken,controllerWrapper(authController.logout, { logRequest, logResponse }));   //REFRESH TOKEN IS NEEDED FOR LOGOUT
+router.patch("/logout",verifyAccessToken,controllerWrapper(authController.logout, { logRequest, logResponse }));   //REFRESH TOKEN IS NEEDED FOR LOGOUT
 
 export default router;
