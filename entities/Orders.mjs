@@ -109,7 +109,7 @@ export const Orders = new EntitySchema({
             nullable: false
         },
         orderStatusTimestamp: {
-            type: "jsonb",
+            type: "timestamp",
             nullable: true
         },
         createdAt: {
