@@ -37,7 +37,7 @@ export const savePushToken = async (data) => {
             status: true
         }
     } catch (error) {
-        logger.error(error);
+        logger.error("Error saving push token", error);
         throw error;
     }
 }
@@ -60,7 +60,7 @@ export const getUserFcmToken = async (userId) => {
         });
         return user.pushToken;
     } catch (error) {
-        logger.error(error);
+        logger.error("Error getting user FCM token", error);
         throw error;
     }
 }
@@ -90,7 +90,7 @@ export const sendPushNotification =  async (token, title, message, url) => {
       const response = await firebaseAdmin.messaging().send(payload);
       return response;
     } catch (error) {
-      logger.error(error);
+      logger.error("Error sending push notification", error);
       throw error;
     }
 }
@@ -101,34 +101,48 @@ export const sendPushNotification =  async (token, title, message, url) => {
  * @param {string} role // User role
  * @param {string} title // Notification title
  * @param {string} body // Notification body
+ * @param {number} batchSize // Batch size
  * @returns {Promise<Object>} 
  * 
  */
-export const broadcastPushNotification = async (role, title, body) => {
+export const broadcastPushNotification = async (role, title, body, batchSize = 1000) => {
     try {
         const userRepository = AppDataSource.getRepository(User);
-        const users = await userRepository.find({
-            where: {
-                role,
-                pushToken: Not(IsNull())
-            }
-        });
-        const tokens = users.map(user => user.pushToken);
-       
+        let offset = 0;
+        let hasMoreUsers = true;
         const message = {
             notification: {
                 title,
                 body
             }
         };
-      
-        const response = await firebaseAdmin.messaging().sendEachForMulticast({   
-            tokens,
-            ...message
-        });
-        return response;
+        while (hasMoreUsers) {
+            const users = await userRepository.find({
+                where: {
+                    role,
+                    pushToken: Not(IsNull())
+                },
+                skip: offset,
+                take: batchSize
+            });
+            if (users.length === 0) {
+                hasMoreUsers = false;
+                break;
+            }
+            const tokens = users.map(user => user.pushToken);
+            const response = await firebaseAdmin.messaging().sendEachForMulticast({
+                tokens,
+                ...message
+            });
+            console.log(`Batch sent: ${response.successCount} notifications sent.`)
+            offset += batchSize;
+        }
+        return {
+            success: true,
+            message: "Push notification sent successfully"
+        }
     } catch (error) {
-        logger.error(error);
+        logger.error("Error sending push notification", error);
         throw error;
     }
 }
@@ -183,44 +197,78 @@ export const sendEmail = async (email, name, template_id, variables) => {
     if (json.status === "success") {
       return json;
     }
-    logger.error(json)
+    logger.error("Failed to send email", json);
     return {
         success: false,
         message: "Failed to send email"
     }
     } catch (error) {
-        logger.error(error);
+        logger.error("Error sending email",error);
         throw error;
     }
 }
 
 /**
- * Broadcasts an email to all users of a role
+ * Broadcasts an email to all users of a role in batches
  * 
  * @param {string} role // User role
  * @param {string} template_id // Email template ID
  * @param {Object} variables // Email variables
+ * @param {number} batchSize // Number of users to process in each batch
+ * @param {number} concurrencyLimit // Number of concurrent email sends
  * @returns {Promise<Object>} 
  * 
  */
-export const broadcastEmail = async (role, template_id, variables) => {
+export const broadcastEmail = async (role, template_id, variables, batchSize = 1000, concurrencyLimit = 10) => {
     try {
         const userRepository = AppDataSource.getRepository(User);
-        const users = await userRepository.find({
-            where: {
-                role,
-                email: Not(IsNull())
-            }
-        });
+        let offset = 0;
+        let hasMoreUsers = true;
 
-        const emailPromises = users.map(user => sendEmail(user.email, user.name, template_id, variables));
-        await Promise.all(emailPromises);
+        while (hasMoreUsers) {
+            const users = await userRepository.find({
+                where: {
+                    role,
+                    email: Not(IsNull())
+                },
+                take: batchSize,
+                skip: offset
+            });
+
+            if (users.length === 0) {
+                hasMoreUsers = false; // No more users to process
+                break;
+            }
+
+            // Create an array of email promises
+            const emailPromises = users.map(user => sendEmail(user.email, user.name, template_id, variables));
+
+            // Limit concurrency using Promise.allSettled
+            const results = [];
+            for (let i = 0; i < emailPromises.length; i += concurrencyLimit) {
+                const batch = emailPromises.slice(i, i + concurrencyLimit);
+                const batchResults = await Promise.allSettled(batch);
+                results.push(...batchResults);
+            }
+
+            // Log results or handle errors as needed
+            results.forEach((result, index) => {
+                if (result.status === 'fulfilled') {
+                    console.log(`Email sent to: ${users[index].email}`);
+                } else {
+                    console.error(`Failed to send email to: ${users[index].email}`, result.reason);
+                }
+            });
+
+            offset += batchSize; // Move to the next batch
+        }
+
         return {
             success: true,
-            message: "Email sent successfully"
-        }
+            message: "Emails sent successfully"
+        };
     } catch (error) {
-        logger.error(error);
+        logger.error("Error sending email", error);
         throw error;
     }
 }
