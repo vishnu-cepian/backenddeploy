@@ -23,6 +23,7 @@ import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
 import { pushQueue, emailQueue } from "../queues/index.mjs";
 import { getPresignedViewUrl } from "../services/s3service.mjs";
 import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
+import { Refunds } from "../entities/Refunds.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -30,6 +31,7 @@ const customerRepo = AppDataSource.getRepository(Customers);
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
 const paymentRepo = AppDataSource.getRepository(Payments);
+const refundRepo = AppDataSource.getRepository(Refunds);
 // const paymentFailureRepo = AppDataSource.getRepository(PaymentFailures);
 
 //========================= ZOD VALIDATION SCHEMAS =========================
@@ -556,14 +558,6 @@ export const createRazorpayOrder = async (data) => {
 
 
 export const refundRazorpayPayment = async (paymentId, reason) => {
-    /*
-    *
-    *
-    *   
-    *   CREATE A TABLE TO TRACK THE REFUNDS (FAILURE AND SUCCESS)
-    * 
-    * 
-    */ 
     try {
         const razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID,
@@ -573,11 +567,26 @@ export const refundRazorpayPayment = async (paymentId, reason) => {
             speed: "normal",
             notes: { reason: reason }
         });
-        console.log(refund)
+        await refundRepo.save({
+            paymentId: paymentId,
+            amount: refund.amount,
+            status: refund.status,
+            notes: reason
+        });
         logger.info(`Refunded payment ${paymentId} for reason ${reason}`);
     } catch(err) {
         logger.error(`Error refunding payment ${paymentId} for reason ${reason}`);
-        logger.error(err);
+        try{
+            await refundRepo.save({
+                paymentId: paymentId,
+                status: "FAILED",
+                notes: reason,
+                comment: err
+            });
+        } catch(err2) {
+            logger.error("Error in refundRazorpayPayment service:", err2);
+        }
+        logger.error("Error in refundRazorpayPayment service:", err);
         throw err;
     }
 }
@@ -736,13 +745,26 @@ export const handleRazorpayWebhook = async(req, res) => {
             // FAIL-SAFE: If anything in DB fails, refund to the customer.
             try {
                 const razorpay = new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET });
-                await razorpay.payments.refund(paymentId, { speed: "normal", notes: { reason: "Internal server error during order processing." } });
-                /**
-                 * 
-                 * Add to a refunds table
-                 */
+                const refund = await razorpay.payments.refund(paymentId, { speed: "normal", notes: { reason: "Internal server error during order processing." } });
+                await refundRepo.save({
+                    paymentId: paymentId,
+                    amount: refund.amount,
+                    status: refund.status,
+                    notes: "Internal server error during order processing.",
+                });
+
                 logger.info(`Successfully refunded payment ${paymentId}`);
             } catch (refundError) {
+                try{
+                    await refundRepo.save({
+                        paymentId: paymentId,
+                        status: "FAILED",
+                        notes: "Internal server error during order processing.",
+                        comment: refundError
+                    });
+                } catch(err2) {
+                    logger.error("Error in refundRazorpayPayment service:", err2);
+                }
                 logger.error(`CRITICAL: FAILED TO REFUND PAYMENT ${paymentId}. MANUAL INTERVENTION REQUIRED.`, refundError);
             }
             
