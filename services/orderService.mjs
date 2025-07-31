@@ -1,7 +1,8 @@
 import { z } from "zod";
 import crypto from "crypto";
 import Razorpay from "razorpay";
-import { In, Not } from "typeorm";
+import { In, Not, IsNull } from "typeorm";
+import QueryRunner from "typeorm";
 
 // Local imports
 import { logger } from "../utils/logger-utils.mjs";
@@ -14,13 +15,14 @@ import { Customers } from "../entities/Customers.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { Payments } from "../entities/Payments.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs";
-import { ORDER_VENDOR_STATUS, ORDER_STATUS, SERVICE_TYPE } from "../types/enums/index.mjs";
+import { ORDER_VENDOR_STATUS, ORDER_STATUS, SERVICE_TYPE, ROLE, MISC } from "../types/enums/index.mjs";
 import { calculateVendorPayoutAmount, calculateOrderAmount } from "../utils/pricing_utils.mjs";
 import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
-import { pushQueue } from "../queues/notification/push/pushQueue.mjs";
+import { pushQueue, emailQueue } from "../queues/index.mjs";
 import { getPresignedViewUrl } from "../services/s3service.mjs";
+import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -111,6 +113,32 @@ const createRazorpayOrderSchema = z.object({
     quoteId: z.string().uuid(),
 });
 
+//=================== HELPER FUNCTIONS ====================
+
+/**
+ * A reusable helper to create an entry in the OrderStatusTimeline table.
+ * Must be called within an active transaction.
+ * @param {QueryRunner} queryRunner - The active TypeORM query runner.
+ * @param {string} orderId - The ID of the order.
+ * @param {string} newStatus - The new status of the order.
+ * @param {string|null} previousStatus - The previous status of the order.
+ * @param {string} changedById - The ID of the user/system making the change.
+ * @param {string} changedByRole - The role of the user/system.
+ * @param {string|null} notes - Optional notes about the status change.
+ */
+
+const createTimelineEntry = async (queryRunner, orderId, previousStatus, newStatus, changedById, changedByRole, notes = null) => {
+    const timelineEntry = queryRunner.manager.create(OrderStatusTimeline, {
+        orderId,
+        previousStatus,
+        newStatus,
+        changedBy: changedById,
+        changedByRole,
+        notes,
+    });
+    await queryRunner.manager.save(OrderStatusTimeline, timelineEntry);
+};
+
 //========================= ORDER CREATION AND MANAGEMENT =========================
 
 /**
@@ -132,29 +160,38 @@ export const createOrder = async (data) => {
         const customer = await queryRunner.manager.findOne(Customers, { where: { userId: userId }, select: { id: true} });
         if (!customer) throw sendError("Customer profile not found", 404);
 
-        const initialTimeStamp = {
-            paidAt: null,
-            orderConfirmedAt: null,
-            orderInProgressAt: null,
-            taskCompletedAt: null,
-            completedAt: null,
-            cancelled: false,           // if cancelled
-            cancelledAt: null,
-            refundRequestedAt: null,
-            refundProcessedAt: null,
-            ...(clothProvided ? {
-                readyForPickupFromCustomer: false, // a flag, set true when assigned for pickup
-                outForPickupFromCustomerAt: null, // timestamp when delivery partner picks it
-                itemPickedFromCustomerAt: null, // timestamp when delivery partner picks it
-                itemDeliveredToVendorAt: null, // timestamp when vendor receives it
-                vendorAcknowledgedItemAt: null, // vendor confirms receipt
-            } : {}),
-            readyForPickupFromVendor: false, // a flag, set true when vendor marks ready
-            outForPickupFromVendorAt: null, // timestamp when delivery partner picks it
-            itemPickedFromVendorAt: null, // delivery partner picks it up
-            itemDeliveredToCustomerAt: null, // customer receives it
+        /**
+         * 
+         * 
+         * CHANGE THE ORDERsTATUS TIMESTAMP FROM JSONB TO TIMESTAMP
+         * 
+         * 
+         * 
+         * 
+         */
+        // const initialTimeStamp = {
+        //     paidAt: null,
+        //     orderConfirmedAt: null,
+        //     orderInProgressAt: null,
+        //     taskCompletedAt: null,
+        //     completedAt: null,
+        //     cancelled: false,           // if cancelled
+        //     cancelledAt: null,
+        //     refundRequestedAt: null,
+        //     refundProcessedAt: null,
+        //     ...(clothProvided ? {
+        //         readyForPickupFromCustomer: false, // a flag, set true when assigned for pickup
+        //         outForPickupFromCustomerAt: null, // timestamp when delivery partner picks it
+        //         itemPickedFromCustomerAt: null, // timestamp when delivery partner picks it
+        //         itemDeliveredToVendorAt: null, // timestamp when vendor receives it
+        //         vendorAcknowledgedItemAt: null, // vendor confirms receipt
+        //     } : {}),
+        //     readyForPickupFromVendor: false, // a flag, set true when vendor marks ready
+        //     outForPickupFromVendorAt: null, // timestamp when delivery partner picks it
+        //     itemPickedFromVendorAt: null, // delivery partner picks it up
+        //     itemDeliveredToCustomerAt: null, // customer receives it
 
-        };
+        // };
 
         const order = await queryRunner.manager.save(Orders, {
             customerId: customer.id,
@@ -177,10 +214,21 @@ export const createOrder = async (data) => {
             landmark,
             orderStatus: ORDER_STATUS.PENDING,
             isPaid: false,
-            orderStatusTimestamp: initialTimeStamp
+            orderStatusTimestamp: new Date()
         });
         
         if (!order) throw sendError("Order not created");
+
+        // Create the first entry in the timeline table
+        await createTimelineEntry(
+            queryRunner,
+            order.id,
+            null, // No previous status
+            ORDER_STATUS.PENDING,
+            userId,
+            ROLE.CUSTOMER,
+            'Order created by customer.'
+        );
 
         const itemToSave = orderItems.map(item => 
             queryRunner.manager.create(OrderItems, {
@@ -534,166 +582,229 @@ export const refundRazorpayPayment = async (paymentId, reason) => {
     }
 }
 
-/*
-*   CODE IS NOT COMPLETED AND TESTED
-*   
-*/
-export const handleRazorpayWebhook = async (req, res) => {
-    const queryRunner = AppDataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+/**
+ * Handles incoming webhooks from Razorpay to process payment events.
+ * This function is secure, idempotent, and transactional.
+ *
+ * @param {Object} req 
+ * @param {Object} res 
+ */
+export const handleRazorpayWebhook = async(req, res) => {
+    
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const signature = req.headers["x-razorpay-signature"];
+    const body = JSON.stringify(req.body);
 
-    let paymentId = null;
-    let event = null;
+    const expectedSignature = crypto.createHmac("sha256", secret).update(body).digest("hex");
+    if (signature !== expectedSignature) {
+        logger.warn("Invalid Razorpay webhook signature received.");
+        return res.status(400).json({ status: "Signature mismatch" });
+    }
 
-    try {
-        const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const { event, payload } = req.body;
+    const paymentEntity = payload.payment.entity;
+    const paymentId = paymentEntity.id;
+    let notificationDetails = null;
 
-        const signature = req.headers["x-razorpay-signature"];
-        const body = JSON.stringify(req.body);
+    if (event === 'payment.failed') {
+        try {
+            const { orderId, quoteId, customerId } = paymentEntity.notes;
+            await AppDataSource.getRepository(PaymentFailures).save({
+                orderId, quoteId, customerId,
+                paymentId: paymentId,
+                amount: paymentEntity.amount / 100,
+                reason: paymentEntity.error_description || "Unknown reason",
+                status: paymentEntity.status,
+                timestamp: new Date(paymentEntity.created_at * 1000),
+            });
+            logger.info(`Recorded failed payment: ${paymentId}`);
+            return res.status(200).json({ status: "Received" });
+        } catch (err) {
+            logger.error(`Error saving payment failure for ${paymentId}`, err);
+            return res.status(500).json({ status: "Error" });
+        }
+    }
 
-        const expectedSignature = crypto.createHmac("sha256", secret).update(body).digest("hex");
+    if (event === 'payment.captured') {
 
-        if (signature !== expectedSignature) throw sendError("Invalid signature");
+        const paymentExists = await AppDataSource.getRepository(Payments).exists({ where: { razorpayPaymentId: paymentId } });
+        if (paymentExists) {
+            logger.info(`Duplicate webhook for already processed payment: ${paymentId}`);
+            return res.status(200).json({ status: "Already processed" });
+        }
 
-        event = req.body.event;
-        paymentId = req.body.payload.payment.entity.id;
+        const queryRunner = AppDataSource.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
 
-        if (event === "payment.captured") {
-            const payment = req.body.payload.payment.entity;
-            const { orderId, quoteId, vendorId, customerId, amount } = payment.notes;
-            const order = await orderRepo.findOne({ where: { id: orderId } });
-            const quote = await orderQuoteRepo.findOne({ where: { id: quoteId } });
+        try {
+            const { orderId, quoteId, vendorId, customerId } = paymentEntity.notes;
 
-            if(!order || !quote || order.selectedVendorId || order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is already assigned to a vendor or is not in PENDING status");
+            // ATOMIC VALIDATION: Fetch and lock the order and quote for update
+            const order = await queryRunner.manager.findOne(Orders, {
+                where: { id: orderId, orderStatus: ORDER_STATUS.PENDING },
+                lock: { mode: "pessimistic_write" } // Lock the row to prevent race conditions
+            });
+            const quote = await queryRunner.manager.findOne(OrderQuotes, { where: { id: quoteId } });
 
-            const existingPayment = await paymentRepo.findOne({ where: { razorpayPaymentId: payment.id } });
-            if (existingPayment) {
-                logger.info(`Duplicate webhook received for payment ${payment.id}`);
-                return res.status(200).json({
-                    message: "Payment already exists",
-                });
+            if (!order || !quote || (paymentEntity.amount !== Math.round(quote.finalPrice * 100))) {
+                throw new Error("Validation failed: Order/quote mismatch or amount incorrect.");
             }
 
-            if (Number(amount) !== Number(quote.finalPrice)) throw sendError("Payment amount does not match the order amount");
-
-            const paymentDate = new Date(payment.created_at * 1000);
-
-            const paymentDetails = await queryRunner.manager.save(Payments, {
-                orderId: orderId,
-                vendorId: vendorId,
-                customerId: customerId,
-                quoteId: quoteId,
-                razorpayPaymentId: payment.id,
-                paymentAmount: amount,
-                paymentCurrency: payment.currency,
-                paymentMethod: payment.method,
-                paymentStatus: payment.status,
-                paymentDate: paymentDate
+            const paymentDate = new Date(paymentEntity.created_at * 1000);
+            const payment = queryRunner.manager.create(Payments, {
+                orderId, 
+                vendorId, 
+                customerId, 
+                quoteId,
+                razorpayPaymentId: paymentId,
+                paymentAmount: paymentEntity.amount / 100,
+                paymentCurrency: paymentEntity.currency,
+                paymentMethod: paymentEntity.method,
+                paymentStatus: paymentEntity.status,
+                paymentDate,
             });
-
-            order.selectedVendorId = vendorId;
-            order.finalQuoteId = quoteId;
-            order.paymentId = paymentDetails.id;
-            order.orderStatus = ORDER_STATUS.ORDER_CONFIRMED;
-            order.isPaid = true;  
-            // UPDATE THE VENDOR ADDRESS ALSO 
-            order.orderStatusTimestamp.paidAt = paymentDate.toString();
-            order.orderStatusTimestamp.orderConfirmedAt = paymentDate.toString();
+            await queryRunner.manager.save(Payments, payment);
 
             quote.isProcessed = true;
             await queryRunner.manager.save(OrderQuotes, quote);
 
-            const {address: vendorAddress} = await vendorRepo.findOne({ where: { id: vendorId }, select: { address: true } });
+            let previousStatus;
 
-            if(order.clothProvided === true) {
-                order.orderStatusTimestamp.readyForPickupFromCustomer = true;
+            previousStatus = order.orderStatus;
+            order.selectedVendorId = vendorId;
+            order.finalQuoteId = quoteId;
+            order.paymentId = payment.id;
+            order.isPaid = true;
+            order.orderStatus = ORDER_STATUS.ORDER_CONFIRMED;
 
+            await createTimelineEntry(queryRunner, orderId, previousStatus, ORDER_STATUS.ORDER_CONFIRMED, MISC.PAYMENT_GATEWAY, ROLE.SYSTEM, `Payment successful. Razorpay ID: ${paymentId}`);
+
+            previousStatus = order.orderStatus;
+
+            if (order.clothProvided) {
+                // Create Outbox event for 2-way delivery
                 // GENERATE DELIVERY TRACKING ID 
                 // IF THE DELIVERY SERVICE NEED TO AVOID CHARACTERS, THEN ADD AN RANDOM/SEQUENTIAL NUMBER BY SETTING THE FIELD AS UNIQUE
-                const deliveryTracking = await queryRunner.manager.save(DeliveryTracking, {
-                    orderId: orderId,
-                    deliveryType: "TO_VENDOR",
-                    from: "CUSTOMER",
-                    to: "VENDOR",
+                const deliveryTracking = await queryRunner.manager.save(DeliveryTracking, { 
+                    orderId, 
+                    deliveryType: "TO_VENDOR", 
+                    from: "CUSTOMER", 
+                    to: "VENDOR", 
                     status: "PENDING",
                     createdAt: new Date(),
                     updatedAt: new Date()
-                })
+                });
 
                 // INITIATE CLOTH PICKUP FROM CUSTOMER, use OUTBOX pattern as this block is in a transaction
+                await queryRunner.manager.save(Outbox, { 
+                    eventType: "INITIATE_PICKUP", 
+                    payload: { 
+                        deliveryTrackingId: 
+                        deliveryTracking.id, 
+                        orderId 
+                    } ,
+                    status: "PENDING",
+                    createdAt: new Date()
+                });
 
-                await queryRunner.manager.save(Outbox, {
-                eventType: "SEND_ITEM_PICKUP",
-                payload: {
-                      deliveryTrackingId: deliveryTracking.id, //deliveryTrackingId or order_id depends on delivery service
-                      orderId,
-                      vendorId,
-                      customerId,
-                      pickupAddress: "test address 1",
-                      deliveryAddress: vendorAddress,
-                 },
-                 status: "PENDING",
-                 createdAt: new Date()
-                })
+                await createTimelineEntry(queryRunner, orderId, previousStatus, ORDER_STATUS.ITEM_PICKUP_FROM_CUSTOMER_SCHEDULED, MISC.LOGISTICS, ROLE.SYSTEM, "Pickup from customer scheduled");
+                order.orderStatus = ORDER_STATUS.ITEM_PICKUP_FROM_CUSTOMER_SCHEDULED;
             } else {
-                order.orderStatusTimestamp.orderInProgressAt = paymentDate.toString();
                 order.orderStatus = ORDER_STATUS.IN_PROGRESS;
-                // send notification to vendor 
+                await createTimelineEntry(queryRunner, orderId, previousStatus, ORDER_STATUS.IN_PROGRESS, MISC.PAYMENT_GATEWAY, ROLE.SYSTEM, "Order process started")
             }
-
-
+            order.orderStatusTimestamp = paymentDate.toISOString();
             await queryRunner.manager.save(Orders, order);
 
-            const orderVendor = await orderVendorRepo.findOne({ where: { orderId: orderId, vendorId: vendorId } });
-            if (!orderVendor) throw sendError("Order vendor not found");
-
-            orderVendor.status = ORDER_VENDOR_STATUS.FINALIZED;
-            await queryRunner.manager.save(OrderVendors, orderVendor);
-
-            // freeze other vendors
-            await queryRunner.manager.update(OrderVendors, {
-                orderId,
-                vendorId: Not(vendorId)
-            }, {
-                status: ORDER_VENDOR_STATUS.FROZEN
-            });
+            await queryRunner.manager.update(OrderVendors, { orderId, vendorId }, { status: ORDER_VENDOR_STATUS.FINALIZED });
+            await queryRunner.manager.update(OrderVendors, { orderId, vendorId: Not(vendorId) }, { status: ORDER_VENDOR_STATUS.FROZEN });
 
             await queryRunner.commitTransaction();
-            res.status(200).json({
-                message: "Order confirmed successfully",
-            })
-        } else if (event === "payment.failed") {
-            const payment = req.body.payload.payment.entity;
-            const { orderId, quoteId, customerId, amount } = payment.notes;
+            logger.info(`Successfully processed payment and updated order: ${paymentId}`);
             
-            await queryRunner.manager.save(PaymentFailures, {
-                orderId: orderId,
-                quoteId: quoteId,
-                customerId: customerId,
-                paymentId: payment.id,
-                amount: amount,
-                reason: payment.error_description || "unknown",
-                status: payment.status,
-                timestamp: new Date(payment.created_at * 1000),
-            });
-            await queryRunner.commitTransaction();
-            // send notification to customer
+            notificationDetails = { orderId, vendorId, customerId };
 
-            return res.status(200).json({
-                message: "Payment failed recorded",
-            })
+            res.status(200).json({ status: "Success" });
+
+        } catch (err) {
+            if (queryRunner.isTransactionActive) {
+                await queryRunner.rollbackTransaction();
+            }
+            logger.error(`Webhook processing failed for payment ${paymentId}. Initiating refund.`, err);
+            
+            // FAIL-SAFE: If anything in DB fails, refund to the customer.
+            try {
+                const razorpay = new Razorpay({ key_id: process.env.RAZORPAY_KEY_ID, key_secret: process.env.RAZORPAY_KEY_SECRET });
+                await razorpay.payments.refund(paymentId, { speed: "normal", notes: { reason: "Internal server error during order processing." } });
+                /**
+                 * 
+                 * Add to a refunds table
+                 */
+                logger.info(`Successfully refunded payment ${paymentId}`);
+            } catch (refundError) {
+                logger.error(`CRITICAL: FAILED TO REFUND PAYMENT ${paymentId}. MANUAL INTERVENTION REQUIRED.`, refundError);
+            }
+            
+            res.status(500).json({ status: "Error processing webhook" });
+        } finally {
+            await queryRunner.release();
         }
-    } catch(err) {
-        console.log(paymentId, event)
-        if (paymentId && event === "payment.captured") {
-            await refundRazorpayPayment(paymentId, "Order Validation failed after payment");
+    } else {
+        res.status(200).json({ status: "Webhook received" });
+    }
+
+    // Queue notifications for customer and vendor about successful payment
+
+    if (notificationDetails) {
+        try {
+            const { orderId, vendorId, customerId } = notificationDetails;
+
+            const customerDetails = await AppDataSource.getRepository(Customers).findOne({ where: { id: customerId }, relations: { user: true } });
+            
+            const vendorDetails = await AppDataSource.getRepository(Vendors).findOne({ where: { id: vendorId }, relations: { user: true } });
+
+            // Customer Notifications
+            if (customerDetails?.user) {
+                if (customerDetails.user.pushToken) {
+                    pushQueue.add('paymentSuccessCustomer', {
+                        token: customerDetails.user.pushToken,
+                        title: "Order Confirmed!",
+                        message: `Your payment for order #${orderId.substring(0, 8)} was successful.`,
+                        url: "/orders",
+                        data: { orderId, type: 'PAYMENT_SUCCESS' }
+                    });
+                }
+                emailQueue.add('paymentSuccessCustomerEmail', {
+                    email: customerDetails.user.email,
+                    name: customerDetails.user.name,
+                    template_id: 'customer_order_confirmation',
+                    variables: { orderId, paymentId }
+                });
+            }
+
+            // Vendor Notifications
+            if (vendorDetails?.user) {
+                if (vendorDetails.user.pushToken) {
+                    pushQueue.add('newOrderForVendor', {
+                        token: vendorDetails.user.pushToken,
+                        title: "You Have a New Order!",
+                        message: `You have received a new paid order: #${orderId.substring(0, 8)}.`,
+                        url: "/orders",
+                        data: { orderId, type: 'NEW_PAID_ORDER' }
+                    });
+                }
+                emailQueue.add('newOrderForVendorEmail', {
+                    email: vendorDetails.user.email,
+                    name: vendorDetails.user.name,
+                    template_id: 'vendor_new_order_alert',
+                    variables: { orderId }
+                });
+            }
+
+        } catch (notificationError) {
+            logger.error(`Failed to queue notifications for order ${notificationDetails.orderId}`, notificationError);
         }
-        await queryRunner.rollbackTransaction();
-        logger.error(err);
-        throw err;
-    } finally {
-        await queryRunner.release();
     }
 }
 
@@ -830,65 +941,6 @@ export const updateOrderStatus = async (data) => {
         await queryRunner.release();
     }
 }
-
-// export const updateOrderStatus = async (data) => {
-//     try {
-//         const { orderId, status } = data;
-
-//         if (!orderId || !status) throw sendError("Order ID and status are required");
-
-//         const order = await orderRepo.findOne({ where: { id: orderId } });
-//         if (!order) throw sendError("Order not found");
-        
-//         switch (order.orderStatus) {
-//             case ORDER_STATUS.ORDER_CONFIRMED:
-//                 if (status === ORDER_STATUS.IN_PROGRESS) {
-//                     order.orderStatus = ORDER_STATUS.IN_PROGRESS;
-//                     await orderRepo.save(order);
-
-//                     // notify 
-
-//                     return {
-//                         message: "Order status updated to IN_PROGRESS successfully",
-//                         newStatus: ORDER_STATUS.IN_PROGRESS
-//                     }
-//                 }
-//                 break;
-
-//             case ORDER_STATUS.IN_PROGRESS:
-//                 if (status === ORDER_STATUS.READY_FOR_PICKUP) {
-//                     order.orderStatus = ORDER_STATUS.READY_FOR_PICKUP;
-//                     await orderRepo.save(order);
-
-//                     // notify 
-
-//                     return {
-//                         message: "Order status updated to READY_FOR_PICKUP successfully",
-//                         newStatus: ORDER_STATUS.READY_FOR_PICKUP
-//                     }
-//                 }
-//                 break;
-//             default:
-//                 throw sendError(`Invalid current order status: ${order.orderStatus}`);
-//         }
-//         throw sendError(`Invalid status transition from ${order.orderStatus} to ${status}`);
-
-
-
-//         ////    IF WEBHOOK AVAILABLE FOR DELIVERY THEN USE ORDER_STATUS.COMPLTED $ ORDER_STATUS.OUT_FOR_DELIVERY  IN THAT
-    
-    
-    
-    
-    
-    
-    
-//     } catch (err) {
-//         logger.error(err);
-//         throw err;
-//     }
-// }
-
 
 export const getOrders = async (data) => {
     try {
