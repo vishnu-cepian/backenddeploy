@@ -22,6 +22,7 @@ import { Outbox } from '../entities/Outbox.mjs';
 import { DeliveryTracking } from '../entities/DeliveryTracking.mjs';
 import { CustomerAddress } from '../entities/CustomerAddress.mjs';
 import { OrderStatusTimeline } from '../entities/orderStatusTimeline.mjs';
+import { Refunds } from '../entities/Refunds.mjs';
 import 'dotenv/config'
 
 export const AppDataSource = new DataSource({
@@ -37,7 +38,7 @@ export const AppDataSource = new DataSource({
     entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, 
         OrderVendors, ChatRoom, ChatMessage, VendorAudit, VendorImages, OrderQuotes, 
         Payments, Rating, LeaderboardHistory, PaymentFailures, QueueLogs, Outbox, 
-        DeliveryTracking, CustomerAddress, OrderStatusTimeline],
+        DeliveryTracking, CustomerAddress, OrderStatusTimeline, Refunds],
 
 //     ssl: true,
 //     extra: {
