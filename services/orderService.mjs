@@ -26,13 +26,9 @@ import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
 import { Refunds } from "../entities/Refunds.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
-const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
 const customerRepo = AppDataSource.getRepository(Customers);
 const vendorRepo = AppDataSource.getRepository(Vendors);
-const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
-const paymentRepo = AppDataSource.getRepository(Payments);
 const refundRepo = AppDataSource.getRepository(Refunds);
-// const paymentFailureRepo = AppDataSource.getRepository(PaymentFailures);
 
 //========================= ZOD VALIDATION SCHEMAS =========================
 
@@ -161,39 +157,6 @@ export const createOrder = async (data) => {
 
         const customer = await queryRunner.manager.findOne(Customers, { where: { userId: userId }, select: { id: true} });
         if (!customer) throw sendError("Customer profile not found", 404);
-
-        /**
-         * 
-         * 
-         * CHANGE THE ORDERsTATUS TIMESTAMP FROM JSONB TO TIMESTAMP
-         * 
-         * 
-         * 
-         * 
-         */
-        // const initialTimeStamp = {
-        //     paidAt: null,
-        //     orderConfirmedAt: null,
-        //     orderInProgressAt: null,
-        //     taskCompletedAt: null,
-        //     completedAt: null,
-        //     cancelled: false,           // if cancelled
-        //     cancelledAt: null,
-        //     refundRequestedAt: null,
-        //     refundProcessedAt: null,
-        //     ...(clothProvided ? {
-        //         readyForPickupFromCustomer: false, // a flag, set true when assigned for pickup
-        //         outForPickupFromCustomerAt: null, // timestamp when delivery partner picks it
-        //         itemPickedFromCustomerAt: null, // timestamp when delivery partner picks it
-        //         itemDeliveredToVendorAt: null, // timestamp when vendor receives it
-        //         vendorAcknowledgedItemAt: null, // vendor confirms receipt
-        //     } : {}),
-        //     readyForPickupFromVendor: false, // a flag, set true when vendor marks ready
-        //     outForPickupFromVendorAt: null, // timestamp when delivery partner picks it
-        //     itemPickedFromVendorAt: null, // delivery partner picks it up
-        //     itemDeliveredToCustomerAt: null, // customer receives it
-
-        // };
 
         const order = await queryRunner.manager.save(Orders, {
             customerId: customer.id,
@@ -556,7 +519,13 @@ export const createRazorpayOrder = async (data) => {
     }
 }
 
-
+/**
+ * Refunds a payment from Razorpay.
+ * 
+ * @param {string} paymentId - The ID of the payment to refund.
+ * @param {string} reason - The reason for the refund.
+ * @returns {Promise<void>}
+ */
 export const refundRazorpayPayment = async (paymentId, reason) => {
     try {
         const razorpay = new Razorpay({
