@@ -17,5 +17,7 @@ router.patch("/deleteShopImageUrl", verifyAccessToken, controllerWrapper(vendorC
 router.post("/saveWorkImageUrl", verifyAccessToken, controllerWrapper(vendorController.saveWorkImageUrl, { logRequest: true, logResponse: true })); 
 router.get("/getVendorWorkImages", verifyAccessToken, controllerWrapper(vendorController.getVendorWorkImages, { logRequest: true, logResponse: true })); 
 router.delete("/deleteVendorWorkImage/:s3Key", verifyAccessToken, controllerWrapper(vendorController.deleteVendorWorkImage, { logRequest: true, logResponse: true })); 
+router.get("/getVendorOrders/:page/:limit", verifyAccessToken, controllerWrapper(vendorController.getVendorOrders, { logRequest: true, logResponse: true}));
+router.get("/getVendorOrderById/:orderVendorId", verifyAccessToken, controllerWrapper(vendorController.getVendorOrderById, { logRequest: true, logResponse: true}));
 
 export default router;

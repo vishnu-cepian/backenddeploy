@@ -8,12 +8,18 @@ import { OtpPhone } from "../entities/OtpPhone.mjs";
 import { VendorImages } from "../entities/VendorImages.mjs";
 import { getPresignedViewUrl, deleteFile } from "./s3service.mjs";
 import { cacheOrFetch, delCache } from "../utils/cache.mjs";
-import { VENDOR_STATUS, SHOP_TYPE, OWNERSHIP_TYPE, SERVICE_TYPE } from "../types/enums/index.mjs";
+import { VENDOR_STATUS, SHOP_TYPE, OWNERSHIP_TYPE, SERVICE_TYPE, ORDER_VENDOR_STATUS } from "../types/enums/index.mjs";
 import { redis } from "../config/redis-config.mjs";
 import { emailQueue } from "../queues/notification/email/emailQueue.mjs";
+import { OrderVendors } from "../entities/OrderVendors.mjs";
+import { Orders } from "../entities/Orders.mjs";
+import { OrderItems } from "../entities/OrderItems.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const vendorImagesRepo = AppDataSource.getRepository(VendorImages);
+const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
+const orderRepo = AppDataSource.getRepository(Orders);
+const orderItemsRepo = AppDataSource.getRepository(OrderItems);
 
 //============================ ZOD VALIDATION SCHEMAS ==============================================
 /**
@@ -50,6 +56,13 @@ const completeProfileSchema = z.object({
   ownershipType: z.string().optional(),
   vendorServices: z.string().optional(),
   shopDocumentUrlPath: z.string().optional(),
+});
+
+const getVendorOrdersSchema = z.object({
+  userId: z.string().uuid(),
+  page: z.number().int().min(1).default(1),
+  limit: z.number().int().min(1).max(50).default(10),
+  status: z.enum([...Object.values(ORDER_VENDOR_STATUS)]),
 });
 
 //============================ CONSTANTS ==============================================
@@ -626,6 +639,99 @@ export const deleteVendorWorkImage = async (data) => {
     };
   } catch (error) {
     logger.error("deleteVendorWorkImage error", error);
+    throw error;
+  }
+}
+
+//=================== VENDOR ORDER MANAGEMENT ====================
+
+/**
+ * Get the vendor orders.
+ * @param {Object} data - The data containing the user id, page, and limit.
+ * @param {string} data.status - (query) The status of the orders to get.
+ * @returns {Promise<Object>} - A paginated list of the vendor's orders.
+ */
+export const getVendorOrders = async (data) => {
+  try {
+    const { userId, page, limit, status } = getVendorOrdersSchema.parse(data);
+    const offset = (page - 1) * limit;
+
+    const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: {id: true}});
+
+    if (!vendor) throw sendError('Vendor Profile not found', 400);
+
+    const orders = await orderVendorRepo.find({
+      where: {
+        vendorId: vendor.id,
+        status: status,
+      },
+      order: {
+        createdAt: "DESC",
+      },
+      skip: offset,
+      take: limit,
+    });
+
+    if (!orders) throw sendError('Orders not found', 400);
+
+    return {
+      orders,
+      pagination: {
+        currentPage: page,
+        hasMore: orders.length === limit,
+        nextPage: orders.length === limit ? page + 1 : null,
+    },
+    }
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      logger.warn("getVendorOrders validation failed", { errors: error.flatten().fieldErrors });
+      throw sendError("Invalid parameters provided.", 400, error.flatten().fieldErrors);
+    }
+    logger.error("getVendorOrders error", error);
+    throw error;
+  }
+}
+
+/**
+ * Get the vendor order by id.
+ * @param {Object} data - The data containing the user id and order vendor id.
+ * @returns {Promise<Object>} - The result of the get.
+ */
+export const getVendorOrderById = async (data) => {
+  try {
+    const { userId, orderVendorId } = data;
+
+    const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: {id: true}});
+    if (!vendor) throw sendError('Vendor Profile not found', 400);
+
+    const orderVendor = await orderVendorRepo.findOne({ where: { id: orderVendorId, vendorId: vendor.id }});
+    if (!orderVendor) throw sendError('Order not found', 400);
+
+    const order = await orderRepo.findOne({ where: { id: orderVendor.orderId }, 
+      select: {id: true, customerId: true, orderName: true, orderType: true, serviceType: true, orderPreference: true, clothProvided: true, orderStatus: true, orderStatusTimestamp: true, requiredByDate: true, createdAt: true}
+    });
+    if (!order) throw sendError('Order not found', 400);
+
+    const orderItems = await orderItemsRepo.find({ where: { orderId: order.id } });
+    if (!orderItems) throw sendError("Order items not found", 404);
+
+    const processedOrderItems = await Promise.all(orderItems.map(async item => {
+        const [designImage1Url, designImage2Url] = await Promise.all([
+            item.designImage1 ? getPresignedViewUrl(item.designImage1) : null,
+            item.designImage2? getPresignedViewUrl(item.designImage2) : null,
+        ]);
+        return {
+            ...item,
+            designImage1Url,
+            designImage2Url
+        }
+    }));
+    return {
+      order,
+      orderItems: processedOrderItems
+    };  
+  } catch (error) {
+    logger.error("getVendorOrderById error", error);
     throw error;
   }
 }

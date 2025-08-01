@@ -221,3 +221,41 @@ export const deleteVendorWorkImage = async (req, res, next) => {
     next(err);
   }
 };
+
+export const getVendorOrders = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+      page: parseInt(req.params.page),
+      limit: parseInt(req.params.limit),
+      status: req.query.status,
+    }
+
+    const response = await vendorService.getVendorOrders(data);
+    if (!response) {
+      throw new Error(formatError("Vendor orders not found", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+}
+
+export const getVendorOrderById = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+      orderVendorId: req.params.orderVendorId,
+    }
+
+    const response = await vendorService.getVendorOrderById(data);
+    if (!response) {
+      throw new Error(formatError("Vendor order not found", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+}
