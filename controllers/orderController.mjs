@@ -20,33 +20,33 @@ export const createOrder = async (req, res, next) => {
     }
 };
 
-export const getOrders = async (req, res, next) => {
-    try {
-        const data = { userId: req.user.id };
-        const response = await orderService.getOrders(data);
-        if (!response) {
-            throw new Error(formatError("Orders not found", response));
-        }
-        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
-    } catch (error) {
-        logger.error(error);
-        next(error);
-    }
-};  
+// export const getOrders = async (req, res, next) => {
+//     try {
+//         const data = { userId: req.user.id };
+//         const response = await orderService.getOrders(data);
+//         if (!response) {
+//             throw new Error(formatError("Orders not found", response));
+//         }
+//         res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+//     } catch (error) {
+//         logger.error(error);
+//         next(error);
+//     }
+// };  
 
-export const getOrderById = async (req, res, next) => {
-    try {
-        const data = { userId: req.user.id, orderId: req.params.orderId };
-        const response = await orderService.getOrderById(data);
-        if (!response) {
-            throw new Error(formatError("Order not found", response));
-        }
-        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
-    } catch (error) {
-        logger.error(error);
-        next(error);
-    }
-};
+// export const getOrderById = async (req, res, next) => {
+//     try {
+//         const data = { userId: req.user.id, orderId: req.params.orderId };
+//         const response = await orderService.getOrderById(data);
+//         if (!response) {
+//             throw new Error(formatError("Order not found", response));
+//         }
+//         res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+//     } catch (error) {
+//         logger.error(error);
+//         next(error);
+//     }
+// };
 
 export const deleteOrder = async (req, res, next) => {
     try {

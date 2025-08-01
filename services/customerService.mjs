@@ -8,9 +8,12 @@ import { Vendors } from "../entities/Vendors.mjs";
 import { VendorImages } from "../entities/VendorImages.mjs";
 import { getPresignedViewUrl } from "../services/s3service.mjs";
 import { cacheOrFetch } from "../utils/cache.mjs";
+import { Orders } from "../entities/Orders.mjs";
+import { OrderItems } from "../entities/OrderItems.mjs";
 
 const customerRepo = AppDataSource.getRepository(Customers);
 const customerAddressRepo = AppDataSource.getRepository(CustomerAddress);
+const orderRepo = AppDataSource.getRepository(Orders);
 
 //============================ ZOD VALIDATION SCHEMAS ==============================================
 
@@ -258,5 +261,83 @@ export const getVendorWorkImagesByVendorId = async (data) => {
         }
         logger.error("Error getting vendor work images by vendor id", error);
         throw error;
+    }
+}
+
+export const getOrders = async (data) => {
+    try {
+        const { userId } = data;
+        const customer = await customerRepo.findOne({ where: { userId: userId }, select: { id: true } });
+        if (!customer) throw sendError("Customer not found");
+
+        const orders = await orderRepo.find({ where: { customerId: customer.id }, select: { id: true, orderName: true, serviceType: true, orderStatus: true, requiredByDate: true, createdAt: true } });
+        if (!orders) throw sendError("Orders not found");
+
+        return orders;
+    } catch (err) {
+        logger.error(err);
+        throw err;
+    }
+}
+
+export const getOrderById = async (data) => {
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+        const { userId, orderId } = data;
+
+        const customer = await queryRunner.manager.findOne(Customers, { where: { userId: userId }, select: { id: true } });
+        if (!customer) throw sendError("Customer not found", 404);
+
+        const order = await queryRunner.manager.findOne(Orders, { where: { id: orderId } });
+        if (!order) throw sendError("Order not found", 404);
+
+        if (order.customerId !== customer.id) throw sendError("You are not authorized to view this order", 403);
+
+        const orderItems = await queryRunner.manager.find(OrderItems, { where: { orderId: orderId } });
+        if (!orderItems) throw sendError("Order items not found", 404);
+
+        const processedOrderItems = await Promise.all(orderItems.map(async item => {
+            const [designImage1Url, designImage2Url] = await Promise.all([
+                item.designImage1 ? getPresignedViewUrl(item.designImage1) : null,
+                item.designImage2? getPresignedViewUrl(item.designImage2) : null,
+            ]);
+            return {
+                ...item,
+                designImage1Url,
+                designImage2Url
+            }
+        }));
+        const {fullName, phoneNumber, addressLine1, addressLine2, district, state, street, city, pincode, landmark, addressType, ...orderDetailsWithoutAddress } = order;
+
+        await queryRunner.commitTransaction();
+        
+        return {
+            order: orderDetailsWithoutAddress,
+            address: {
+                fullName,
+                phoneNumber,
+                addressLine1,
+                addressLine2,
+                district,
+                state,
+                street,
+                city,
+                pincode,
+                landmark,
+                addressType
+            },
+            orderItems: processedOrderItems
+        };
+    } catch (err) {
+        if (queryRunner.isTransactionActive) {
+            await queryRunner.rollbackTransaction();
+        }
+        logger.error(err);
+        throw err;
+    } finally {
+        await queryRunner.release();
     }
 }

@@ -12,5 +12,7 @@ router.patch("/deleteCustomerAddress/:addressId", verifyAccessToken, controllerW
 router.patch("/makeAddressDefault/:addressId", verifyAccessToken, controllerWrapper(customerController.makeAddressDefault, { logRequest: true, logResponse: true }));
 router.get("/getVendorDetailsByVendorId/:vendorId", verifyAccessToken, controllerWrapper(customerController.getVendorDetailsByVendorId, { logRequest: true, logResponse: true }));
 router.get("/getVendorWorkImagesByVendorId/:vendorId", verifyAccessToken, controllerWrapper(customerController.getVendorWorkImagesByVendorId, { logRequest: true, logResponse: true }));
+router.get("/getOrders", verifyAccessToken, controllerWrapper(customerController.getOrders, { logRequest: true, logResponse: true }));
+router.get("/getOrderById/:orderId", verifyAccessToken, controllerWrapper(customerController.getOrderById, { logRequest: true, logResponse: true }));
 
 export default router;

@@ -9,8 +9,8 @@ const router = Router();
 // CUSTOMER ACCESSIBLE ROUTES
 
 router.post("/createOrder", verifyAccessToken, controllerWrapper(orderController.createOrder, { logRequest: true, logResponse: true }));
-router.get("/getOrders", verifyAccessToken, controllerWrapper(orderController.getOrders, { logRequest: true, logResponse: true }));
-router.get("/getOrderById/:orderId", verifyAccessToken, controllerWrapper(orderController.getOrderById, { logRequest: true, logResponse: true }));
+// router.get("/getOrders", verifyAccessToken, controllerWrapper(orderController.getOrders, { logRequest: true, logResponse: true }));
+// router.get("/getOrderById/:orderId", verifyAccessToken, controllerWrapper(orderController.getOrderById, { logRequest: true, logResponse: true }));
 // router.delete("/deleteOrder/:orderId", verifyAccessToken, controllerWrapper(orderController.deleteOrder, { logRequest: true, logResponse: true }));
 
 router.post("/sendOrderToVendor", verifyAccessToken, controllerWrapper(orderController.sendOrderToVendor, { logRequest: true, logResponse: true }));
