@@ -10,6 +10,7 @@ import { getPresignedViewUrl } from "../services/s3service.mjs";
 import { cacheOrFetch } from "../utils/cache.mjs";
 import { Orders } from "../entities/Orders.mjs";
 import { OrderItems } from "../entities/OrderItems.mjs";
+import { SERVICE_TYPE } from "../types/enums/index.mjs";
 
 const customerRepo = AppDataSource.getRepository(Customers);
 const customerAddressRepo = AppDataSource.getRepository(CustomerAddress);
@@ -35,6 +36,11 @@ const addCustomerAddressSchema = z.object({
 
 const vendorIdSchema = z.object({
     vendorId: z.string().uuid().min(1, { message: "Vendor ID is required" }),
+})
+
+const getOrdersSchema = z.object({
+    userId: z.string().uuid(),
+    serviceType: z.enum(Object.values(SERVICE_TYPE)).optional(),
 })
 
 //============================ CUSTOMER SERVICE FUNCTIONS ==============================================
@@ -266,17 +272,21 @@ export const getVendorWorkImagesByVendorId = async (data) => {
 
 export const getOrders = async (data) => {
     try {
-        const { userId } = data;
+        const { userId, serviceType } = getOrdersSchema.parse(data);
         const customer = await customerRepo.findOne({ where: { userId: userId }, select: { id: true } });
         if (!customer) throw sendError("Customer not found");
 
-        const orders = await orderRepo.find({ where: { customerId: customer.id }, select: { id: true, orderName: true, serviceType: true, orderStatus: true, requiredByDate: true, createdAt: true } });
+        const orders = await orderRepo.find({ where: { customerId: customer.id, serviceType: serviceType }, select: { id: true, orderName: true, serviceType: true, orderStatus: true, requiredByDate: true, createdAt: true } });
         if (!orders) throw sendError("Orders not found");
 
         return orders;
-    } catch (err) {
-        logger.error(err);
-        throw err;
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            logger.warn("getOrders validation failed", { errors: error.flatten().fieldErrors });
+            throw sendError("Invalid parameters provided.", 400, error.flatten().fieldErrors);
+        }
+        logger.error("getOrders error", error);
+        throw error;
     }
 }
 

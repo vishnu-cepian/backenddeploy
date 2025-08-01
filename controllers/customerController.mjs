@@ -127,7 +127,7 @@ export const addCustomerAddress = async (req, res, next) => {
 
   export const getOrders = async (req, res, next) => {
     try {
-        const data = { userId: req.user.id };
+        const data = { userId: req.user.id, serviceType: req.query.serviceType };
         const response = await customerService.getOrders(data);
         if (!response) {
             throw new Error(formatError("Orders not found", response));
