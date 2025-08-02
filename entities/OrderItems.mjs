@@ -39,7 +39,7 @@ export const OrderItems = new EntitySchema({
         },
         measurementType: {
             type: "varchar",
-            nullable: false
+            nullable: true
         },
         laundryService: {
             type: "varchar",

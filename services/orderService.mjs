@@ -39,20 +39,22 @@ const orderItemSchema = z.object({
     fabricType: z.string().min(1, { message: "Fabric type is required" }),
     instructions: z.string().optional().nullable().default(null),
     dressCustomisations: z.any().optional().nullable().default(null),
-    measurementType: z.string().min(1, { message: "Measurement type is required" }),
+    measurementType: z.string().min(1, { message: "Measurement type is required" }).nullable(),
     laundryService: z.string().optional().nullable().default(null),
     stdMeasurements: z.string().optional().nullable().default(null),
     customMeasurements: z.any().optional().nullable().default(null),
     designImage1: z.string().optional().nullable().default(null),
     designImage2: z.string().optional().nullable().default(null),
 }).refine(data => {
-    if (data.stdMeasurements && data.customMeasurements) {
-        return false; // Only one of custom/standard measurements can be provided
-    }
-    if (data.itemCount <= 5 && !data.customMeasurements && !data.stdMeasurements) {
-        return false; // Custom/standard measurements are required for small quantities
-    } else if (data.itemCount > 5 && !data.stdMeasurements) {
-        return false; // Standard measurements are required for large quantities
+    if (!data.laundryService) {
+        if (data.stdMeasurements && data.customMeasurements) {
+            return false; // Only one of custom/standard measurements can be provided
+        }
+        if (data.itemCount <= 5 && !data.customMeasurements && !data.stdMeasurements) {
+            return false; // Custom/standard measurements are required for small quantities
+        } else if (data.itemCount > 5 && !data.stdMeasurements) {
+            return false; // Standard measurements are required for large quantities
+        }
     }
     return true;
 }, {
