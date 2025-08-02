@@ -137,10 +137,10 @@ export const rejectVendor = async (req, res, next) => {
 
 export const getOrders = async (req, res, next) => {
     try {
-        const {pageNumber, limitNumber, sort, id, customerId, selectedVendorId, isPaid, isRefunded, orderStatus} = req.query;
-        const page = pageNumber ? parseInt(pageNumber) : 1;
-        const limit = limitNumber ? parseInt(limitNumber) : 10;
-        const response = await adminService.getOrders(parseInt(page), parseInt(limit), sort, id, customerId, selectedVendorId, isPaid, isRefunded, orderStatus);
+        const {page, limit, sort, id, customerId, selectedVendorId, isPaid, isRefunded, orderStatus} = req.query;
+        const pageNumber = page ? parseInt(page) : 1;
+        const limitNumber = limit ? parseInt(limit) : 10;
+        const response = await adminService.getOrders(pageNumber, limitNumber, sort, id, customerId, selectedVendorId, isPaid, isRefunded, orderStatus);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
@@ -190,6 +190,23 @@ export const getCustomerById = async (req, res, next) => {
     try {
         const customerId = req.params.id;
         const response = await adminService.getCustomerById(customerId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const updateCustomer = async (req, res, next) => {
+    try {
+        const data = {
+            ...req.body,
+            customerId: req.params.id
+        }
+        const response = await adminService.updateCustomer(data);
         if (!response) {
             throw new Error(formatError("No response", response));
         }

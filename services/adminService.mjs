@@ -11,8 +11,9 @@ import { Vendors } from "../entities/Vendors.mjs";
 import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs"
 import { Payments } from "../entities/Payments.mjs"
-import { In } from 'typeorm';
+import { In, Not } from 'typeorm';
 import { paginateListDirectoryBuckets } from "@aws-sdk/client-s3";
+import { ORDER_STATUS } from "../types/enums/index.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 // const orderItemRepo = AppDataSource.getRepository(OrderItems);
@@ -382,6 +383,12 @@ export const blockOrUnblockVendor = async (id) => {
       throw sendError('Vendor not found', 404);
     }
     const blockStatus = await userRepo.findOne({ where: { id: vendor.userId }, select: ["isBlocked"] });
+    if(!blockStatus.isBlocked) {
+      const orderHistory = await orderRepo.exists({ where: { selectedVendorId: id, orderStatus: Not(ORDER_STATUS.COMPLETED, ORDER_STATUS.REFUNDED) } });
+      if (orderHistory) {
+        throw sendError('Vendor has Active orders. So blocking this vendor will cause issues with the orders. Ensure the status of the orders is COMPLETED or REFUNDED', 400);
+      }
+    }
     await userRepo.update(vendor.userId, { isBlocked: !blockStatus.isBlocked });
     return { message: "Vendor blocked successfully" };
   } catch (err) {
@@ -423,6 +430,10 @@ export const rejectVendor = async (id) => { //DELETE VENDOR
     const vendor = await vendorRepo.findOne({ where: { id } });
     if (!vendor) {
       throw sendError('Vendor not found', 404);
+    }
+    const orderHistory = await orderRepo.exists({ where: { selectedVendorId: id } });
+    if (orderHistory) {
+      throw sendError('Vendor has / had orders. So deleting this vendor will cause issues with the orders. SYSTEM does not encourage HARD DELETE, instead try blocking the vendor', 400);
     }
     await vendorRepo.delete(id);
     /**
@@ -638,6 +649,21 @@ export const getCustomerById = async (id) => {
   }
 }
 
+export const updateCustomer = async (data) => {
+  try {
+    const {customerId, ...rest} = data;
+    const customer = await customerRepo.findOne({ where: { id: customerId }, select: {userId : true} });
+    const user = await userRepo.findOne({ where: { id: customer.userId } });
+    if (!user) {
+      throw sendError('User not found', 404);
+    }
+    await userRepo.update(user.id, rest);
+    return { message: "Customer updated successfully" };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
 export const blockOrUnblockCustomer = async (id) => {
   try {
     const customer = await customerRepo.findOne({ where: { id } });

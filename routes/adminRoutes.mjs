@@ -25,6 +25,7 @@ router.get("/getOrders",verifyAdminAccessToken, controllerWrapper(adminControlle
 router.get("/getAllCustomers",verifyAdminAccessToken, controllerWrapper(adminController.getAllCustomers, {logRequest, logResponse}))
 router.post("/searchCustomerByEmailorPhoneNumber",verifyAdminAccessToken, controllerWrapper(adminController.searchCustomerByEmailorPhoneNumber, {logRequest, logResponse}))
 router.get("/getCustomerById/:id",verifyAdminAccessToken, controllerWrapper(adminController.getCustomerById, {logRequest, logResponse}))
+router.patch("/updateCustomer/:id",verifyAdminAccessToken, controllerWrapper(adminController.updateCustomer, {logRequest, logResponse}))
 router.post("/blockOrUnblockCustomer/:id",verifyAdminAccessToken, controllerWrapper(adminController.blockOrUnblockCustomer, {logRequest, logResponse}))
 router.get("/getOrderById/:id",verifyAdminAccessToken, controllerWrapper(adminController.getOrderById, {logRequest, logResponse}))
 router.get("/getVendorResponse/:id",verifyAdminAccessToken, controllerWrapper(adminController.getVendorResponse, {logRequest, logResponse}))
