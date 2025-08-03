@@ -135,6 +135,23 @@ export const rejectVendor = async (req, res, next) => {
     }
 };
 
+export const updateVendor = async (req, res, next) => {
+    try {
+        const data = {
+            ...req.body,
+        }
+        const vendorId = req.params.id;
+        const response = await adminService.updateVendor(data, vendorId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
 export const getOrders = async (req, res, next) => {
     try {
         const {page, limit, sort, id, customerId, selectedVendorId, isPaid, isRefunded, orderStatus} = req.query;

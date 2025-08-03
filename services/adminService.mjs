@@ -13,7 +13,9 @@ import { OrderQuotes } from "../entities/OrderQuote.mjs"
 import { Payments } from "../entities/Payments.mjs"
 import { In, Not } from 'typeorm';
 import { paginateListDirectoryBuckets } from "@aws-sdk/client-s3";
-import { ORDER_STATUS } from "../types/enums/index.mjs";
+import { ORDER_STATUS, SHOP_TYPE, SERVICE_TYPE, OWNERSHIP_TYPE } from "../types/enums/index.mjs";
+import { z } from "zod";
+import { UpdateLog } from "../entities/UpdateLog.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 // const orderItemRepo = AppDataSource.getRepository(OrderItems);
@@ -31,11 +33,11 @@ export const generateAccessToken = (payload) => {
     return jwt.sign(payload, ADMIN_ACCESS_TOKEN_SECRET, { expiresIn: '1d' }); 
   };
   
-  export const generateRefreshToken = (payload) => {
+export const generateRefreshToken = (payload) => {
     return jwt.sign(payload, ADMIN_REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
   };
   
-  export const verifyAccessToken = (token) => {
+export const verifyAccessToken = (token) => {
     try {
       return jwt.verify(token, ADMIN_ACCESS_TOKEN_SECRET);
     } catch (err) {
@@ -43,7 +45,7 @@ export const generateAccessToken = (payload) => {
     }
   }
   
-  export const verifyRefreshToken = (token) => {
+export const verifyRefreshToken = (token) => {
     try {
       return jwt.verify(token, ADMIN_REFRESH_TOKEN_SECRET);
     } catch (err) {
@@ -51,7 +53,7 @@ export const generateAccessToken = (payload) => {
     }
   };
   
-  export const refreshAccessToken = async (refreshToken) => {  //if token is expired, ie., 401, then refresh token will be used to get new access token
+export const refreshAccessToken = async (refreshToken) => {  //if token is expired, ie., 401, then refresh token will be used to get new access token
     /*
       input:- refreshToken saved in local storage
       output:- new access token, refresh token, message
@@ -97,7 +99,7 @@ export const generateAccessToken = (payload) => {
       }
   };
 
-  export const login = async (data) => {
+export const login = async (data) => {
     /*
   input:- email,password
   ouput:- role, accessTokken, refreshToken, message
@@ -448,6 +450,93 @@ export const rejectVendor = async (id) => { //DELETE VENDOR
   } catch (err) {
     logger.error(err);
     throw err;
+  }
+}
+
+const updateVendorSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email(),
+  phoneNumber: z.string().regex(/^(?:\+91|91)?[6789]\d{9}$/, { message: "Invalid Indian phone number format" }),
+  aadhaarNumber: z.string().length(12, { message: "Aadhaar number must be 12 digits" }),
+  shopType: z.enum(Object.values(SHOP_TYPE)),
+  serviceType: z.enum(Object.values(SERVICE_TYPE)),
+  shopName: z.string().min(1),
+  address: z.string().min(1),
+  street: z.string().min(1),
+  city: z.string().min(1),
+  state: z.string().min(1),
+  pincode: z.string().length(6, { message: "Pincode must be 6 digits" }),
+  shopDescription: z.string().min(1),
+  accountHolderName: z.string().min(1),
+  accountNumber: z.string().min(1),
+  ifscCode: z.string().min(1),
+
+  bankPassbookUrlPath: z.string().optional(),
+  aadhaarUrlPath: z.string().optional(),
+  ownershipType: z.enum(Object.values(OWNERSHIP_TYPE)).optional().nullable().default(null),
+  vendorServices: z.string().optional(),
+  shopDocumentUrlPath: z.string().optional(),
+}).refine(data => {
+  if (data.shopType === SHOP_TYPE.IN_HOME) {
+    if(data.ownershipType) return false;
+  } else {
+    if(!data.ownershipType) return false;
+  }
+  return true;
+}, {
+  message: "if shop type is not IN_HOME then ownershipType required. or else vice versa",
+});
+
+export const updateVendor = async (data, vendorId) => {
+  const queryRunner = AppDataSource.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
+  try {
+    const {name, email, phoneNumber, bankPassbookUrlPath, aadhaarUrlPath, shopDocumentUrlPath, ...rest} = updateVendorSchema.parse(data);
+
+    const vendor = await queryRunner.manager.findOne(Vendors, { where: { id: vendorId }, relations: ["user"] });
+    if (!vendor) {
+      throw sendError('Vendor not found', 404);
+    }
+    const oldData = vendor;
+    const updateLog = queryRunner.manager.create(UpdateLog, {
+      oldData,
+      newData: data,
+      reason: "Vendor updated by admin"
+    });
+    await queryRunner.manager.save(UpdateLog, updateLog);
+
+    Object.assign(vendor, rest);
+    Object.assign(vendor.user, {name, email, phoneNumber});
+
+    if(bankPassbookUrlPath) {
+      vendor.bankPassbookUrlPath = bankPassbookUrlPath;
+    }
+    if(aadhaarUrlPath) {
+      vendor.aadhaarUrlPath = aadhaarUrlPath;
+    }
+    if(shopDocumentUrlPath) {
+      vendor.shopDocumentUrlPath = shopDocumentUrlPath;
+    }
+
+    await queryRunner.manager.save(User, vendor.user);
+    await queryRunner.manager.save(Vendors, vendor);
+
+    await queryRunner.commitTransaction();
+    return { message: "Vendor updated successfully" };
+  } catch (error) {
+    if (queryRunner.isTransactionActive) {  
+      await queryRunner.rollbackTransaction();
+    }
+
+    if (error instanceof z.ZodError) {
+      console.log(error.flatten())
+      logger.warn("completeProfile validation failed", { errors: error.flatten().fieldErrors });
+      throw sendError("Invalid data provided.", 400, error.flatten().fieldErrors);
+    }
+    throw error;
+  } finally {
+    await queryRunner.release();
   }
 }
 
