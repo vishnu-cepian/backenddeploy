@@ -660,22 +660,36 @@ export const getVendorOrders = async (data) => {
 
     if (!vendor) throw sendError('Vendor Profile not found', 400);
 
-    const orders = await orderVendorRepo.find({
-      where: {
-        vendorId: vendor.id,
-        status: status,
-      },
-      order: {
-        createdAt: "DESC",
-      },
-      skip: offset,
-      take: limit,
-    });
+    const orders = await orderVendorRepo.createQueryBuilder("orderVendors")
+    .leftJoinAndSelect("orderVendors.order", "orders")
+    .select([
+      "orderVendors.id",
+      "orderVendors.status",
+      "orderVendors.createdAt",
+      "orders.orderName",
+      "orders.serviceType",
+      "orders.finishByDate",
+      "orders.orderStatusTimestamp",
+    ])
+    .where("orderVendors.vendorId = :vendorId", { vendorId: vendor.id })
+    .andWhere("orderVendors.status = :status", { status: status })
+    .orderBy("orderVendors.createdAt", "DESC")
+    .skip(offset)
+    .take(limit)
+    .getMany();
 
     if (!orders) throw sendError('Orders not found', 400);
 
     return {
-      orders,
+      orders: orders.map(order => ({
+        id: order.id,
+        status: order.status,
+        createdAt: order.createdAt,
+        orderName: order.order.orderName,
+        serviceType: order.order.serviceType,
+        finishByDate: order.order.finishByDate,
+        completedAt: order.order.orderStatusTimestamp.completedAt,
+      })),
       pagination: {
         currentPage: page,
         hasMore: orders.length === limit,
