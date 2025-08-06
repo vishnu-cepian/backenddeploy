@@ -14,13 +14,14 @@ import { emailQueue } from "../queues/notification/email/emailQueue.mjs";
 import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { Orders } from "../entities/Orders.mjs";
 import { OrderItems } from "../entities/OrderItems.mjs";
+import { OrderQuotes } from "../entities/OrderQuote.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const vendorImagesRepo = AppDataSource.getRepository(VendorImages);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderItemsRepo = AppDataSource.getRepository(OrderItems);
-
+const quoteRepo = AppDataSource.getRepository(OrderQuotes);
 //============================ ZOD VALIDATION SCHEMAS ==============================================
 /**
  * Zod schema for data validation.
@@ -746,6 +747,33 @@ export const getVendorOrderById = async (data) => {
     };  
   } catch (error) {
     logger.error("getVendorOrderById error", error);
+    throw error;
+  }
+}
+
+export const getVendorQuote = async (data) => {
+  try {
+    const { userId, orderVendorId } = data;
+
+    const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: {id: true}});
+    if (!vendor) throw sendError('Vendor Profile not found', 400);
+
+    const orderVendor = await orderVendorRepo.findOne({ where: { id: orderVendorId, vendorId: vendor.id, }, select: {id: true , status: true}});
+    if (!orderVendor) throw sendError('Order not found', 400);
+
+    if(orderVendor.status === ORDER_VENDOR_STATUS.PENDING) throw sendError('You have not accepted or rejected the order yet', 400);
+    if(orderVendor.status === ORDER_VENDOR_STATUS.REJECTED) throw sendError('You have rejected the order', 400);
+    if(orderVendor.status === ORDER_VENDOR_STATUS.EXPIRED) throw sendError('The order has expired', 400);
+    if(orderVendor.status === ORDER_VENDOR_STATUS.FROZEN) throw sendError('The order has been frozen', 400);
+
+    const quote = await quoteRepo.findOne({ where: { orderVendorId: orderVendorId }, select: {id: true, quotedDays: true, quotedPrice: true, createdAt: true}});
+    if (!quote) throw sendError('Quote not found', 400);
+
+    return {
+      quote,
+    };
+  } catch (error) {
+    logger.error("getVendorQuote error", error);
     throw error;
   }
 }
