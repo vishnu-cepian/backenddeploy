@@ -181,7 +181,11 @@ export const createOrder = async (data) => {
             landmark,
             orderStatus: ORDER_STATUS.PENDING,
             isPaid: false,
-            orderStatusTimestamp: new Date()
+            orderStatusTimestamp: {
+                pendingAt: new Date(),
+                inProgressAt: null,
+                completedAt: null,
+            }
         });
         
         if (!order) throw sendError("Order not created");

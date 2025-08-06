@@ -22,6 +22,10 @@ export const Orders = new EntitySchema({
             type: "uuid",
             nullable: true
         },
+        finishByDate: {
+            type: "date",
+            nullable: true
+        },
         paymentId: {
             type: "uuid",
             nullable: true
@@ -109,7 +113,7 @@ export const Orders = new EntitySchema({
             nullable: false
         },
         orderStatusTimestamp: {
-            type: "timestamp",
+            type: "jsonb",
             nullable: true
         },
         createdAt: {
