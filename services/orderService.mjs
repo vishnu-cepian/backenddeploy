@@ -29,7 +29,7 @@ const orderRepo = AppDataSource.getRepository(Orders);
 const customerRepo = AppDataSource.getRepository(Customers);
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const refundRepo = AppDataSource.getRepository(Refunds);
-
+const orderStatusTimelineRepo = AppDataSource.getRepository(OrderStatusTimeline);
 //========================= ZOD VALIDATION SCHEMAS =========================
 
 const orderItemSchema = z.object({
@@ -936,6 +936,26 @@ export const updateOrderStatus = async (data) => {
         throw err;
     } finally {
         await queryRunner.release();
+    }
+}
+
+export const getOrderTimeline = async (data) => {
+    try {
+        const { orderId } = data;
+
+        const order = await orderRepo.findOne({ where: { id: orderId } });
+        if (!order) throw sendError("Order not found", 404);
+
+        const orderTimeline = await orderStatusTimelineRepo.find({ 
+            where: { orderId: orderId },
+            select: { id: true, newStatus: true, changedAt: true },
+        });
+        if (!orderTimeline) throw sendError("Order timeline not found", 404);
+        return orderTimeline;
+
+    } catch (error) {
+        logger.error("Error getting order timeline", error);
+        throw error;
     }
 }
 

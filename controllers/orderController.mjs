@@ -201,3 +201,18 @@ export const updateOrderStatus = async (req, res, next) => {
         next(error);
     }
 };
+
+
+export const getOrderTimeline = async (req, res, next) => {
+    try {
+        const data = { userId: req.user.id, orderId: req.params.orderId };
+        const response = await orderService.getOrderTimeline(data);
+        if (!response) {
+            throw new Error(formatError("Order timeline not found", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+  };

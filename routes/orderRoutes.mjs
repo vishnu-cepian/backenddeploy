@@ -30,6 +30,9 @@ router.post("/createRazorpayOrder", verifyAccessToken, controllerWrapper(orderCo
 router.post("/handleRazorpayWebhook", handleRazorpayWebhook);
 
 router.post("/updateOrderStatus", verifyAccessToken, controllerWrapper(orderController.updateOrderStatus, { logRequest: true, logResponse: true }));
+
+router.get("/getOrderTimeline/:orderId", verifyAccessToken, controllerWrapper(orderController.getOrderTimeline, { logRequest: true, logResponse: true }));
+
 // router.post("/confirmVendorPayment/:paymentId", verifyAccessToken, controllerWrapper(orderController.confirmVendorPayment, { logRequest: true, logResponse: true }));
 
 // router.post("/freezeOrderVendors/:orderId/:vendorId", verifyAccessToken, controllerWrapper(orderController.freezeOrderVendors, { logRequest: true, logResponse: true }));
