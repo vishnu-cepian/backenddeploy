@@ -10,11 +10,15 @@ import { getPresignedViewUrl } from "../services/s3service.mjs";
 import { cacheOrFetch } from "../utils/cache.mjs";
 import { Orders } from "../entities/Orders.mjs";
 import { OrderItems } from "../entities/OrderItems.mjs";
-import { SERVICE_TYPE, ORDER_STATUS } from "../types/enums/index.mjs";
+import { SERVICE_TYPE, ORDER_STATUS, ORDER_VENDOR_STATUS } from "../types/enums/index.mjs";
+import { OrderVendors } from "../entities/OrderVendors.mjs";
+import { OrderQuotes } from "../entities/OrderQuote.mjs";
 
 const customerRepo = AppDataSource.getRepository(Customers);
 const customerAddressRepo = AppDataSource.getRepository(CustomerAddress);
 const orderRepo = AppDataSource.getRepository(Orders);
+const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
+const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
 
 //============================ ZOD VALIDATION SCHEMAS ==============================================
 
@@ -353,3 +357,77 @@ export const getOrderById = async (data) => {
         await queryRunner.release();
     }
 }
+
+export const getOrderRequests = async (data) => {
+    try {
+       const { userId, orderId } = data;
+
+       const customer = await customerRepo.exists({ where: { userId: userId } });
+       if (!customer) throw sendError("Customer Profile not found", 404);
+
+       const order = await orderRepo.exists({ where: { id: orderId } });
+       if (!order) throw sendError("Order not found", 400);
+
+       const orderRequests = await orderVendorRepo.createQueryBuilder("orderVendors")
+       .leftJoinAndSelect("orderVendors.vendor", "vendors")
+       .select([
+        "orderVendors.id",
+        "orderVendors.status",
+        "orderVendors.createdAt",
+        "vendors.shopName",
+        "vendors.shopImageUrlPath",
+       ])
+       .where("orderVendors.orderId = :orderId", { orderId })
+       .andWhere("orderVendors.status IN (:...status)", { status: [ORDER_VENDOR_STATUS.ACCEPTED, ORDER_VENDOR_STATUS.PENDING] })
+       .getMany();
+
+       if (orderRequests.length === 0) return [];
+
+       const processedOrderRequests = await Promise.all(orderRequests.map(async (orderRequest) => {
+        const [shopImageUrl] = await Promise.all([
+            orderRequest.vendor.shopImageUrlPath ? getPresignedViewUrl(orderRequest.vendor.shopImageUrlPath) : null,
+        ]);
+        return {
+            ...orderRequest,
+            shopImageUrl
+        }
+       }));
+
+       return {
+        orderRequests: processedOrderRequests.map(orderRequest => ({
+            id: orderRequest.id,
+            status: orderRequest.status,
+            createdAt: orderRequest.createdAt,
+            shopName: orderRequest.vendor.shopName,
+            shopImageUrl: orderRequest.shopImageUrl
+        }))
+       }
+    } catch (error) {
+        logger.error("Error getting pending or accepted quotes", error);
+        throw error;
+    }
+}
+
+export const getAcceptedQuoteById = async(data) => {
+    try {
+        const { userId, orderVendorId } = data;
+
+        const customer = await customerRepo.exists({ where: { userId: userId } });
+        if (!customer) throw sendError("Customer Profile not found", 404);
+
+        const orderVendor = await orderVendorRepo.findOne({ where: { id: orderVendorId }, select: { id: true, status: true, orderId: true } });
+        if (orderVendor.status !== ORDER_VENDOR_STATUS.ACCEPTED) throw sendError("Order Request timed out or Order hasn't been accepted by vendor", 404);
+
+        const quote = await orderQuoteRepo.findOne({ where: { orderVendorId: orderVendorId }, select: { id: true, quotedDays: true, priceAfterPlatformFee: true, deliveryCharge: true, finalPrice: true, notes: true } });
+        if (!quote) throw sendError("Quote not found", 404);
+
+        return {
+            ...quote,
+            orderId: orderVendor.orderId
+        }
+    } catch (error) {
+        logger.error("Error getting accepted quote by id", error);
+        throw error;
+    }
+}
+

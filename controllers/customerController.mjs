@@ -156,3 +156,31 @@ export const getOrderById = async (req, res, next) => {
         next(error);
     }
 };
+
+export const getOrderRequests = async (req, res, next) => {
+  try {
+      const data = { userId: req.user.id, orderId: req.params.orderId };
+      const response = await customerService.getOrderRequests(data);
+      if (!response) {
+          throw new Error(formatError("Order requests not found", response));
+      }
+      res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (error) {
+      logger.error(error);
+      next(error);
+  }
+};
+
+export const getAcceptedQuoteById = async (req, res, next) => {
+  try {
+      const data = { userId: req.user.id, orderVendorId: req.params.orderVendorId };
+      const response = await customerService.getAcceptedQuoteById(data);
+      if (!response) {
+          throw new Error(formatError("Accepted quote not found", response));
+      }
+      res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (error) {
+      logger.error(error);
+      next(error);
+  }
+};
