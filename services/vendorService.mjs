@@ -766,7 +766,7 @@ export const getVendorQuote = async (data) => {
     if(orderVendor.status === ORDER_VENDOR_STATUS.EXPIRED) throw sendError('The order has expired', 400);
     if(orderVendor.status === ORDER_VENDOR_STATUS.FROZEN) throw sendError('The order has been frozen', 400);
 
-    const quote = await quoteRepo.findOne({ where: { orderVendorId: orderVendorId }, select: {id: true, quotedDays: true, quotedPrice: true, createdAt: true}});
+    const quote = await quoteRepo.findOne({ where: { orderVendorId: orderVendorId }, select: {id: true, quotedDays: true, quotedPrice: true, vendorPayoutAfterCommission: true, deliveryCharge: true, finalPrice: true, createdAt: true}});
     if (!quote) throw sendError('Quote not found', 400);
 
     return {
