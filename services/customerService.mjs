@@ -329,29 +329,72 @@ export const getOrderById = async (data) => {
         const {fullName, phoneNumber, addressLine1, addressLine2, district, state, street, city, pincode, landmark, addressType, ...orderDetailsWithoutAddress } = order;
 
         await queryRunner.commitTransaction();
-        
-        return {
-            order: orderDetailsWithoutAddress,
-            address: {
-                fullName,
-                phoneNumber,
-                addressLine1,
-                addressLine2,
-                district,
-                state,
-                street,
-                city,
-                pincode,
-                landmark,
-                addressType
-            },
-            orderItems: processedOrderItems
-        };
+        if (order.orderStatus === ORDER_STATUS.PENDING) {
+            return {
+                order: orderDetailsWithoutAddress,
+                vendor: null,
+                quote: null,
+                address: {
+                    fullName,
+                    phoneNumber,
+                    addressLine1,
+                    addressLine2,
+                    district,
+                    state,
+                    street,
+                    city,
+                    pincode,
+                    landmark,
+                    addressType
+                },
+                orderItems: processedOrderItems
+            }
+        } else {
+            const vendor = await queryRunner.manager.findOne(Vendors, { where: { id: order.selectedVendorId }, select: { id: true, shopName: true, shopImageUrlPath: true } });
+
+            const [shopImageUrl] = await Promise.all([
+                vendor.shopImageUrlPath ? getPresignedViewUrl(vendor.shopImageUrlPath) : null,
+            ]);
+
+            const quote = await queryRunner.manager.findOne(OrderQuotes, { where: { id: order.finalQuoteId }, select: { id: true, quotedDays: true, priceAfterPlatformFee: true, deliveryCharge: true, finalPrice: true, notes: true, isProcessed: true } });
+            if (!quote) throw sendError("Quote not found", 404);
+
+            return {
+                order: orderDetailsWithoutAddress,
+                vendor: {
+                    shopName: vendor.shopName,
+                    shopImageUrl: shopImageUrl,
+                },
+                quote: {
+                    id: quote.id,
+                    quotedDays: quote.quotedDays,
+                    priceAfterPlatformFee: quote.priceAfterPlatformFee,
+                    deliveryCharge: quote.deliveryCharge,
+                    finalPrice: quote.finalPrice,
+                    notes: quote.notes,
+                    isProcessed: quote.isProcessed
+                },
+                address: {
+                    fullName,
+                    phoneNumber,
+                    addressLine1,
+                    addressLine2,
+                    district,
+                    state,
+                    street,
+                    city,
+                    pincode,
+                    landmark,
+                    addressType
+                },
+                orderItems: processedOrderItems
+            }
+        }
     } catch (err) {
         if (queryRunner.isTransactionActive) {
             await queryRunner.rollbackTransaction();
         }
-        logger.error(err);
+        logger.error("Error getting order by id", err);
         throw err;
     } finally {
         await queryRunner.release();
