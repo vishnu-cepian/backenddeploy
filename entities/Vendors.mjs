@@ -57,15 +57,23 @@ export const Vendors = new EntitySchema({
             type: "varchar",
             nullable: false
         },
-        address: {
+        addressLine1: {
             type: "varchar",
             nullable: false
+        },
+        addressLine2: {
+            type: "varchar",
+            nullable: true
         },
         street: {
             type: "varchar",
             nullable: false
         },
         city: {
+            type: "varchar",
+            nullable: false
+        },
+        district: {
             type: "varchar",
             nullable: false
         },
@@ -76,6 +84,10 @@ export const Vendors = new EntitySchema({
         pincode: {
             type: "varchar",
             nullable: false
+        },
+        landmark: {
+            type: "varchar",
+            nullable: true
         },
         shopDescription: {
             type: "text",
