@@ -653,18 +653,12 @@ export const handleRazorpayWebhook = async(req, res) => {
             quote.isProcessed = true;
             await queryRunner.manager.save(OrderQuotes, quote);
 
-            let previousStatus;
-
-            previousStatus = order.orderStatus;
             order.selectedVendorId = vendorId;
             order.finalQuoteId = quoteId;
             order.paymentId = payment.id;
             order.isPaid = true;
-            order.orderStatus = ORDER_STATUS.ORDER_CONFIRMED;
 
-            await createTimelineEntry(queryRunner, orderId, previousStatus, ORDER_STATUS.ORDER_CONFIRMED, MISC.PAYMENT_GATEWAY, ROLE.SYSTEM, `Payment successful. Razorpay ID: ${paymentId}`);
-
-            previousStatus = order.orderStatus;
+            await createTimelineEntry(queryRunner, orderId, order.orderStatus, ORDER_STATUS.IN_PROGRESS, MISC.PAYMENT_GATEWAY, ROLE.SYSTEM, `Payment successful. Razorpay ID: ${paymentId}`);
 
             if (order.clothProvided) {
                 // Create Outbox event for 2-way delivery
@@ -692,13 +686,12 @@ export const handleRazorpayWebhook = async(req, res) => {
                     createdAt: new Date()
                 });
 
-                await createTimelineEntry(queryRunner, orderId, previousStatus, ORDER_STATUS.ITEM_PICKUP_FROM_CUSTOMER_SCHEDULED, MISC.LOGISTICS, ROLE.SYSTEM, "Pickup from customer scheduled");
-                order.orderStatus = ORDER_STATUS.ITEM_PICKUP_FROM_CUSTOMER_SCHEDULED;
-            } else {
-                order.orderStatus = ORDER_STATUS.IN_PROGRESS;
-                await createTimelineEntry(queryRunner, orderId, previousStatus, ORDER_STATUS.IN_PROGRESS, MISC.PAYMENT_GATEWAY, ROLE.SYSTEM, "Order process started")
-            }
-            order.orderStatusTimestamp = paymentDate.toISOString();
+                await createTimelineEntry(queryRunner, orderId, ORDER_STATUS.IN_PROGRESS, ORDER_STATUS.ITEM_PICKUP_FROM_CUSTOMER_SCHEDULED, MISC.LOGISTICS, ROLE.SYSTEM, "Pickup from customer scheduled");
+            } 
+
+            order.orderStatus = ORDER_STATUS.IN_PROGRESS;
+            order.orderStatusTimestamp.inProgressAt = paymentDate.toISOString();
+
             await queryRunner.manager.save(Orders, order);
 
             await queryRunner.manager.update(OrderVendors, { orderId, vendorId }, { status: ORDER_VENDOR_STATUS.FINALIZED });
