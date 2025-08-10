@@ -46,6 +46,8 @@ const getOrdersSchema = z.object({
     userId: z.string().uuid(),
     serviceType: z.enum(Object.values(SERVICE_TYPE)).optional(),
     orderStatus: z.enum(Object.values(ORDER_STATUS)).optional(),
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(50).default(10),
 })
 
 //============================ CUSTOMER SERVICE FUNCTIONS ==============================================
@@ -277,12 +279,17 @@ export const getVendorWorkImagesByVendorId = async (data) => {
 
 export const getOrders = async (data) => {
     try {
-        const { userId, serviceType, orderStatus } = getOrdersSchema.parse(data);
+        const { userId, serviceType, orderStatus, page, limit } = getOrdersSchema.parse(data);
+        const offset = (page - 1) * limit;
 
         const customer = await customerRepo.findOne({ where: { userId: userId }, select: { id: true } });
         if (!customer) throw sendError("Customer not found");
 
-        const orders = await orderRepo.find({ where: { customerId: customer.id, serviceType: serviceType, orderStatus: orderStatus }, select: { id: true, orderName: true, serviceType: true, orderStatus: true, requiredByDate: true, createdAt: true } });
+        const orders = await orderRepo.find({ where: { customerId: customer.id, serviceType: serviceType, orderStatus: orderStatus }, 
+            select: { id: true, orderName: true, serviceType: true, orderStatus: true, isRated: true, requiredByDate: true, createdAt: true },
+            skip: offset,
+            take: limit
+        });
         if (!orders) throw sendError("Orders not found");
 
         return orders;

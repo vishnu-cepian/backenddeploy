@@ -131,6 +131,8 @@ export const addCustomerAddress = async (req, res, next) => {
           userId: req.user.id, 
           serviceType: req.query.serviceType,
           orderStatus: req.query.orderStatus,
+          page: parseInt(req.params.page),
+          limit: parseInt(req.params.limit),
         };
         const response = await customerService.getOrders(data);
         if (!response) {
