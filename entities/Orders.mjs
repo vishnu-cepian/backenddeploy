@@ -106,6 +106,10 @@ export const Orders = new EntitySchema({
             type: "varchar",
             nullable: false
         },
+        isRated: {
+            type: "boolean",
+            default: false
+        },
         orderStatus: {
             type: "varchar",
             enum: Object.values(ORDER_STATUS),

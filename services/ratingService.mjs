@@ -55,6 +55,9 @@ export const updateVendorRating = async (data) => {
             select: { id: true }
         });
         if(!order) throw sendError("This order is not eligible for rating", 403);
+        if(order.isRated) throw sendError("You have already rated this vendor for this order", 409);
+
+        await queryRunner.manager.update(Orders, orderId, { isRated: true });
 
         const monthYear = new Date().toISOString().split("T")[0].split("-").slice(0, 2).join("-");
         await queryRunner.manager.save(Rating, {
