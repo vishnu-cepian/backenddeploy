@@ -292,7 +292,14 @@ export const getOrders = async (data) => {
         });
         if (!orders) throw sendError("Orders not found");
 
-        return orders;
+        return {
+            orders,
+            pagination: {
+                currentPage: page,
+                hasMore: orders.length === limit,
+                nextPage: orders.length === limit ? page + 1 : null,
+            },
+        }
     } catch (error) {
         if (error instanceof z.ZodError) {
             logger.warn("getOrders validation failed", { errors: error.flatten().fieldErrors });
