@@ -286,14 +286,19 @@ export const getOrders = async (data) => {
         if (!customer) throw sendError("Customer not found");
 
         const orders = await orderRepo.find({ where: { customerId: customer.id, serviceType: serviceType, orderStatus: orderStatus }, 
-            select: { id: true, orderName: true, serviceType: true, orderStatus: true, isRated: true, requiredByDate: true, createdAt: true },
+            select: { id: true, orderName: true, serviceType: true, orderStatus: true, isRated: true, finishByDate: true, orderStatusTimestamp: true, requiredByDate: true, createdAt: true },
             skip: offset,
             take: limit
         });
         if (!orders) throw sendError("Orders not found");
 
+        const processedOrders = orders.map(order => ({
+            ...order,
+            orderStatusTimestamp: order.orderStatusTimestamp.completedAt ? order.orderStatusTimestamp.completedAt : null,
+        }));
+
         return {
-            orders,
+            orders: processedOrders,
             pagination: {
                 currentPage: page,
                 hasMore: orders.length === limit,
