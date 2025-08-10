@@ -277,3 +277,20 @@ export const getVendorQuote = async (req, res, next) => {
     next(err);
   }
 }
+
+export const getVendorStats = async (req, res, next) => {
+  try {
+    const data = {
+      userId: req.user.id,
+    }
+
+    const response = await vendorService.getVendorStats(data);
+    if (!response) {
+      throw new Error(formatError("Vendor stats not found", response));
+    }
+    res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (err) {
+    logger.error(err);
+    next(err);
+  }
+}

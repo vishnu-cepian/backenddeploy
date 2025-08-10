@@ -15,6 +15,7 @@ import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { Orders } from "../entities/Orders.mjs";
 import { OrderItems } from "../entities/OrderItems.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs";
+import { VendorStats } from "../entities/VendorStats.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const vendorImagesRepo = AppDataSource.getRepository(VendorImages);
@@ -22,6 +23,7 @@ const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderItemsRepo = AppDataSource.getRepository(OrderItems);
 const quoteRepo = AppDataSource.getRepository(OrderQuotes);
+const vendorStatsRepo = AppDataSource.getRepository(VendorStats);
 //============================ ZOD VALIDATION SCHEMAS ==============================================
 /**
  * Zod schema for data validation.
@@ -219,6 +221,14 @@ export const completeProfile = async (data, deviceInfo) => {
     });
     await queryRunner.manager.save(VendorAudit, vendorAudit);
 
+    const vendorStats = await queryRunner.manager.save(VendorStats, {
+      vendorId: newVendor.id,
+      totalInProgressOrders: 0,
+      totalCompletedOrders: 0,
+      totalEarnings: 0,
+      totalDeductions: 0,
+    });
+    if (!vendorStats) throw sendError('Vendor stats creation failed',400);
     if (!vendorAudit) throw sendError('Vendor audit creation failed',400);
 
     await queryRunner.commitTransaction();
@@ -777,6 +787,28 @@ export const getVendorQuote = async (data) => {
     };
   } catch (error) {
     logger.error("getVendorQuote error", error);
+    throw error;
+  }
+}
+
+export const getVendorStats = async (data) => {
+  try {
+    const { userId } = data;
+
+    const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: {id: true}});
+    if (!vendor) throw sendError('Vendor Profile not found', 400);
+
+    const stats = await vendorStatsRepo.findOne({ where: { vendorId: vendor.id }, 
+      select: {id: true, totalInProgressOrders: true, totalCompletedOrders: true, totalEarnings: true, totalDeductions: true}});
+
+    const totalPendingRequests = await orderVendorRepo.count({ where: { vendorId: vendor.id, status: ORDER_VENDOR_STATUS.PENDING }});
+
+    return {
+      ...stats,
+      totalPendingRequests,
+    };
+  } catch (error) {
+    logger.error("getVendorStats error", error);
     throw error;
   }
 }

@@ -24,6 +24,7 @@ import { pushQueue, emailQueue } from "../queues/index.mjs";
 import { getPresignedViewUrl } from "../services/s3service.mjs";
 import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
 import { Refunds } from "../entities/Refunds.mjs";
+import { VendorStats } from "../entities/VendorStats.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const customerRepo = AppDataSource.getRepository(Customers);
@@ -693,7 +694,7 @@ export const handleRazorpayWebhook = async(req, res) => {
             order.orderStatusTimestamp.inProgressAt = paymentDate.toISOString();
 
             await queryRunner.manager.save(Orders, order);
-
+            await queryRunner.manager.update(VendorStats, { vendorId }, { totalInProgressOrders: () => "totalInProgressOrders + 1" });
             await queryRunner.manager.update(OrderVendors, { orderId, vendorId }, { status: ORDER_VENDOR_STATUS.FINALIZED });
             await queryRunner.manager.update(OrderVendors, { orderId, vendorId: Not(vendorId) }, { status: ORDER_VENDOR_STATUS.FROZEN });
 
