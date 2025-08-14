@@ -51,7 +51,8 @@ export const VENDOR_STATUS = {
 export const OWNERSHIP_TYPE = {
   SINGLE: "single",
   PARTNERSHIP: "partnership",
-  PRIVATE_LIMITED: "private limited"
+  PRIVATE_LIMITED: "private limited",
+  LIMITED_LIABILITY_PARTNERSHIP: "limited liability partnership",
 }
 
 export const SERVICE_TYPE = {

@@ -13,20 +13,19 @@ import { OrderQuotes } from "../entities/OrderQuote.mjs"
 import { Payments } from "../entities/Payments.mjs"
 import { In, Not } from 'typeorm';
 import { paginateListDirectoryBuckets } from "@aws-sdk/client-s3";
-import { ORDER_STATUS, SHOP_TYPE, SERVICE_TYPE, OWNERSHIP_TYPE } from "../types/enums/index.mjs";
+import { ORDER_STATUS, SHOP_TYPE, SERVICE_TYPE, OWNERSHIP_TYPE, ORDER_VENDOR_STATUS } from "../types/enums/index.mjs";
 import { z } from "zod";
 import { UpdateLog } from "../entities/UpdateLog.mjs";
+import { VendorStats } from "../entities/VendorStats.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
-// const orderItemRepo = AppDataSource.getRepository(OrderItems);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
 const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
-// const orderItemMeasurementByVendorRepo = AppDataSource.getRepository(OrderItemMeasurementByVendor);
 const customerRepo = AppDataSource.getRepository(Customers);
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const userRepo = AppDataSource.getRepository(User);
 const paymentRepo = AppDataSource.getRepository(Payments);
-
+const vendorStatsRepo = AppDataSource.getRepository(VendorStats);
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
@@ -343,7 +342,10 @@ export const getVendorById = async (id) => {
       "vendors.serviceType",
       "vendors.vendorServices",
       "vendors.shopName",
-      "vendors.address",
+      "vendors.addressLine1",
+      "vendors.addressLine2",
+      "vendors.district",
+      "vendors.landmark",
       "vendors.city",
       "vendors.street",
       "vendors.state",
@@ -371,7 +373,12 @@ export const getVendorById = async (id) => {
     .where("vendors.id = :id", { id })
     .getOne();
    
-    return { vendor };
+    const stats = await vendorStatsRepo.findOne({ where: { vendorId: vendor.id }, 
+      select: {id: true, totalInProgressOrders: true, totalCompletedOrders: true, totalEarnings: true, totalDeductions: true}});
+
+    const totalPendingRequests = await orderVendorRepo.count({ where: { vendorId: vendor.id, status: ORDER_VENDOR_STATUS.PENDING }});
+
+    return { ...vendor, ...stats, totalPendingRequests };
   } catch (err) {
     logger.error(err);
     throw err;
@@ -783,8 +790,23 @@ export const getOrderById = async (id) => {
       "orders.selectedVendorId",
       "orders.finalQuoteId",
       "orders.paymentId",
+      "orders.finishByDate",
+      "orders.orderName",
+      "orders.orderType",
+      "orders.orderPreference",
       "orders.requiredByDate",
       "orders.clothProvided",
+      "orders.fullName",
+      "orders.phoneNumber",
+      "orders.addressLine1",
+      "orders.addressLine2",
+      "orders.district",
+      "orders.state",
+      "orders.pincode",
+      "orders.addressType",
+      "orders.landmark",
+      "orders.city",
+      "orders.street",
       "orders.isPaid",
       "orders.isRefunded",
       "orders.orderStatus",
