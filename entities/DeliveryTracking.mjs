@@ -39,13 +39,9 @@ export const DeliveryTracking = new EntitySchema({
             nullable: false,
             enum: ["PENDING", "IN_TRANSIT", "DELIVERED", "CANCELLED"]
         },
-        statusUpdatedAt: {
-            type: "timestamp",
+        statusUpdateTimeStamp: {
+            type: "jsonb",
             nullable: true
-        },
-        createdAt: {
-            type: "timestamp",
-            default: () => "CURRENT_TIMESTAMP"
         },
     },
 });
