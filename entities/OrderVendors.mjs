@@ -30,6 +30,10 @@ export const OrderVendors = new EntitySchema({
             default: ORDER_VENDOR_STATUS.PENDING,
             nullable: false
         },
+        notes: {
+            type: "text",
+            nullable: true
+        },
         createdAt: {
             type: "timestamp",
             createDate: true
