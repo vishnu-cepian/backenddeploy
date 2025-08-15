@@ -121,14 +121,14 @@ const createRazorpayOrderSchema = z.object({
  * Must be called within an active transaction.
  * @param {QueryRunner} queryRunner - The active TypeORM query runner.
  * @param {string} orderId - The ID of the order.
- * @param {string} newStatus - The new status of the order.
  * @param {string|null} previousStatus - The previous status of the order.
+ * @param {string} newStatus - The new status of the order.
  * @param {string} changedById - The ID of the user/system making the change.
  * @param {string} changedByRole - The role of the user/system.
  * @param {string|null} notes - Optional notes about the status change.
  */
 
-const createTimelineEntry = async (queryRunner, orderId, previousStatus, newStatus, changedById, changedByRole, notes = null) => {
+export const createTimelineEntry = async (queryRunner, orderId, previousStatus, newStatus, changedById, changedByRole, notes = null) => {
     const timelineEntry = queryRunner.manager.create(OrderStatusTimeline, {
         orderId,
         previousStatus,
@@ -136,6 +136,7 @@ const createTimelineEntry = async (queryRunner, orderId, previousStatus, newStat
         changedBy: changedById,
         changedByRole,
         notes,
+        changedAt: new Date()
     });
     await queryRunner.manager.save(OrderStatusTimeline, timelineEntry);
 };
@@ -186,6 +187,8 @@ export const createOrder = async (data) => {
                 pendingAt: new Date(),
                 inProgressAt: null,
                 completedAt: null,
+                cancelledAt: null,
+                refundedAt: null,
             }
         });
         
@@ -378,6 +381,11 @@ export const vendorOrderResponse = async (data) => {
         }   
 
         orderVendor.status = action === ORDER_VENDOR_STATUS.ACCEPTED ? ORDER_VENDOR_STATUS.ACCEPTED : ORDER_VENDOR_STATUS.REJECTED;
+
+        if (action === ORDER_VENDOR_STATUS.REJECTED) {
+            orderVendor.notes = notes || null;
+        }
+
         await queryRunner.manager.save(OrderVendors, orderVendor);
 
         if(action === ORDER_VENDOR_STATUS.ACCEPTED) {
@@ -671,16 +679,23 @@ export const handleRazorpayWebhook = async(req, res) => {
                     from: "CUSTOMER", 
                     to: "VENDOR", 
                     status: "PENDING",
-                    createdAt: new Date(),
-                    updatedAt: new Date()
+                    statusUpdateTimeStamp: {
+                        initiated_at: new Date(),
+                        pickup_assigned_at: null,
+                        pickup_in_transit_at: null,
+                        pickup_completed_at: null,
+                        delivery_in_transit_at: null,
+                        delivery_completed_at: null,
+                        delivery_failed_at: null,
+                        delivery_cancelled_at: null,
+                    },
                 });
 
                 // INITIATE CLOTH PICKUP FROM CUSTOMER, use OUTBOX pattern as this block is in a transaction
                 await queryRunner.manager.save(Outbox, { 
                     eventType: "INITIATE_PICKUP", 
                     payload: { 
-                        deliveryTrackingId: 
-                        deliveryTracking.id, 
+                        deliveryTrackingId: deliveryTracking.id, 
                         orderId 
                     } ,
                     status: "PENDING",
@@ -688,7 +703,9 @@ export const handleRazorpayWebhook = async(req, res) => {
                 });
 
                 await createTimelineEntry(queryRunner, orderId, ORDER_STATUS.IN_PROGRESS, ORDER_STATUS.ITEM_PICKUP_FROM_CUSTOMER_SCHEDULED, MISC.LOGISTICS, ROLE.SYSTEM, "Pickup from customer scheduled");
-            } 
+            } else {
+                await createTimelineEntry(queryRunner, orderId,  ORDER_STATUS.IN_PROGRESS, ORDER_STATUS.WORK_STARTED, ROLE.SYSTEM, ROLE.SYSTEM, "Work started triggered by System for order with no cloth provided");
+            }
 
             order.orderStatus = ORDER_STATUS.IN_PROGRESS;
             order.orderStatusTimestamp.inProgressAt = paymentDate.toISOString();
@@ -833,56 +850,104 @@ export const updateOrderStatus = async (data) => {
             throw sendError("Missing required fields: userId, orderId, or status");
         }
 
-        const { id: vendorId, address: vendorAddress } = await vendorRepo.findOne({ 
+        const { id: vendorId, addressLine1: vendorAddress } = await queryRunner.manager.findOne(Vendors, { 
             where: { userId: userId },
-            select: { id: true, address: true } 
+            select: { id: true, addressLine1: true } 
         });
         if (!vendorId) throw sendError("Vendor not found");
 
-        const order = await orderRepo.findOne({ 
+        const order = await queryRunner.manager.findOne(Orders, { 
             where: { id: orderId }, 
+            select: { id: true, clothProvided: true, orderStatus: true, customerId: true, selectedVendorId: true }
         });
   
         if (!order) throw sendError("Order not found");
         
         if (order.selectedVendorId !== vendorId) throw sendError("Order is not assigned to this vendor");
 
-        const timestamp = new Date().toString();
-
         switch (status) {
-            case "ITEM_RECEIVED":
+            case ORDER_STATUS.ITEM_RECEIVED:
                         // 2 way and if the itemDeliveredToVendorAt is null, it means that the item is yet to be delivered to the vendor (hence the first phase of delivery is not yet finished)
                         if (!order.clothProvided) {
                             throw sendError("no Item is provided by the customer");
                         }
 
-                        if (!order.orderStatusTimestamp.itemDeliveredToVendorAt) {
-                            throw sendError("Item is not yet delivered to the vendor or please wait for the delivery partner to update the status");
-                        }
+                        const alreadyReceived = await queryRunner.manager.findOne(OrderStatusTimeline, {
+                            where: { orderId: orderId, newStatus: ORDER_STATUS.ITEM_RECEIVED },
+                            select: { id: true }
+                        });
                         
-                        if (order.orderStatusTimestamp.vendorAcknowledgedItemAt) {
-                            throw sendError("Item is already delivered to the vendor and vendor has acknowledged it");
+                        if (alreadyReceived) {
+                            throw sendError("Item is already delivered to the vendor and vendor has acknowledged it", 400);
                         }
 
-                        order.orderStatusTimestamp.vendorAcknowledgedItemAt = timestamp;
-                        order.orderStatusTimestamp.orderInProgressAt = timestamp;
-                        order.orderStatus = ORDER_STATUS.IN_PROGRESS;
+                        const itemDeliveredEvent = await queryRunner.manager.findOne(OrderStatusTimeline, { 
+                            where: { orderId: orderId, newStatus: ORDER_STATUS.ITEM_DELIVERED_TO_VENDOR },
+                            select: { id: true }
+                        });
+
+                        if (!itemDeliveredEvent) {
+                            throw sendError("Item is not yet delivered to the vendor or please wait for the delivery partner to update the status", 400);
+                        }
+
+                        await createTimelineEntry(
+                            queryRunner,
+                            orderId,
+                            ORDER_STATUS.ITEM_DELIVERED_TO_VENDOR,
+                            ORDER_STATUS.ITEM_RECEIVED,
+                            vendorId,
+                            ROLE.VENDOR,
+                            "Item received by the vendor"
+                        )            
+                        
+                        await createTimelineEntry(
+                            queryRunner,
+                            orderId,
+                            ORDER_STATUS.ITEM_RECEIVED,
+                            ORDER_STATUS.WORK_STARTED,
+                            vendorId,
+                            ROLE.VENDOR,
+                            "Vendor ack received"
+                        )  
                         
                         break;
 
-            case "READY_FOR_PICKUP":
+            case ORDER_STATUS.ITEM_READY_FOR_PICKUP:
 
                         if (order.orderStatus !== ORDER_STATUS.IN_PROGRESS) {
                             throw sendError("Order is not in IN_PROGRESS status");
                         }
                         
-                        if (order.orderStatusTimestamp.readyForPickupFromVendor) {
-                            throw sendError("Item is already in the ready for pickup state");
+                        const alreadyReadyForPickup = await queryRunner.manager.findOne(OrderStatusTimeline, {
+                            where: { orderId: orderId, newStatus: ORDER_STATUS.ITEM_READY_FOR_PICKUP },
+                            select: { id: true }
+                        });
+
+                        if (alreadyReadyForPickup) {
+                            throw sendError("Item is already in the ready for pickup state", 400);
                         }
                         
-                        order.orderStatusTimestamp.readyForPickupFromVendor = true;
-                        order.orderStatusTimestamp.taskCompletedAt = timestamp;
-                        order.orderStatus = ORDER_STATUS.OUT_FOR_DELIVERY;
+
+                        if (order.clothProvided ) {
+                            const itemReceivedEvent = await queryRunner.manager.findOne(OrderStatusTimeline, {
+                                where: { orderId: orderId, newStatus: ORDER_STATUS.WORK_STARTED },
+                                select: { id: true }
+                            });
+
+                            if (!itemReceivedEvent) {
+                                throw sendError("Item is not yet received by the vendor", 400);
+                            }
+                        } 
+
+                        await createTimelineEntry(
+                            queryRunner,
+                            orderId,
+                            ORDER_STATUS.WORK_STARTED,
+                            ORDER_STATUS.ITEM_READY_FOR_PICKUP,
+                            vendorId,
+                            ROLE.VENDOR,
+                            "Item ready for pickup from vendor"
+                        )
 
                         // GENERATE DELIVERY TRACKING ID 
                         // IF THE DELIVERY SERVICE NEED TO AVOID CHARACTERS, THEN ADD AN RANDOM/SEQUENTIAL NUMBER BY SETTING THE FIELD AS UNIQUE
@@ -892,8 +957,16 @@ export const updateOrderStatus = async (data) => {
                             from: "VENDOR",
                             to: "CUSTOMER",
                             status: "PENDING",
-                            createdAt: new Date(),
-                            updatedAt: new Date()
+                            statusUpdateTimeStamp: {
+                                initiated_at: new Date(),
+                                pickup_assigned_at: null,
+                                pickup_in_transit_at: null,
+                                pickup_completed_at: null,
+                                delivery_in_transit_at: null,
+                                delivery_completed_at: null,
+                                delivery_failed_at: null,
+                                delivery_cancelled_at: null,
+                            },
                         })
 
                         // INITIATE CLOTH PICKUP FROM VENDOR, use OUTBOX pattern as this block is in a transaction
@@ -905,8 +978,8 @@ export const updateOrderStatus = async (data) => {
                             orderId,
                             vendorId,
                             customerId: order.customerId,
-                            pickupAddress: "test address 1",
-                            deliveryAddress: vendorAddress,
+                            pickupAddress: vendorAddress,
+                            deliveryAddress: "test address 1",
                         },
                         status: "PENDING",
                         createdAt: new Date()
@@ -915,8 +988,6 @@ export const updateOrderStatus = async (data) => {
                         break;
             default: throw sendError("Invalid status");
         }
-
-        await queryRunner.manager.save(Orders, order);
 
         await queryRunner.commitTransaction();
         return {
@@ -937,7 +1008,10 @@ export const getOrderTimeline = async (data) => {
     try {
         const { orderId } = data;
 
-        const order = await orderRepo.findOne({ where: { id: orderId } });
+        const order = await orderRepo.findOne({
+             where: { id: orderId },
+             select: {id: true }, 
+            });
         if (!order) throw sendError("Order not found", 404);
 
         const orderTimeline = await orderStatusTimelineRepo.find({ 
