@@ -3,6 +3,11 @@ import { sendError } from "../utils/core-utils.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
 import { Orders } from "../entities/Orders.mjs";
+import { createTimelineEntry } from "../services/orderService.mjs";
+import { OrderQuotes } from "../entities/OrderQuote.mjs";
+import { VendorStats } from "../entities/VendorStats.mjs";
+import { Vendors } from "../entities/Vendors.mjs";
+import { OrderVendors } from "../entities/OrderVendors.mjs";
 
 export const sendDeliveryRequest = async (payload) => {
     throw new Error("Not implemented");
@@ -20,75 +25,211 @@ export const handleDeliveryWebhook = async (req, res) => {
 
         if (!deliveryTrackingId || !status) throw sendError("Delivery tracking ID and status are required");
 
-        const deliveryTracking = await queryRunner.manager.findOne(DeliveryTracking, { where: { id: deliveryTrackingId } });
+        const deliveryTracking = await queryRunner.manager.findOne(DeliveryTracking, { 
+            where: { id: deliveryTrackingId },
+            select: {
+                id: true,
+                orderId: true,
+                deliveryType: true,
+                status: true,
+                statusUpdateTimeStamp: true,
+            }
+        });
         if (!deliveryTracking) throw sendError("Delivery tracking not found");
-
-        deliveryTracking.status = status;   
-        deliveryTracking.statusUpdatedAt = new Date();
-
-        await queryRunner.manager.save(DeliveryTracking, deliveryTracking);
 
         /**
          * 
          * ADD IDEMPOTENCY CHECK
          * 
          */
-        const order = await queryRunner.manager.findOne(Orders, { where: { id: deliveryTracking.orderId } });
+        const order = await queryRunner.manager.findOne(Orders, { 
+            where: { id: deliveryTracking.orderId },
+            select: {
+                id: true,
+                selectedVendorId: true,
+                finalQuoteId: true,
+                orderStatus: true,
+                orderStatusTimestamp: true,
+            }
+        });
         if (!order) throw sendError("Order not found");
-
-        const statusChanges = [];
 
         switch(deliveryTracking.deliveryType) {
             case "TO_VENDOR":
-                if (status === "OUT_FOR_PICKUP") {
-                    if (!order.orderStatusTimestamp.outForPickupFromCustomerAt) {   
-                    order.orderStatus = "OUT_FOR_PICKUP";
-                        order.orderStatusTimestamp.outForPickupFromCustomerAt = new Date().toString();
-                        statusChanges.push("OUT_FOR_PICKUP");
-                    } 
-                } else if (status === "PICKUP_COMPLETED") {
-                    if (!order.orderStatusTimestamp.itemPickedFromCustomerAt) {
-                        order.orderStatusTimestamp.itemPickedFromCustomerAt = new Date().toString();
-                        statusChanges.push("PICKUP_COMPLETED");
+                if (status === "PICKUP_ASSIGNED") {
+                    if ( deliveryTracking.statusUpdateTimeStamp.pickup_assigned_at ) {
+                        throw sendError("Duplicate event: Pickup already assigned", 400);
                     }
-                } else if (status === "DELIVERED") {
-                    if (!order.orderStatusTimestamp.itemDeliveredToVendorAt) {
-                        order.orderStatusTimestamp.itemDeliveredToVendorAt = new Date().toString();
-                        statusChanges.push("DELIVERED");
+                    deliveryTracking.status = "PICKUP_ASSIGNED";
+                    deliveryTracking.statusUpdateTimeStamp.pickup_assigned_at = new Date().toString();
+                    await queryRunner.manager.update(DeliveryTracking, { id: deliveryTrackingId }, deliveryTracking);
+
+                } else if (status === "PICKUP_IN_TRANSIT") {
+                    if ( deliveryTracking.statusUpdateTimeStamp.pickup_in_transit_at ) {
+                        throw sendError("Duplicate event: Pickup already in transit", 400);
                     }
-                } 
+                    deliveryTracking.status = "PICKUP_IN_TRANSIT";
+                    deliveryTracking.statusUpdateTimeStamp.pickup_in_transit_at = new Date().toString();
+                    await queryRunner.manager.update(DeliveryTracking, { id: deliveryTrackingId }, deliveryTracking);
+                    
+                } else if (status === "PICKUP_COMPLETE") {
+                    if ( deliveryTracking.statusUpdateTimeStamp.pickup_completed_at ) {
+                        throw sendError("Duplicate event: Pickup already completed", 400);
+                    }
+                    deliveryTracking.status = "PICKUP_COMPLETE";
+                    deliveryTracking.statusUpdateTimeStamp.pickup_completed_at = new Date().toString();
+                    await queryRunner.manager.update(DeliveryTracking, { id: deliveryTrackingId }, deliveryTracking);
+
+                    await createTimelineEntry(
+                        queryRunner,
+                        order.id,
+                        "ITEM_PICKUP_FROM_CUSTOMER_SCHEDULED",
+                        "ITEM_PICKED_UP_FROM_CUSTOMER",
+                        "LOGISTICS",
+                        "SYSTEM",
+                        "Item picked up from customer"
+                    )
+
+                } else if (status === "DELIVERY_IN_TRANSIT") {
+                    if ( deliveryTracking.statusUpdateTimeStamp.delivery_in_transit_at ) {
+                        throw sendError("Duplicate event: Delivery already in transit", 400);
+                    }
+                    deliveryTracking.status = "DELIVERY_IN_TRANSIT";
+                    deliveryTracking.statusUpdateTimeStamp.delivery_in_transit_at = new Date().toString();
+                    await queryRunner.manager.update(DeliveryTracking, { id: deliveryTrackingId }, deliveryTracking);
+
+                } else if (status === "DELIVERY_COMPLETE") {
+                    if ( deliveryTracking.statusUpdateTimeStamp.delivery_completed_at ) {
+                        throw sendError("Duplicate event: Delivery already completed", 400);
+                    }
+                    deliveryTracking.status = "DELIVERY_COMPLETE";
+                    deliveryTracking.statusUpdateTimeStamp.delivery_completed_at = new Date().toString();
+                    await queryRunner.manager.update(DeliveryTracking, { id: deliveryTrackingId }, deliveryTracking);
+
+                    await createTimelineEntry(
+                        queryRunner,
+                        order.id,
+                        "ITEM_PICKED_UP_FROM_CUSTOMER",
+                        "ITEM_DELIVERED_TO_VENDOR",
+                        "LOGISTICS",
+                        "SYSTEM",
+                        "Item delivered to vendor"
+                    )
+
+                } else {
+                    throw sendError("Invalid status: " + status, 400);
+                }
+
                 break;
             
             case "TO_CUSTOMER":
-                if (status === "OUT_FOR_PICKUP") {
-                    if (!order.orderStatusTimestamp.outForPickupFromVendorAt) {
-                        order.orderStatusTimestamp.outForPickupFromVendorAt = new Date().toString();
-                        statusChanges.push("OUT_FOR_PICKUP");
+                /**
+                 * 
+                 * After receiving the item_delivered_to_customer, Make the Order COMPLETED
+                 * 
+                 */
+                if (status === "PICKUP_ASSIGNED") {
+                    if ( deliveryTracking.statusUpdateTimeStamp.pickup_assigned_at ) {
+                        throw sendError("Duplicate event: Pickup already assigned", 400);
                     }
-                } else if (status === "PICKUP_COMPLETED") {
-                    if (!order.orderStatusTimestamp.itemPickedFromVendorAt) {
-                        order.orderStatusTimestamp.itemPickedFromVendorAt = new Date().toString();
-                        statusChanges.push("PICKUP_COMPLETED");
+                    deliveryTracking.status = "PICKUP_ASSIGNED";
+                    deliveryTracking.statusUpdateTimeStamp.pickup_assigned_at = new Date().toString();
+                    await queryRunner.manager.update(DeliveryTracking, { id: deliveryTrackingId }, deliveryTracking);
+
+                } else if (status === "PICKUP_IN_TRANSIT") {
+                    if ( deliveryTracking.statusUpdateTimeStamp.pickup_in_transit_at ) {
+                        throw sendError("Duplicate event: Pickup already in transit", 400);
                     }
-                } else if (status === "DELIVERED") {
-                    if (!order.orderStatusTimestamp.itemDeliveredToCustomerAt) {
-                        order.orderStatusTimestamp.itemDeliveredToCustomerAt = new Date().toString();
-                        statusChanges.push("DELIVERED");
+                    deliveryTracking.status = "PICKUP_IN_TRANSIT";
+                    deliveryTracking.statusUpdateTimeStamp.pickup_in_transit_at = new Date().toString();
+                    await queryRunner.manager.update(DeliveryTracking, { id: deliveryTrackingId }, deliveryTracking);
+
+                } else if (status === "PICKUP_COMPLETE") {
+                    if ( deliveryTracking.statusUpdateTimeStamp.pickup_completed_at ) {
+                        throw sendError("Duplicate event: Pickup already completed", 400);
                     }
+                    deliveryTracking.status = "PICKUP_COMPLETE";
+                    deliveryTracking.statusUpdateTimeStamp.pickup_completed_at = new Date().toString();
+                    await queryRunner.manager.update(DeliveryTracking, { id: deliveryTrackingId }, deliveryTracking);
+
+                    await createTimelineEntry(
+                        queryRunner,
+                        order.id,
+                        "ITEM_READY_FOR_PICKUP",
+                        "ITEM_PICKED_UP_FROM_VENDOR",
+                        "LOGISTICS",
+                        "SYSTEM",
+                        "Item picked up from vendor"
+                    )
+
+                } else if (status === "DELIVERY_IN_TRANSIT") {
+                    if ( deliveryTracking.statusUpdateTimeStamp.delivery_in_transit_at ) {
+                        throw sendError("Duplicate event: Delivery already in transit", 400);
+                    }
+                    deliveryTracking.status = "DELIVERY_IN_TRANSIT";
+                    deliveryTracking.statusUpdateTimeStamp.delivery_in_transit_at = new Date().toString();
+                    await queryRunner.manager.update(DeliveryTracking, { id: deliveryTrackingId }, deliveryTracking);
+
+                } else if (status === "DELIVERY_COMPLETE") {
+                    if ( deliveryTracking.statusUpdateTimeStamp.delivery_completed_at ) {
+                        throw sendError("Duplicate event: Delivery already completed", 400);
+                    }
+                    deliveryTracking.status = "DELIVERY_COMPLETE";
+                    deliveryTracking.statusUpdateTimeStamp.delivery_completed_at = new Date().toString();
+                    await queryRunner.manager.update(DeliveryTracking, { id: deliveryTrackingId }, deliveryTracking);
+
+                    await createTimelineEntry(
+                        queryRunner,
+                        order.id,
+                        "ITEM_PICKED_UP_FROM_VENDOR",
+                        "ITEM_DELIVERED_TO_CUSTOMER",
+                        "LOGISTICS",
+                        "SYSTEM",
+                        "Item delivered to customer"
+                    )
+
+                    order.orderStatus = "COMPLETED";
+                    order.orderStatusTimestamp.completedAt = new Date().toString();
+                    await queryRunner.manager.update(Orders, { id: order.id }, order);
+
+                    /**
+                     * 
+                     * MAKE THE ORDER VENDOR STATUS AS COMPLETED
+                     * 
+                     */
+                    const orderVendor = await queryRunner.manager.findOne(OrderVendors, {
+                        where: { orderId: order.id, vendorId: order.selectedVendorId },
+                        select: { id: true, status: true }
+                    });
+                    if(!orderVendor) throw sendError("Order vendor not found", 404);
+                    orderVendor.status = "COMPLETED";
+                    await queryRunner.manager.update(OrderVendors, { id: orderVendor.id }, orderVendor);
+
+                    /**
+                     * 
+                     *  INCREMENT THE VENDOR COMPLETED ORDERS BY 1
+                     * 
+                     * 
+                     */
+
+                    const orderQuote = await queryRunner.manager.findOne(OrderQuotes, { where: { id: order.finalQuoteId }, select: { vendorPayoutAfterCommission: true } });
+                    if(!orderQuote) throw sendError("Order quote not found", 404);
+
+                    await queryRunner.manager.update(VendorStats, { vendorId: order.selectedVendorId }, { 
+                        totalCompletedOrders: () => "totalCompletedOrders + 1", totalInProgressOrders: () => "totalInProgressOrders - 1", totalEarnings: () => `totalEarnings + ${orderQuote.vendorPayoutAfterCommission}`
+                    });
+
+                    /**
+                     * 
+                     * INITATE PUSH NOTIFICATION TO CUSTOMER FOR RATING & also to vendor for feedback
+                     * 
+                     */
                 }
                 break;
 
             default:
                 throw sendError("Invalid delivery type");
         }
-
-        if (statusChanges.length > 0) {
-            logger.info(`Order ${order.id} status changed to ${statusChanges.join(", ")}`);
-        } else {
-            logger.info(`No status changes for order ${order.id}, status: ${status} already processed`);
-        }
-
-        await queryRunner.manager.save(Orders, order);
 
         await queryRunner.commitTransaction();
         
