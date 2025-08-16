@@ -5,7 +5,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "nodemon server.mjs",
-    "dev": "nodemon server.mjs"
+    "dev": "nodemon server.mjs",
+    "migration:generate": "typeorm migration:generate -d ./config/data-source.mjs --outputJs",
+    "migration:run": "typeorm migration:run -d ./config/data-source.mjs",
+    "migration:revert": "typeorm migration:revert -d ./config/data-source.mjs"
   },
   "keywords": [],
   "author": "",
