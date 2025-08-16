@@ -184,7 +184,7 @@ export const createOrder = async (data) => {
             orderStatus: ORDER_STATUS.PENDING,
             isPaid: false,
             orderStatusTimestamp: {
-                pendingAt: new Date(),
+                pendingAt: new Date().toString(),
                 inProgressAt: null,
                 completedAt: null,
                 cancelledAt: null,
@@ -708,7 +708,7 @@ export const handleRazorpayWebhook = async(req, res) => {
             }
 
             order.orderStatus = ORDER_STATUS.IN_PROGRESS;
-            order.orderStatusTimestamp.inProgressAt = paymentDate.toISOString();
+            order.orderStatusTimestamp.inProgressAt = paymentDate.toString();
 
             await queryRunner.manager.save(Orders, order);
             await queryRunner.manager.update(VendorStats, { vendorId }, { totalInProgressOrders: () => "totalInProgressOrders + 1" });
