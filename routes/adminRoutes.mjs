@@ -32,5 +32,7 @@ router.get("/getOrderById/:id",verifyAdminAccessToken, controllerWrapper(adminCo
 router.get("/getVendorResponse/:id",verifyAdminAccessToken, controllerWrapper(adminController.getVendorResponse, {logRequest, logResponse}))
 router.get("/getQuotes/:id",verifyAdminAccessToken, controllerWrapper(adminController.getQuotes, {logRequest, logResponse}))
 router.get("/getPayments/:id",verifyAdminAccessToken, controllerWrapper(adminController.getPayments, {logRequest, logResponse}))
+router.get("/getOrderTimeline/:id",verifyAdminAccessToken, controllerWrapper(adminController.getOrderTimeline, {logRequest, logResponse}))
+router.get("/getDeliveryDetails/:id",verifyAdminAccessToken, controllerWrapper(adminController.getDeliveryDetails, {logRequest, logResponse}))
 
 export default router;

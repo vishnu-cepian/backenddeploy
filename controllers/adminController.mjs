@@ -303,3 +303,31 @@ export const getPayments = async (req, res, next) => {
         next(error);
     }
 };
+
+export const getOrderTimeline = async (req, res, next) => {
+    try {
+        const orderId = req.params.id;
+        const response = await adminService.getOrderTimeline(orderId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const getDeliveryDetails = async (req, res, next) => {
+    try {
+        const orderId = req.params.id;
+        const response = await adminService.getDeliveryDetails(orderId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};

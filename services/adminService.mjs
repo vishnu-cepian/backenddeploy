@@ -17,6 +17,8 @@ import { ORDER_STATUS, SHOP_TYPE, SERVICE_TYPE, OWNERSHIP_TYPE, ORDER_VENDOR_STA
 import { z } from "zod";
 import { UpdateLog } from "../entities/UpdateLog.mjs";
 import { VendorStats } from "../entities/VendorStats.mjs";
+import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
+import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -815,7 +817,6 @@ export const getOrderById = async (id) => {
     ])
     .where("orders.id = :id", { id })
     .getOne();
-    console.log(order)
     return { order };
   } catch (err) {
     logger.error(err);
@@ -852,5 +853,39 @@ export const getPayments = async (id) => {
   } catch (err) {
     logger.error(err);
     throw err;
+  }
+}
+
+export const getOrderTimeline = async (orderId) => {
+  try {
+      const order = await orderRepo.findOne({
+           where: { id: orderId },
+           select: {id: true }, 
+          });
+      if (!order) throw sendError("Order not found", 404);
+ 
+      const orderStatusTimelineRepo = AppDataSource.getRepository(OrderStatusTimeline);
+      const orderTimeline = await orderStatusTimelineRepo.find({ 
+          where: { orderId: orderId },
+          // select: { id: true, previousStatus: true, newStatus: true, changedAt: true },
+      });
+      if (!orderTimeline) throw sendError("Order timeline not found", 404);
+ 
+      return orderTimeline;
+
+  } catch (error) {
+      logger.error("Error getting order timeline", error);
+      throw error;
+  }
+}
+
+export const getDeliveryDetails = async (orderId) => {
+  try {
+    const deliveryTrackingRepo = AppDataSource.getRepository(DeliveryTracking);
+    const deliveryTracking = await deliveryTrackingRepo.find({ where: { orderId } });
+    return deliveryTracking;
+  } catch (error) {
+    logger.error("Error getting delivery details", error);
+    throw error;
   }
 }
