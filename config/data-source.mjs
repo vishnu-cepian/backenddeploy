@@ -1,74 +1,47 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
-import { User } from '../entities/User.mjs';
-import { Vendors } from '../entities/Vendors.mjs';
-import { OtpPhone } from '../entities/OtpPhone.mjs';
-import { OtpEmail } from '../entities/OtpEmail.mjs';
-import { Customers } from '../entities/Customers.mjs';
-import { Orders } from '../entities/Orders.mjs';
-import { OrderItems } from '../entities/OrderItems.mjs';
-import { OrderVendors } from '../entities/OrderVendors.mjs';
-import { ChatRoom } from '../entities/ChatRoom.mjs';
-import { ChatMessage } from '../entities/ChatMessage.mjs';
-import { VendorAudit } from '../entities/VendorAudit.mjs';
-import { VendorImages } from '../entities/VendorImages.mjs';
-import { OrderQuotes } from '../entities/OrderQuote.mjs';
-import { Payments } from '../entities/Payments.mjs';
-import { Rating } from '../entities/Rating.mjs';
-import { LeaderboardHistory } from '../entities/LeaderboardHistory.mjs';
-import { PaymentFailures } from '../entities/PaymentFailures.mjs';  
-import { QueueLogs } from '../entities/queueLogs.mjs';
-import { Outbox } from '../entities/Outbox.mjs';
-import { DeliveryTracking } from '../entities/DeliveryTracking.mjs';
-import { CustomerAddress } from '../entities/CustomerAddress.mjs';
-import { OrderStatusTimeline } from '../entities/orderStatusTimeline.mjs';
-import { Refunds } from '../entities/Refunds.mjs';
-import { UpdateLog } from '../entities/UpdateLog.mjs';
-import { VendorStats } from '../entities/VendorStats.mjs';
-import 'dotenv/config'
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+dotenv.config();
+
+/**
+ * A helper function to get a required environment variable.
+ * Throws an error if the variable is not set.
+ * @param {string} name The name of the environment variable.
+ * @returns {string} The value of the environment variable.
+ */
+const getRequiredEnv = (name) => {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`FATAL ERROR: Environment variable "${name}" is not set.`);
+  }
+  return value;
+};
+
+// root directory of the project for correct pathing
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.join(__dirname, '..'); // since this file is in a 'config' subdirectory so going back one level
+
+const isProduction = process.env.NODE_ENV === 'production';
 
 export const AppDataSource = new DataSource({
     type: 'postgres',
-    url: process.env.DATABASE_URL + "?sslmode=require",
-    // host: process.env.DB_HOST,
-    // port: process.env.DB_PORT,
-    // username: process.env.DB_USERNAME,
-    // password: process.env.DB_PASSWORD,
-    // database: process.env.DB_DATABASE,
-    schema: "public",
-    synchronize: true,
-    entities: [User, Vendors, OtpPhone, OtpEmail, Customers, Orders, OrderItems, 
-        OrderVendors, ChatRoom, ChatMessage, VendorAudit, VendorImages, OrderQuotes, 
-        Payments, Rating, LeaderboardHistory, PaymentFailures, QueueLogs, Outbox, 
-        DeliveryTracking, CustomerAddress, OrderStatusTimeline, Refunds, UpdateLog, VendorStats],
+    url: getRequiredEnv('DATABASE_URL'),
+    
+    synchronize: !isProduction,    // synchronize: NEVER use 'true' in production. Migrations are the safe way to handle schema changes.
 
-//     ssl: true,
-//     extra: {
-//     ssl: {
-//       rejectUnauthorized: false // For self-signed certificates
-//     }
-//   }
+    logging: isProduction ? ['error'] : true,    // logging: Enables full logging in development, but only log errors in production.
 
-//   FOR DIFFERENT ENVIRONMENTS
-// ssl: process.env.NODE_ENV === 'production' ? {
-//   rejectUnauthorized: true,
-//   ca: fs.readFileSync('/path/to/ca-certificate.crt').toString()
-// } : false
+    // --- Entity and Migration Paths ---
+    // Use glob patterns to automatically find all entity and migration files.
+    entities: [path.join(rootDir, 'entities', '**', '*.mjs')],
+    migrations: [path.join(rootDir, 'migrations', '**', '*.js')], // Note: Migrations need compiled to .js
+    
+    // --- SSL Configuration for Production ---
+    ssl: isProduction 
+        ? { rejectUnauthorized: false } // Adjust  based on your provider's requirements
+        : false,
 });
-
-
-// FOR PRODUCTION
-
-// export const AppDataSource = new DataSource({
-//     type: "postgres",
-//     host: process.env.DB_HOST, // your RDS endpoint
-//     port: 5432,
-//     username: process.env.DB_USER, // 'postgres'
-//     password: process.env.DB_PASS,
-//     database: process.env.DB_NAME, // e.g. 'myapp'
-//     synchronize: false, // ✅ false in production
-//     logging: true,
-//     entities: ["src/entities/*.js"], // adjust path as needed
-//     migrations: ["src/migrations/*.js"],
-//     ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-//   });
