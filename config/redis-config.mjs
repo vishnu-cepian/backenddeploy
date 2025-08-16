@@ -1,11 +1,28 @@
 import Redis from 'ioredis';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+/**
+ * A helper function to get a required environment variable.
+ * Throws an error if the variable is not set.
+ * @param {string} name The name of the environment variable.
+ * @returns {string} The value of the environment variable.
+ */
+const getRequiredEnv = (name) => {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`FATAL ERROR: Environment variable "${name}" is not set.`);
+  }
+  return value;
+};
 
 class RedisManager {
   constructor() {
     this.options = {
-      host: process.env.REDIS_HOST || 'redis-18909.c305.ap-south-1-1.ec2.redns.redis-cloud.com',
-      port: parseInt(process.env.REDIS_PORT || '18909'), 
-      password: process.env.REDIS_PASSWORD || "qsWG3H1WQZO6Gz71iaSHUC7lH4y3QgMR",
+      host: getRequiredEnv('REDIS_HOST'),
+      port: parseInt(getRequiredEnv('REDIS_PORT'), 10), 
+      password: getRequiredEnv('REDIS_PASSWORD'),
       enableReadyCheck: true, // Verify Redis is ready
       reconnectOnError: (err) => {
         // Reconnect only on non-network errors
