@@ -3,6 +3,9 @@ import { EntitySchema } from "typeorm";
 export const ChatMessage = new EntitySchema({
     name: "ChatMessage",
     tableName: "chat_messages",
+    indices: [
+        { name: "IDX_CHAT_MESSAGE_ROOM_ID_CREATED_AT", columns: ["chatRoomId", "createdAt"] }
+    ],
     columns: {
         id: {
             primary: true,
@@ -48,7 +51,7 @@ export const ChatMessage = new EntitySchema({
                 name: "senderId"
             },
             cascade: true,
-            onDelete: "CASCADE"
+            onDelete: "SET NULL"
         }
     }
 });
