@@ -5,8 +5,8 @@ export const CustomerAddress = new EntitySchema({
     tableName: "customerAddresses",
     indices: [
         { name: "customer_address_customer_id_idx", columns: ["customerId"] },
-        { name: "customer_address_is_default_idx", columns: ["isDefault"] },
-        { name: "customer_address_is_deleted_idx", columns: ["isDeleted"] }
+        { name: "customer_address_customer_default_idx", columns: ["customerId", "isDefault"] },
+        { name: "customer_address_customer_active_idx", columns: ["customerId", "isDeleted"] }
     ],
     columns: {
         id: {
