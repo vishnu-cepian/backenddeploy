@@ -1,3 +1,8 @@
+/**
+ * 
+ * USED IF REDIS FAILS TO GET THE CONSTANTS OR FROM THE DB
+ * 
+ */
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -22,5 +27,5 @@ const getRequiredNumberEnv = (name) => {
 };
 
 // --- Financial Constants ---
-export const PLATFORM_FEE_PERCENT = getRequiredNumberEnv("PLATFORM_FEE_PERCENTAGE");
-export const VENDOR_FEE_PERCENT = getRequiredNumberEnv("VENDOR_FEE_PERCENTAGE");
+export const DEFAULT_PLATFORM_FEE_PERCENT = getRequiredNumberEnv("DEFAULT_PLATFORM_FEE_PERCENTAGE");
+export const DEFAULT_VENDOR_FEE_PERCENT = getRequiredNumberEnv("DEFAULT_VENDOR_FEE_PERCENTAGE");
