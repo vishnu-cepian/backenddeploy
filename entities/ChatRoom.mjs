@@ -3,6 +3,14 @@ import { EntitySchema } from "typeorm";
 export const ChatRoom = new EntitySchema({
     name: "ChatRoom",
     tableName: "chat_rooms",
+    indices: [
+        { name: "IDX_CHAT_ROOM_CUSTOMER_ID", columns: ["customerId"] },
+        { name: "IDX_CHAT_ROOM_VENDOR_ID", columns: ["vendorId"] },
+        { name: "IDX_CHAT_ROOM_UPDATED_AT", columns: ["updatedAt"] }
+    ],
+    uniques: [
+        { name: "IDX_CHAT_ROOM_CUSTOMER_ID_VENDOR_ID", columns: ["customerId", "vendorId"] }
+    ],
     columns: {
         id: {
             primary: true,
@@ -17,14 +25,14 @@ export const ChatRoom = new EntitySchema({
             type: "uuid",
             nullable: false
         },
-        lastMessage: {
-            type: "text",
-            nullable: true
-        },
-        lastMessageAt : {
-            type: "timestamp",
-            nullable: true
-        },
+        // lastMessage: {
+        //     type: "text",
+        //     nullable: true
+        // },
+        // lastMessageAt : {
+        //     type: "timestamp",
+        //     nullable: true
+        // },
         createdAt: {
             type: "timestamp",
             createDate: true
