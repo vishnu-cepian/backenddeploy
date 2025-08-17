@@ -4,7 +4,9 @@ import { EntitySchema } from "typeorm";
 export const DeliveryTracking = new EntitySchema({
     name: "DeliveryTracking",
     tableName: "deliveryTracking",
-
+    indices: [
+        { name: "delivery_tracking_order_id_idx", columns: ["orderId"] },
+    ],
     columns: {
         id: {
             primary: true,
