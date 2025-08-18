@@ -5,11 +5,10 @@ import * as chatService from "../services/chatService.mjs";
 
 export const getOrCreateChatRoom = async (req, res, next) => {
     try {
-
-        // pass the user (from jwt) to determine if its customer or vendor
         const data = {
-            user: req.user,
-            receiverId: req.body.receiverId
+            currentUserId: req.user.id,
+            currentUserRole: req.user.role,
+            receiverId: req.params.receiverId
         }
         const response = await chatService.getOrCreateChatRoom(data);
         if (!response) {
@@ -22,24 +21,10 @@ export const getOrCreateChatRoom = async (req, res, next) => {
     }
 };
 
-export const getChatRoom = async (req, res, next) => {
-    try {
-        const { chatRoomId } = req.body;
-        const response = await chatService.getChatRoom(chatRoomId);
-        if (!response) {
-            throw new Error(formatError("Error fetching room", response));
-        }
-        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
-    } catch (err) {
-        logger.error(err);
-        next(err);
-    }
-}
-
 export const getChatRoomsForUser = async (req, res, next) => {
     try {
-        const user = req.user;
-        const response = await chatService.getChatRoomsForUser(user);
+        const userId = req.user.id;
+        const response = await chatService.getChatRoomsForUser(userId);
         if (!response) {
             throw new Error(formatError("Chat rooms not found", response));
         }
@@ -50,28 +35,15 @@ export const getChatRoomsForUser = async (req, res, next) => {
     }
 }
 
-export const sendMessage = async (req, res, next) => {
-    try {
-        const data = {
-            chatRoomId: req.body.chatRoomId,
-            senderId: req.user.id,
-            content: req.body.content
-        }
-        const response = await chatService.sendMessage(data);
-        if (!response) {
-            throw new Error(formatError("Message not sent", response));
-        }
-        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
-    } catch(err) {
-        logger.error(err);
-        next(err);
-    }
-}
-
 export const getMessages = async (req, res, next) => {
     try {
-        const { chatRoomId } = req.body;
-        const response = await chatService.getMessages(chatRoomId);
+        const data = {
+            userId: req.user.id,
+            chatRoomId: req.params.chatRoomId,
+            page: parseInt(req.params.page),
+            limit: parseInt(req.params.limit)
+        }
+        const response = await chatService.getMessages(data);
         if (!response) {
             throw new Error(formatError("error reading message", response));
         }
@@ -82,17 +54,3 @@ export const getMessages = async (req, res, next) => {
     }
 }
 
-export const markAsRead = async (req, res, next) => {
-    try {
-        const { chatRoomId } = req.body;
-        const senderId = req.user.id;
-        const response = await chatService.markAsRead(chatRoomId, senderId);
-        if (!response) {
-            throw new Error(formatError("Error marking as read", response));
-        }
-        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
-    } catch (err) {
-        logger.error(err);
-        next(err);
-    }
-}
