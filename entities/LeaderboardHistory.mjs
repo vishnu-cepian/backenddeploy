@@ -3,6 +3,9 @@ import { EntitySchema } from "typeorm";
 export const LeaderboardHistory = new EntitySchema({
     name: "LeaderboardHistory",
     tableName: "leaderboard_history",
+    indices: [
+        { name: "IDX_LEADERBOARD_HISTORY_LOOKUP", columns: ["serviceType", "monthYear", "bayesianScore"] }
+    ],
     columns: {
         id: {
             type: "uuid",
