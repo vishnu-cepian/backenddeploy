@@ -25,14 +25,14 @@ export const ChatRoom = new EntitySchema({
             type: "uuid",
             nullable: false
         },
-        // lastMessage: {
-        //     type: "text",
-        //     nullable: true
-        // },
-        // lastMessageAt : {
-        //     type: "timestamp",
-        //     nullable: true
-        // },
+        customerUserId: {
+            type: "uuid",
+            nullable: false
+        },
+        vendorUserId: {
+            type: "uuid",
+            nullable: false
+        },
         createdAt: {
             type: "timestamp",
             createDate: true
@@ -60,6 +60,22 @@ export const ChatRoom = new EntitySchema({
             },
             cascade: true,
             onDelete: "CASCADE"
+        },
+        customerUser: {
+            type: "many-to-one",
+            target: "User",
+            joinColumn: {
+                name: "customerUserId"
+            },
+            cascade: true,
+        },
+        vendorUser: {
+            type: "many-to-one",
+            target: "User",
+            joinColumn: {
+                name: "vendorUserId"
+            },
+            cascade: true,
         }
     }
 });

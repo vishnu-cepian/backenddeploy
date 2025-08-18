@@ -16,17 +16,13 @@ export const ChatMessage = new EntitySchema({
             type: "uuid",
             nullable: false
         },
-        senderId: {
+        senderUserId: {
             type: "uuid",
             nullable: false
         },
         content: {
             type: "text",
             nullable: false
-        },
-        isRead: {
-            type: "boolean",
-            default: false
         },
         createdAt: {
             type: "timestamp",
@@ -48,7 +44,7 @@ export const ChatMessage = new EntitySchema({
             type: "many-to-one",
             target: "User",
             joinColumn: {
-                name: "senderId"
+                name: "senderUserId"
             },
             cascade: true,
             onDelete: "SET NULL"
