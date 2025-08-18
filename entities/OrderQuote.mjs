@@ -11,12 +11,34 @@ export const OrderQuotes = new EntitySchema({
         },     
         orderVendorId: {
             type: "uuid",
+            unique: true,
             nullable: false
         },
         quotedDays: {
             type: "int",
             nullable: false
         },
+        /**
+         * 
+         * 
+         * 
+         *  USE NUMERIC INSTEAD OF FLOAT FOR ALL FILEDS.    (AFTER DELETING ALL DATA FROM THE TABLE) 
+         * 
+         * 
+         * 
+         * 
+         * 
+         *  quotedPrice: {
+            type: "numeric",
+            precision: 10,
+            scale: 2,
+            nullable: false
+        },
+         * 
+         * 
+         * 
+         * 
+         */
         quotedPrice: {
             type: "float",
             nullable: false
