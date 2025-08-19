@@ -3,6 +3,9 @@ import { EntitySchema } from "typeorm";
 export const PaymentFailures = new EntitySchema({
     name: "PaymentFailures",
     tableName: "paymentFailures",
+    indices: [
+        { name: "IDX_PAYMENT_FAILURES_PAYMENT_ID", columns: ["paymentId"] },
+    ],
     columns: {
         id: {
             primary: true,
