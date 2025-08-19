@@ -6,9 +6,8 @@ export const Vendors = new EntitySchema({
     tableName: "vendors",
     indices: [
         { name: "vendor_location_gix", columns: ["location"], spatial: true },
-        { name: "vendor_current_month_rating_idx", columns: ["currentMonthRating"] },
-        { name: "vendor_current_month_bayesian_score_idx", columns: ["currentMonthBayesianScore"] },
-        { name: "vendor_current_month_review_count_idx", columns: ["currentMonthReviewCount"] },
+        { name: "vendor_user_id_idx", columns: ["userId"], unique: true },
+        { name: "vendor_search_score_idx", columns: ["serviceType", "status", "currentMonthBayesianScore"] },
         { name: "vendor_all_time_rating_idx", columns: ["allTimeRating"] },
         { name: "vendor_all_time_review_count_idx", columns: ["allTimeReviewCount"] },
         { name: "vendor_shopname_idx", columns: ["shopName"] },
@@ -114,7 +113,7 @@ export const Vendors = new EntitySchema({
             nullable: false
         },       
         location: {     //  { type: 'Point', coordinates: [lng, lat] }
-            type: "geometry",
+            type: "geography",
             spatialFeatureType: "Point", 
             srid: 4326,
             nullable: true
