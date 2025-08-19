@@ -9,6 +9,7 @@ import { sendError } from "../utils/core-utils.mjs";
 import { ROLE } from '../types/enums/index.mjs';
 import { ChatReadState } from '../entities/ChatReadState.mjs';
 import { getPresignedViewUrl } from "./s3service.mjs";
+import { Not } from "typeorm";
 //=================== ZOD VALIDATION SCHEMAS ====================
 
 const getOrCreateChatRoomSchema = z.object({
@@ -187,29 +188,38 @@ export const getMessages = async (data) => {
             throw sendError("You are not authorized to view these messages.", 403);
         }
 
-        const messages = await AppDataSource.getRepository(ChatMessage).find({
+        const [messages, totalCount] = await Promise.all ([
+            AppDataSource.getRepository(ChatMessage).find({
             where: { chatRoomId },
             order: { createdAt: "DESC" },
             skip: offset,
             take: limit,
-        });
+        }),
+            AppDataSource.getRepository(ChatMessage).count({
+                where: { chatRoomId },
+            })
+        ]);
 
         const readState = await AppDataSource.getRepository(ChatReadState).findOne({
-            where: { chatRoomId, userId },
+            where: { chatRoomId, userId: Not(userId) },
         });
 
-        return messages.map(m => ({
-            id: m.id,
-            chatRoomId: m.chatRoomId,
-            content: m.content,
-            createdAt: m.createdAt,
-            senderId: m.senderUserId,
-            isRead: readState ? m.id <= readState.lastReadMessageId : false,
-        }))
-    } catch(err) {
-        if (queryRunner.isTransactionActive) {
-            await queryRunner.rollbackTransaction();
+        return {
+            messages: messages.map(m => ({
+                id: m.id,
+                chatRoomId: m.chatRoomId,
+                content: m.content,
+                createdAt: m.createdAt,
+                senderId: m.senderUserId,
+                isRead: readState ? m.createdAt <= readState.lastReadAt : false,
+            })),
+            pagination: {
+                hasMore: offset + messages.length < totalCount,
+                page,
+                limit,
+            }
         }
+    } catch(err) {
         if (err instanceof z.ZodError) {
             logger.warn("getMessages validation failed", { errors: err.flatten().fieldErrors });
             throw sendError("Invalid data provided.", 400, err.flatten().fieldErrors);

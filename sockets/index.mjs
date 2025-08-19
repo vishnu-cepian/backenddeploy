@@ -10,6 +10,7 @@ import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
 import { ChatMessage } from "../entities/ChatMessage.mjs";
 import { sendError } from "../utils/core-utils.mjs";
+import { Not } from "typeorm";
 
 //=================== ZOD VALIDATION SCHEMAS ====================
 
@@ -82,7 +83,7 @@ export const initializeSocket = (io) => {
                 order: { createdAt: "DESC" },
                 select: ["id"],
             });
-        
+
             if (lastMessage) {
                 await chatService.markAsRead(validatedRoomId, socket.user.id, lastMessage.id);
             }
@@ -98,7 +99,6 @@ export const initializeSocket = (io) => {
             if (typeof callback === "function") callback({ status: "success" });
         }));
         
-
         socket.on("sendMessage", withErrorHandling(async (payload, callback) => {
             const { roomId, content } = sendMessageSchema.parse(payload);
 
@@ -111,17 +111,6 @@ export const initializeSocket = (io) => {
 
             const saved = await chatService.sendMessage(message);
 
-            /**
-             * 
-             * if any PROBLEM ARISE WITH UNREADCOUNT THEN USE THIS CODE LOGIC
-             * 
-             * await chatQueue.add('markSenderRead', {chatRoomId: roomId, senderId: socket.user.id, messageId: saved.id})  //also ensure markAsRead function to use the queue
-             * 
-             * 
-             * 
-             * 
-             * 
-             */
             // Emit to room for real-time delivery
             io.to(roomId).emit("newMessage", {id: saved.id, roomId: saved.chatRoomId, senderId: saved.senderUserId, content: saved.content, createdAt: saved.createdAt} );
 
@@ -144,7 +133,7 @@ export const initializeSocket = (io) => {
             }
 
             if (receiverPresent) {
-                await chatService.markAsRead(roomId, socket.user.id, saved.id);
+                await chatService.markAsRead(roomId, receiverUserId, saved.id);
                 io.to(roomId).emit("messageRead", {id: saved.id, roomId: saved.chatRoomId, senderId: saved.senderUserId, content: saved.content, createdAt: saved.createdAt});
             }
 
