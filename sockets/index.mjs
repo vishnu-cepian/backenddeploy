@@ -126,21 +126,9 @@ export const initializeSocket = (io) => {
 
             const receiverUserId = socket.user.id === room.customerUserId ? room.vendorUserId : room.customerUserId;
 
-            // const socketInRoom = io.sockets.adapter.rooms.get(roomId) || new Set();
-
-            // let receiverPresent = false;
-
-            // for (const socketId of socketInRoom) {
-            //     const s = io.sockets.sockets.get(socketId);
-            //     if (s?.user?.id === receiverUserId) {
-            //         receiverPresent = true;
-            //         break;
-            //     }
-            // }
-
             const receiverInRoom = await pubClient.sismember(`room:${roomId}:users`, receiverUserId);
             const receiverPresent = receiverInRoom === 1;
-            
+
             if (receiverPresent) {
                 await chatService.markAsRead(roomId, receiverUserId, saved.id);
                 io.to(roomId).emit("messageRead", {id: saved.id, roomId: saved.chatRoomId, senderId: saved.senderUserId, content: saved.content, createdAt: saved.createdAt});
