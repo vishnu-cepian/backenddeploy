@@ -3,6 +3,9 @@ import { EntitySchema } from "typeorm";
 export const OtpPhone = new EntitySchema({
     name: "OtpPhone",
     tableName: "otp_phone",
+    indices: [
+        { name: "IDX_OTP_PHONE_PHONE", columns: ["phone"], unique: true },
+    ],
     columns: {
         id: {
             type: "uuid",
