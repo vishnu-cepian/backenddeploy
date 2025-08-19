@@ -121,7 +121,7 @@ export const initializeSocket = (io) => {
             const receiverUserId = socket.user.id === room.customerUserId ? room.vendorUserId : room.customerUserId;
 
             const socketInRoom = io.sockets.adapter.rooms.get(roomId) || new Set();
-
+console.log(socketInRoom)
             let receiverPresent = false;
 
             for (const socketId of socketInRoom) {
