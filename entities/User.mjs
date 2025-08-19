@@ -1,13 +1,13 @@
 import { EntitySchema } from "typeorm";
-
+import { ROLE } from "../types/enums/index.mjs";
 
 export const User = new EntitySchema({
     name: "User",
     tableName: "user",
     indices: [
+        { name: "user_email_idx", columns: ["email"], unique: true },
         { name: "user_role_idx", columns: ["role"] },
         { name: "user_refreshtoken_idx", columns: ["refreshToken"] },
-        { name: "user_fullname_idx", columns: ["name"] }
     ],
     columns: {
         id: {
@@ -17,20 +17,25 @@ export const User = new EntitySchema({
         },
         email: {
             type: "varchar",
-            unique: true
+            unique: true,
+            nullable: false
         },
         password: {
             type: "varchar",
+            nullable: false
         },
         role: {
-            type: "varchar"
+            type: "varchar",
+            enum: Object.values(ROLE),
+            nullable: false
         },
         name: {
             type: "varchar",
+            nullable: false
         },
         phoneNumber: {
             type: "varchar",
-            nullable: true
+            nullable: false
         },
         isBlocked: {
             type: "boolean",
@@ -42,7 +47,7 @@ export const User = new EntitySchema({
         },
         pushToken: {
             type: "varchar",
-            nullable: true      // make it false in prod
+            nullable: true      
         },
         createdAt: {
             type: "timestamp",
