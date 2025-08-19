@@ -3,6 +3,12 @@ import { EntitySchema } from "typeorm";
 export const VendorImages = new EntitySchema({
     name: "VendorImages",
     tableName: "vendor_images",
+    indices: [
+        { name: "vendor_images_vendor_id_idx", columns: ["vendorId"] },
+    ],
+    unique: [
+        { name: "vendor_images_vendor_id_s3key_idx", columns: ["vendorId", "s3Key"] },
+    ],
     columns: {
         id: {
             type: "uuid",
