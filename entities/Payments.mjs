@@ -3,6 +3,9 @@ import { EntitySchema } from "typeorm";
 export const Payments = new EntitySchema({
     name: "Payments",
     tableName: "payments",
+    indices: [
+        { name: "IDX_PAYMENTS_RAZORPAY_PAYMENT_ID", columns: ["razorpayPaymentId"] },
+    ],
     columns: {
         id: {
             primary: true,
