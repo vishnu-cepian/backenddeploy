@@ -4,7 +4,9 @@ import { EntitySchema } from "typeorm";
 export const Outbox = new EntitySchema({
     name: "Outbox",
     tableName: "outbox",
-
+    indices: [
+        { name: "IDX_OUTBOX_PENDING_MESSAGES", columns: ["status", "createdAt"] },
+    ],
     columns: {
         id: {
             primary: true,
@@ -33,7 +35,7 @@ export const Outbox = new EntitySchema({
         },
         createdAt: {
             type: "timestamp",
-            default: () => "CURRENT_TIMESTAMP"
+            createDate: true
         },
     },
 });
