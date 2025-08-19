@@ -76,6 +76,9 @@ export const initializeSocket = (io) => {
         socket.on("joinRoom", withErrorHandling(async (roomId, callback) => {
             const validatedRoomId = joinRoomSchema.parse(roomId);
             await socket.join(validatedRoomId);
+
+            await pubClient.sadd(`room:${validatedRoomId}:users`, socket.user.id);
+
             io.to(validatedRoomId).emit("userJoinedRoom", { userId: socket.user.id, roomId: validatedRoomId });
             // fetch latest message id
             const lastMessage = await AppDataSource.getRepository(ChatMessage).findOne({
@@ -95,6 +98,9 @@ export const initializeSocket = (io) => {
         socket.on("leaveRoom", withErrorHandling(async (roomId, callback) => {
             const validatedRoomId = joinRoomSchema.parse(roomId);
             await socket.leave(validatedRoomId);
+
+            await pubClient.srem(`room:${validatedRoomId}:users`, socket.user.id);
+            
             io.to(validatedRoomId).emit("userLeftRoom", { userId: socket.user.id, roomId: validatedRoomId });
             if (typeof callback === "function") callback({ status: "success" });
         }));
@@ -120,22 +126,21 @@ export const initializeSocket = (io) => {
 
             const receiverUserId = socket.user.id === room.customerUserId ? room.vendorUserId : room.customerUserId;
 
-            const socketInRoom = io.sockets.adapter.rooms.get(roomId) || new Set();
-            console.log("allSockets", await io.in(roomId).allSockets())
-            console.log("socketInRoom", socketInRoom)
-            console.log("fetchSockets", await io.in(roomId).fetchSockets())
-            console.log("serverCount", await io.in(roomId).serverCount())
-            console.log("allRooms", await io.in(roomId).allRooms())
-            let receiverPresent = false;
+            // const socketInRoom = io.sockets.adapter.rooms.get(roomId) || new Set();
 
-            for (const socketId of socketInRoom) {
-                const s = io.sockets.sockets.get(socketId);
-                if (s?.user?.id === receiverUserId) {
-                    receiverPresent = true;
-                    break;
-                }
-            }
+            // let receiverPresent = false;
 
+            // for (const socketId of socketInRoom) {
+            //     const s = io.sockets.sockets.get(socketId);
+            //     if (s?.user?.id === receiverUserId) {
+            //         receiverPresent = true;
+            //         break;
+            //     }
+            // }
+
+            const receiverInRoom = await pubClient.sismember(`room:${roomId}:users`, receiverUserId);
+            const receiverPresent = receiverInRoom === 1;
+            
             if (receiverPresent) {
                 await chatService.markAsRead(roomId, receiverUserId, saved.id);
                 io.to(roomId).emit("messageRead", {id: saved.id, roomId: saved.chatRoomId, senderId: saved.senderUserId, content: saved.content, createdAt: saved.createdAt});
@@ -163,9 +168,15 @@ export const initializeSocket = (io) => {
         }));
 
         // DISCONNECTION HANDLER
-        socket.on("disconnect", () => {
+        socket.on("disconnect", async () => {
             logger.info(`User disconnected: ${socket.user.id}, Socket ID: ${socket.id}`);
             pubClient.hdel('online_users', socket.user.id);
+
+            // Remove user from all rooms they were in
+            const userRooms = await pubClient.keys(`room:*:users`);
+            for (const roomKey of userRooms) {
+                await pubClient.srem(roomKey, socket.user.id);
+            }
 
             io.emit("userOffline", { userId: socket.user.id });
         });
