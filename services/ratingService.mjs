@@ -110,7 +110,7 @@ export const getDailyLeadershipBoard = async () => {
                 select: {
                     id: true,
                     shopName: true,
-                    currentMonthRating: true,
+                    // currentMonthRating: true,
                     currentMonthBayesianScore: true,
                     serviceType: true,
                     vendorAvatarUrlPath: true,
