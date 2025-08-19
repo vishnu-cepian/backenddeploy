@@ -3,6 +3,9 @@ import { EntitySchema } from "typeorm";
 export const VendorStats = new EntitySchema({
     name: "VendorStats",
     tableName: "vendor_stats",
+    indices: [
+        { name: "vendor_stats_vendor_id_idx", columns: ["vendorId"], unique: true },
+    ],
     columns: {
         id: {
             primary: true,
@@ -23,13 +26,13 @@ export const VendorStats = new EntitySchema({
         },
         totalEarnings: {
             type: "numeric",
-            precision: 10,
+            precision: 12,
             scale: 2,
             default: 0
         },
         totalDeductions: {
             type: "numeric",
-            precision: 10,
+            precision: 12,
             scale: 2,
             default: 0
         },
