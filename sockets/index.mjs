@@ -14,6 +14,7 @@ import { sendError } from "../utils/core-utils.mjs";
 //=================== ZOD VALIDATION SCHEMAS ====================
 
 const joinRoomSchema = z.string().uuid();
+
 const sendMessageSchema = z.object({
   roomId: z.string().uuid(),
   content: z.string().min(1).max(2000), 
@@ -74,7 +75,7 @@ export const initializeSocket = (io) => {
         socket.on("joinRoom", withErrorHandling(async (roomId, callback) => {
             const validatedRoomId = joinRoomSchema.parse(roomId);
             await socket.join(validatedRoomId);
-        
+            io.to(validatedRoomId).emit("userJoinedRoom", { userId: socket.user.id, roomId: validatedRoomId });
             // fetch latest message id
             const lastMessage = await AppDataSource.getRepository(ChatMessage).findOne({
                 where: { chatRoomId: validatedRoomId },
@@ -87,6 +88,13 @@ export const initializeSocket = (io) => {
             }
         
             logger.info(`User ${socket.user.id} joined room ${validatedRoomId}`);
+            if (typeof callback === "function") callback({ status: "success" });
+        }));
+
+        socket.on("leaveRoom", withErrorHandling(async (roomId, callback) => {
+            const validatedRoomId = joinRoomSchema.parse(roomId);
+            await socket.leave(validatedRoomId);
+            io.to(validatedRoomId).emit("userLeftRoom", { userId: socket.user.id, roomId: validatedRoomId });
             if (typeof callback === "function") callback({ status: "success" });
         }));
         
@@ -115,7 +123,7 @@ export const initializeSocket = (io) => {
              * 
              */
             // Emit to room for real-time delivery
-            io.to(roomId).emit("newMessage", message);
+            io.to(roomId).emit("newMessage", {id: saved.id, roomId: saved.chatRoomId, senderId: saved.senderUserId, content: saved.content, createdAt: saved.createdAt} );
 
 
             const room = await chatService.getChatRoom(roomId);
@@ -137,13 +145,13 @@ export const initializeSocket = (io) => {
 
             if (receiverPresent) {
                 await chatService.markAsRead(roomId, socket.user.id, saved.id);
-                io.to(roomId).emit("messageRead", {roomId, messageId: saved.id, userId: receiverUserId});
+                io.to(roomId).emit("messageRead", {id: saved.id, roomId: saved.chatRoomId, senderId: saved.senderUserId, content: saved.content, createdAt: saved.createdAt});
             }
 
             const isReceiverOnline = await pubClient.hget('online_users', receiverUserId);
 
             if (isReceiverOnline && !receiverPresent) {
-                io.to(isReceiverOnline).emit("chatNotification", {roomId, messageId: saved.id, userId: receiverUserId});
+                io.to(isReceiverOnline).emit("chatNotification", {id: saved.id, roomId: saved.chatRoomId, senderId: saved.senderUserId, content: saved.content, createdAt: saved.createdAt});
             }
 
             if (!isReceiverOnline && receiverUserId) {
@@ -158,7 +166,7 @@ export const initializeSocket = (io) => {
                 }
             }
 
-            if (typeof callback === 'function') callback({ status: 'success', message: "Message sent" });
+            if (typeof callback === 'function') callback({ status: 'success', chatMessage: {id: saved.id, roomId: saved.chatRoomId, senderId: saved.senderUserId, content: saved.content, createdAt: saved.createdAt} });
         }));
 
         // DISCONNECTION HANDLER
