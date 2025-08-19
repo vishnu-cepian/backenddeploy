@@ -7,6 +7,9 @@ export const Rating = new EntitySchema({
         { name: "vendor_rating_idx", columns: ["vendorId"] },
         { name: "month_year_rating_idx", columns: ["monthYear"] }
     ],
+    unique: [
+        { columns: ["vendorId", "customerId", "orderId"], name: "vendor_customer_order_unique" }
+    ],
     columns: {
         id: {
             type: "uuid",
@@ -60,7 +63,7 @@ export const Rating = new EntitySchema({
             cascade: true
         },
         order: {
-            type: "many-to-one",
+            type: "one-to-one",
             target: "Orders",
             joinColumn: { name: "orderId" },
             onDelete: "CASCADE",
