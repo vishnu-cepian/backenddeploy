@@ -59,28 +59,28 @@ export const Payments = new EntitySchema({
             type: "many-to-one",
             target: "Orders",
             joinColumn: { name: "orderId" },
-            onDelete: "CASCADE",
+            onDelete: "SET NULL",
             cascade: true
         },
         vendor: {
             type: "many-to-one",
             target: "Vendors",
             joinColumn: { name: "vendorId" },
-            onDelete: "CASCADE",
+            onDelete: "SET NULL",
             cascade: true
         }, 
         customer: {
             type: "many-to-one",
             target: "Customers",
             joinColumn: { name: "customerId" },
-            onDelete: "CASCADE",
+            onDelete: "SET NULL",
             cascade: true
         },
         quote: {
             type: "many-to-one",
             target: "OrderQuotes",
             joinColumn: { name: "quoteId" },
-            onDelete: "CASCADE",
+            onDelete: "SET NULL",
             cascade: true
         }
     }
