@@ -3,6 +3,10 @@ import { EntitySchema } from "typeorm";
 export const QueueLogs = new EntitySchema({
     name: "QueueLogs",
     tableName: "queueLogs",
+    indices: [
+        { name: "IDX_QUEUE_LOGS_LOOKUP", columns: ["queueName", "failedAt"] },
+        { name: "IDX_QUEUE_LOGS_JOB_ID", columns: ["jobId"] },
+    ],
     columns: {
         id: {
             primary: true,
