@@ -3,6 +3,9 @@ import { EntitySchema } from "typeorm";
 export const OtpEmail = new EntitySchema({
     name: "OtpEmail",
     tableName: "otpEmail",
+    indices: [
+        { name: "IDX_OTP_EMAIL_EMAIL", columns: ["email"] },
+    ],
     columns: {
         id: {
             type: "uuid",
