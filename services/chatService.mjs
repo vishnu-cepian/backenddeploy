@@ -199,7 +199,11 @@ export const getMessages = async (data) => {
         });
 
         return messages.map(m => ({
-            ...m,
+            id: m.id,
+            chatRoomId: m.chatRoomId,
+            content: m.content,
+            createdAt: m.createdAt,
+            senderId: m.senderUserId,
             isRead: readState ? m.id <= readState.lastReadMessageId : false,
         }))
     } catch(err) {

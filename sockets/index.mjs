@@ -166,7 +166,7 @@ export const initializeSocket = (io) => {
                 }
             }
 
-            if (typeof callback === 'function') callback({ status: 'success', chatMessage: {id: saved.id, roomId: saved.chatRoomId, senderId: saved.senderUserId, content: saved.content, createdAt: saved.createdAt} });
+            if (typeof callback === 'function') callback({ status: 'success', message: "Message sent successfully" });
         }));
 
         // DISCONNECTION HANDLER
