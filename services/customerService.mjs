@@ -438,9 +438,10 @@ export const getOrderRequests = async (data) => {
         "orderVendors.createdAt",
         "vendors.shopName",
         "vendors.shopImageUrlPath",
+        "orderVendors.notes"
        ])
        .where("orderVendors.orderId = :orderId", { orderId })
-       .andWhere("orderVendors.status IN (:...status)", { status: [ORDER_VENDOR_STATUS.ACCEPTED, ORDER_VENDOR_STATUS.PENDING] })
+       .andWhere("orderVendors.status IN (:...status)", { status: [ORDER_VENDOR_STATUS.ACCEPTED, ORDER_VENDOR_STATUS.PENDING, ORDER_VENDOR_STATUS.REJECTED] })
        .getMany();
 
        if (orderRequests.length === 0) return [];
@@ -461,7 +462,8 @@ export const getOrderRequests = async (data) => {
             status: orderRequest.status,
             createdAt: orderRequest.createdAt,
             shopName: orderRequest.vendor.shopName,
-            shopImageUrl: orderRequest.shopImageUrl
+            shopImageUrl: orderRequest.shopImageUrl,
+            notes: orderRequest.notes
         }))
        }
     } catch (error) {
