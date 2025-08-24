@@ -25,6 +25,11 @@ export const OrderItems = new EntitySchema({
             type: "integer",
             nullable: false
         },
+        clothProvided: {
+            type: "boolean",
+            nullable: false,
+            default: false,
+        },
         fabricType: {
             type: "varchar",
             nullable: false
@@ -38,6 +43,10 @@ export const OrderItems = new EntitySchema({
             nullable: true
         },
         measurementType: {
+            type: "varchar",
+            nullable: true
+        },
+        tailorService: {
             type: "varchar",
             nullable: true
         },
