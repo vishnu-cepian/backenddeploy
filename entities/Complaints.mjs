@@ -40,6 +40,14 @@ export const Complaints = new EntitySchema({
             type: "boolean",
             default: false
         },
+        resolvedAt: {
+            type: "timestamp",
+            nullable: true
+        },
+        resolutionNotes: {
+            type: "varchar",
+            nullable: true
+        },
         createdAt: {
             type: "timestamp",
             createDate: true
