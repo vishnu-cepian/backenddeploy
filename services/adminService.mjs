@@ -27,7 +27,7 @@ import { AdminLoginHistory } from "../entities/AdminLoginHistory.mjs";
 import { Complaints } from "../entities/Complaints.mjs";
 import { Refunds } from "../entities/Refunds.mjs";
 import { PaymentFailures } from "../entities/PaymentFailures.mjs";
-import { QueueLogs } from "../entities/QueueLogs.mjs";
+import { QueueLogs } from "../entities/queueLogs.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
