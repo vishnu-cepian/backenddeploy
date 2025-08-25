@@ -1173,3 +1173,28 @@ export const exportComplaints = async (filters) => {
     throw err;
   }
 }
+
+export const loginHistory = async (filters) => {
+  try {
+    const queryBuilder = AppDataSource.getRepository(AdminLoginHistory).createQueryBuilder("adminLoginHistory");
+    const [loginHistory, totalCount] = await Promise.all([
+      queryBuilder
+        .orderBy("adminLoginHistory.loginTime", "DESC")
+        .skip((filters.page - 1) * filters.limit)
+        .take(filters.limit)
+        .getMany(),
+      queryBuilder.getCount()
+    ]);
+
+    return { loginHistory,totalCount, pagination: {
+      currentPage: filters.page,
+      itemsPerPage: filters.limit,
+      totalItems: totalCount,
+      totalPages: Math.ceil(totalCount / filters.limit),
+      hasMore: filters.page * filters.limit < totalCount
+    } };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
