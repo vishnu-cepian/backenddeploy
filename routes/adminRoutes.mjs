@@ -34,5 +34,7 @@ router.get("/getQuotes/:id",verifyAdminAccessToken, controllerWrapper(adminContr
 router.get("/getPayments/:id",verifyAdminAccessToken, controllerWrapper(adminController.getPayments, {logRequest, logResponse}))
 router.get("/getOrderTimeline/:id",verifyAdminAccessToken, controllerWrapper(adminController.getOrderTimeline, {logRequest, logResponse}))
 router.get("/getDeliveryDetails/:id",verifyAdminAccessToken, controllerWrapper(adminController.getDeliveryDetails, {logRequest, logResponse}))
+router.get("/getOrSetSettings/:key",verifyAdminAccessToken, controllerWrapper(adminController.getOrSetSettings, {logRequest, logResponse}))
+router.patch("/updateSettings",verifyAdminAccessToken, controllerWrapper(adminController.updateSettings, {logRequest, logResponse}))
 
 export default router;

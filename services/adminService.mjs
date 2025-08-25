@@ -12,13 +12,15 @@ import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs"
 import { Payments } from "../entities/Payments.mjs"
 import { In, Not } from 'typeorm';
-import { paginateListDirectoryBuckets } from "@aws-sdk/client-s3";
 import { ORDER_STATUS, SHOP_TYPE, SERVICE_TYPE, OWNERSHIP_TYPE, ORDER_VENDOR_STATUS } from "../types/enums/index.mjs";
+import { DEFAULT_PLATFORM_FEE_PERCENT, DEFAULT_VENDOR_FEE_PERCENT } from "../config/constants.mjs";
 import { z } from "zod";
 import { UpdateLog } from "../entities/UpdateLog.mjs";
 import { VendorStats } from "../entities/VendorStats.mjs";
 import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
+import { Settings } from "../entities/Settings.mjs";
+import { delCache } from "../utils/cache.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -887,5 +889,55 @@ export const getDeliveryDetails = async (orderId) => {
   } catch (error) {
     logger.error("Error getting delivery details", error);
     throw error;
+  }
+}
+
+export const getOrSetSettings = async (key) => {
+  try {
+    const settings = await AppDataSource.getRepository(Settings).findOne({ where: { key } });
+    let value;
+    if (!settings) {
+      if (key === "platform_fee_percent") {
+        await delCache("platform_fee_percent");
+        value = DEFAULT_PLATFORM_FEE_PERCENT;
+      } else if (key === "vendor_fee_percent") {
+        await delCache("vendor_fee_percent");
+        value = DEFAULT_VENDOR_FEE_PERCENT;
+      }
+      await AppDataSource.getRepository(Settings).save({ key, value, type: "number" });
+      logger.info(`Settings ${key} set to ${value}`);
+      return value;
+    }
+    return settings.value;
+  } catch (error) {
+    logger.error("Error getting settings", error);
+    throw error;
+  }
+}
+
+export const updateSettings = async (key, value, userId) => {
+  const queryRunner = AppDataSource.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
+  try {
+    if (key === "platform_fee_percent" || key === "vendor_fee_percent") {
+      if (value < 0 || value > 100) throw sendError("Invalid value", 400);
+    }
+    const settings = await queryRunner.manager.findOne(Settings, { where: { key } });
+    if (!settings) throw sendError("Settings not found", 404);
+    settings.value = value;
+    settings.updatedBy = userId;
+    await queryRunner.manager.save(Settings, settings);
+    await delCache(key);
+    await queryRunner.commitTransaction();
+    return { message: "Settings updated successfully" };
+  } catch (error) {
+    logger.error("Error updating settings", error);
+    if (queryRunner.isTransactionActive) {
+      await queryRunner.rollbackTransaction();
+    }
+    throw error;
+  } finally {
+    await queryRunner.release(); 
   }
 }

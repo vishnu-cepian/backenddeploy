@@ -331,3 +331,34 @@ export const getDeliveryDetails = async (req, res, next) => {
         next(error);
     }
 };
+
+export const getOrSetSettings = async (req, res, next) => {
+    try {
+        const key = req.params.key;
+        const response = await adminService.getOrSetSettings(key);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const updateSettings = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const key = Object.keys(req.body)[0];
+        const value = Object.values(req.body)[0];
+
+        const response = await adminService.updateSettings(key, value, userId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
