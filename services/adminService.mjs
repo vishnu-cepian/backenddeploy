@@ -21,6 +21,7 @@ import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
 import { Settings } from "../entities/Settings.mjs";
 import { delCache } from "../utils/cache.mjs";
+import { emailQueue } from "../queues/index.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -438,9 +439,9 @@ export const verifyVendor = async (id) => {
   }
 }
 
-export const rejectVendor = async (id) => { //DELETE VENDOR
+export const rejectVendor = async (id, rejectionReason) => { //DELETE VENDOR
   try {
-    const vendor = await vendorRepo.findOne({ where: { id } });
+    const vendor = await vendorRepo.findOne({ where: { id }, relations: { user: true } });
     if (!vendor) {
       throw sendError('Vendor not found', 404);
     }
@@ -448,7 +449,15 @@ export const rejectVendor = async (id) => { //DELETE VENDOR
     if (orderHistory) {
       throw sendError('Vendor has / had orders. So deleting this vendor will cause issues with the orders. SYSTEM does not encourage HARD DELETE, instead try blocking the vendor', 400);
     }
-    await vendorRepo.delete(id);
+ 
+    await emailQueue.add("vendorRejectionEmail", {
+      email: vendor.user.email,
+      name: vendor.user.name,
+      template_id: "vendor_rejection",
+      variables: { rejectionReason }
+    });
+
+    await vendorRepo.delete(id); 
     /**
      * 
      * 
