@@ -40,4 +40,5 @@ router.patch("/updateSettings",verifyAdminAccessToken, controllerWrapper(adminCo
 router.get("/reports", verifyAdminAccessToken, controllerWrapper(adminController.reports, {logRequest, logResponse}))
 router.get("/getComplaints", verifyAdminAccessToken, controllerWrapper(adminController.getComplaints, {logRequest, logResponse}))
 router.patch("/resolveComplaint/:id", verifyAdminAccessToken, controllerWrapper(adminController.resolveComplaint, {logRequest, logResponse}))
+router.get("/complaints/export", verifyAdminAccessToken, controllerWrapper(adminController.exportComplaints, {logRequest, logResponse}))
 export default router;

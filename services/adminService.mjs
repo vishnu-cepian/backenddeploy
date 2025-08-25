@@ -1146,3 +1146,30 @@ export const resolveComplaint = async (complaintId, resolutionNotes) => {
     throw err;
   }
 }
+
+export const exportComplaints = async (filters) => {
+  try {
+
+    const queryBuilder = AppDataSource.getRepository(Complaints).createQueryBuilder("complaints");
+    if (filters.search) {
+       queryBuilder.where("complaints.id = :id", { id: filters.search });
+    } else if (filters.status === "pending" || filters.status === "resolved") {
+       queryBuilder.where("complaints.isResolved = :isResolved", { isResolved: filters.status === "pending" ? false : true });
+    } else if (filters.from && filters.to) {
+       queryBuilder.where("complaints.createdAt BETWEEN :from AND :to", { from: filters.from, to: filters.to });
+    }
+
+    const [complaints, totalCount] = await Promise.all([
+      queryBuilder.getMany(),
+      queryBuilder.getCount()
+    ]);
+
+
+    const csv = complaints.map(complaint => `${complaint.id},${complaint.email},${complaint.phoneNumber},${complaint.name},${complaint.orderId},${complaint.complaint},${complaint.isResolved},${complaint.resolvedAt},${complaint.resolutionNotes}`).join("\n");
+
+    return csv;
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
