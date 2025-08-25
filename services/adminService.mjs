@@ -11,7 +11,7 @@ import { Vendors } from "../entities/Vendors.mjs";
 import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs"
 import { Payments } from "../entities/Payments.mjs"
-import { In, Not } from 'typeorm';
+import { In, Not, Between, Like, ILike } from 'typeorm';
 import { ORDER_STATUS, SHOP_TYPE, SERVICE_TYPE, OWNERSHIP_TYPE, ORDER_VENDOR_STATUS } from "../types/enums/index.mjs";
 import { DEFAULT_PLATFORM_FEE_PERCENT, DEFAULT_VENDOR_FEE_PERCENT } from "../config/constants.mjs";
 import { z } from "zod";
@@ -23,6 +23,12 @@ import { delCache } from "../utils/cache.mjs";
 import { emailQueue } from "../queues/index.mjs";
 import { AdminActions } from "../entities/AdminActions.mjs";
 import { AdminLoginHistory } from "../entities/AdminLoginHistory.mjs";
+
+import { Complaints } from "../entities/Complaints.mjs";
+import { Refunds } from "../entities/Refunds.mjs";
+import { PaymentFailures } from "../entities/PaymentFailures.mjs";
+import { QueueLogs } from "../entities/QueueLogs.mjs";
+import { Outbox } from "../entities/Outbox.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -969,5 +975,174 @@ export const updateSettings = async (key, value, userId) => {
     throw error;
   } finally {
     await queryRunner.release(); 
+  }
+}
+
+export const reports = async (data) => {
+  try {
+    const { fromDate, toDate, type } = data;
+
+    const from = fromDate ? new Date(fromDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const to = toDate ? new Date(toDate) : new Date();
+
+    const [complaints, adminLogins, adminActions, payments, refunds, paymentFailures, queueLogs, outboxFailures] = await Promise.all([
+      AppDataSource.getRepository(Complaints).count({ where: { createdAt: Between(from, to) } }),
+      AppDataSource.getRepository(AdminLoginHistory).count({ where: { loginTime: Between(from, to) } }),
+      AppDataSource.getRepository(AdminActions).count({ where: { createdAt: Between(from, to) } }),
+      AppDataSource.getRepository(Payments).count({ where: { paymentDate: Between(from, to) } }),
+      AppDataSource.getRepository(Refunds).count({ where: { createdAt: Between(from, to) } }),
+      AppDataSource.getRepository(PaymentFailures).count({ where: { timestamp: Between(from, to) } }),
+      AppDataSource.getRepository(QueueLogs).count({ where: { failedAt: Between(from, to) } }),
+      AppDataSource.getRepository(Outbox).count({ where: { createdAt: Between(from, to), status: "FAILED" } }),
+    ])
+
+    const activities = [];
+
+    const complaintLogs = await AppDataSource.getRepository(Complaints).find({ order: { createdAt: "DESC" }, take: 3 });
+    complaintLogs.forEach(complaint => {
+      activities.push({
+        id: complaint.id,
+        action: complaint.isResolved ? "User complaint resolved" : "User complaint raised",
+        type: "complaint",
+        status: complaint.isResolved ? "Resolved" : "warning",
+        time: complaint.createdAt,
+      })
+    })
+
+    const loginLogs = await AppDataSource.getRepository(AdminLoginHistory).find({ order: { loginTime: "DESC" }, take: 2 });
+    loginLogs.forEach(login => {
+      activities.push({
+        id: login.id,
+        action: `Admin ${login.adminEmail} logged in`,
+        type: "login",
+        status: "warning",
+        time: login.loginTime,
+      })
+    })
+
+    // const actionLogs = await AppDataSource.getRepository(AdminActions).find({ order: { createdAt: "DESC" }, take: 5 });
+    // actionLogs.forEach(action => {
+    //   activities.push({
+    //     id: action.id,
+    //     action: action.action,
+    //     type: "action",
+    //     time: action.createdAt,
+    //   })
+    // })
+
+    const paymentLogs = await AppDataSource.getRepository(Payments).find({ order: { paymentDate: "DESC" }, take: 3 });
+    paymentLogs.forEach(payment => {
+      activities.push({
+        id: payment.id,
+        action: payment.paymentStatus === "captured" ? "Payment captured" : "Payment failed",
+        type: "payment",
+        status: payment.paymentStatus === "captured" ? "success" : "error",
+        time: payment.paymentDate,
+      })
+    })
+
+    const refundLogs = await AppDataSource.getRepository(Refunds).find({ order: { createdAt: "DESC" }, take: 2 });
+    refundLogs.forEach(refund => {
+      activities.push({
+        id: refund.id,
+        action: refund.status === "processed" ? "Refund processed" : "Refund failed",
+        type: "refund",
+        status: refund.status === "processed" ? "success" : "error", 
+        time: refund.createdAt,
+      })
+    })
+
+    const paymentFailureLogs = await AppDataSource.getRepository(PaymentFailures).find({ order: { timestamp: "DESC" }, take: 2 });
+    paymentFailureLogs.forEach(failure => {
+      activities.push({
+        id: failure.id,
+        action: "Payment failure detected",
+        type: "payment",
+        status: "error",
+        time: failure.timestamp,
+      })
+    })
+
+    const outboxLogs = await AppDataSource.getRepository(Outbox).find({ order: { createdAt: "DESC" }, take: 2, where: { status: "FAILED" } });
+    outboxLogs.forEach(outbox => {
+      activities.push({
+        id: outbox.id,
+        action: outbox.status === "FAILED" ? "Outbox message failed" : "Outbox message sent",
+        type: "failure",
+        status: outbox.status === "FAILED" ? "error" : "success",
+        time: outbox.createdAt,
+      })
+    })
+
+    activities.sort((a, b) => b.time.getTime() - a.time.getTime());
+
+    return {
+      stats: {
+        complaints,
+        adminLogins,
+        adminActions,
+        payments,
+        refunds,
+        paymentFailures,
+        queueLogs,
+        outboxFailures
+      },
+      recentActivities: activities.slice(0, 10),
+    }
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getComplaints = async (filters) => {
+  try {
+
+    const queryBuilder = AppDataSource.getRepository(Complaints).createQueryBuilder("complaints");
+    if (filters.search) {
+       queryBuilder.where("complaints.id = :id", { id: filters.search });
+    } else if (filters.status === "pending" || filters.status === "resolved") {
+       queryBuilder.where("complaints.isResolved = :isResolved", { isResolved: filters.status === "pending" ? false : true });
+    } else if (filters.from && filters.to) {
+       queryBuilder.where("complaints.createdAt BETWEEN :from AND :to", { from: filters.from, to: filters.to });
+    }
+
+    const [complaints, totalCount] = await Promise.all([
+      queryBuilder
+        .skip((filters.page - 1) * filters.limit)
+        .take(filters.limit)
+        .getMany(),
+      queryBuilder.getCount()
+    ]);
+
+    return {
+      data: {complaints, totalCount},
+      pagination: {
+        currentPage: filters.page,
+        itemsPerPage: filters.limit,
+        totalItems: totalCount,
+        totalPages: Math.ceil(totalCount / filters.limit),
+        hasMore: filters.page * filters.limit < totalCount
+      }
+    };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const resolveComplaint = async (complaintId, resolutionNotes) => {
+  try {
+    const complaint = await AppDataSource.getRepository(Complaints).findOne({ where: { id: complaintId } });
+    if (!complaint) throw sendError("Complaint not found", 404);
+    complaint.isResolved = true;
+    complaint.resolvedAt = new Date();
+    complaint.resolutionNotes = resolutionNotes;
+    await AppDataSource.getRepository(Complaints).save(complaint);
+    return { message: "Complaint resolved successfully" };
+  }
+  catch (err) {
+    logger.error(err);
+    throw err;
   }
 }

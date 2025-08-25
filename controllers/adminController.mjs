@@ -379,3 +379,49 @@ export const updateSettings = async (req, res, next) => {
         next(error);
     }
 };
+
+export const reports = async (req, res, next) => {
+    try {
+        const data = {
+            fromDate: req.query.from,
+            toDate: req.query.to,
+            type: req.query.reportType
+        }
+        const response = await adminService.reports(data);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const getComplaints = async (req, res, next) => {
+    try {
+        const response = await adminService.getComplaints(req.query);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const resolveComplaint = async (req, res, next) => {
+    try {
+        const complaintId = req.params.id;
+        const resolutionNotes = req.body.resolutionNotes;
+        const response = await adminService.resolveComplaint(complaintId, resolutionNotes);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};

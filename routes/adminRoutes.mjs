@@ -37,5 +37,7 @@ router.get("/getOrderTimeline/:id",verifyAdminAccessToken, controllerWrapper(adm
 router.get("/getDeliveryDetails/:id",verifyAdminAccessToken, controllerWrapper(adminController.getDeliveryDetails, {logRequest, logResponse}))
 router.get("/getOrSetSettings/:key",verifyAdminAccessToken, controllerWrapper(adminController.getOrSetSettings, {logRequest, logResponse}))
 router.patch("/updateSettings",verifyAdminAccessToken, controllerWrapper(adminController.updateSettings, {logRequest, logResponse}))
-
+router.get("/reports", verifyAdminAccessToken, controllerWrapper(adminController.reports, {logRequest, logResponse}))
+router.get("/getComplaints", verifyAdminAccessToken, controllerWrapper(adminController.getComplaints, {logRequest, logResponse}))
+router.patch("/resolveComplaint/:id", verifyAdminAccessToken, controllerWrapper(adminController.resolveComplaint, {logRequest, logResponse}))
 export default router;
