@@ -15,13 +15,13 @@ import { In, Not } from 'typeorm';
 import { ORDER_STATUS, SHOP_TYPE, SERVICE_TYPE, OWNERSHIP_TYPE, ORDER_VENDOR_STATUS } from "../types/enums/index.mjs";
 import { DEFAULT_PLATFORM_FEE_PERCENT, DEFAULT_VENDOR_FEE_PERCENT } from "../config/constants.mjs";
 import { z } from "zod";
-import { UpdateLog } from "../entities/UpdateLog.mjs";
 import { VendorStats } from "../entities/VendorStats.mjs";
 import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
 import { Settings } from "../entities/Settings.mjs";
 import { delCache } from "../utils/cache.mjs";
 import { emailQueue } from "../queues/index.mjs";
+import { AdminActions } from "../entities/AdminActions.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -31,6 +31,7 @@ const vendorRepo = AppDataSource.getRepository(Vendors);
 const userRepo = AppDataSource.getRepository(User);
 const paymentRepo = AppDataSource.getRepository(Payments);
 const vendorStatsRepo = AppDataSource.getRepository(VendorStats);
+const adminActionsRepo = AppDataSource.getRepository(AdminActions);
 //===================JWT UTILS====================
 
 export const generateAccessToken = (payload) => {
@@ -510,7 +511,7 @@ const updateVendorSchema = z.object({
   message: "if shop type is not IN_HOME then ownershipType required. or else vice versa",
 });
 
-export const updateVendor = async (data, vendorId) => {
+export const updateVendor = async (data, vendorId, adminUserId) => {
   const queryRunner = AppDataSource.createQueryRunner();
   await queryRunner.connect();
   await queryRunner.startTransaction();
@@ -521,13 +522,17 @@ export const updateVendor = async (data, vendorId) => {
     if (!vendor) {
       throw sendError('Vendor not found', 404);
     }
+
     const oldData = vendor;
-    const updateLog = queryRunner.manager.create(UpdateLog, {
-      oldData,
-      newData: data,
-      reason: "Vendor updated by admin"
+    const adminAction = queryRunner.manager.create(AdminActions, {
+      adminUserId: adminUserId,
+      action: "updateVendor",
+      actionData: {
+        oldData,
+        newData: data
+      }
     });
-    await queryRunner.manager.save(UpdateLog, updateLog);
+    await queryRunner.manager.save(AdminActions, adminAction);
 
     Object.assign(vendor, rest);
     Object.assign(vendor.user, {name, email, phoneNumber});

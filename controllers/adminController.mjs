@@ -142,7 +142,8 @@ export const updateVendor = async (req, res, next) => {
             ...req.body,
         }
         const vendorId = req.params.id;
-        const response = await adminService.updateVendor(data, vendorId);
+        const adminUserId = req.user.id;
+        const response = await adminService.updateVendor(data, vendorId, adminUserId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
