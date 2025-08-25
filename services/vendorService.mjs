@@ -16,6 +16,7 @@ import { Orders } from "../entities/Orders.mjs";
 import { OrderItems } from "../entities/OrderItems.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs";
 import { VendorStats } from "../entities/VendorStats.mjs";
+import { Complaints } from "../entities/Complaints.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const vendorImagesRepo = AppDataSource.getRepository(VendorImages);
@@ -70,6 +71,12 @@ const getVendorOrdersSchema = z.object({
   limit: z.number().int().min(1).max(50).default(10),
   status: z.enum([...Object.values(ORDER_VENDOR_STATUS)]),
 });
+
+const addComplaintSchema = z.object({
+  userId: z.string().uuid(),
+  orderId: z.string().uuid().optional(),
+  complaint: z.string().min(1, { message: "Complaint is required" }),
+})
 
 //============================ CONSTANTS ==============================================
 
@@ -810,5 +817,33 @@ export const getVendorStats = async (data) => {
   } catch (error) {
     logger.error("getVendorStats error", error);
     throw error;
+  }
+}
+
+export const addComplaint = async (data) => {
+  try {
+      const { userId, orderId, complaint } = addComplaintSchema.parse(data);
+
+      const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: { id: true }, relations: ["user"] });
+      if (!vendor) throw sendError("Vendor not found", 404);
+
+      const order = await orderRepo.exists({ where: { id: orderId, selectedVendorId: vendor.id } });
+      if (!order) throw sendError("Order ID is invalid or You are not authorized to add complaint for this order", 403);
+
+      const complaintData = AppDataSource.getRepository(Complaints).create({ vendorId: vendor.id, email: vendor.user.email, phoneNumber: vendor.user.phoneNumber, name: vendor.user.name, orderId, complaint });
+
+      await AppDataSource.getRepository(Complaints).save(complaintData);
+
+      return {
+          success: true,
+          message: "Complaint added successfully",
+      }
+  } catch (error) {
+      logger.error("Error adding complaint", error);
+      if (error instanceof z.ZodError) {
+          logger.warn("addComplaint validation failed", { errors: error.flatten().fieldErrors });
+          throw sendError("Invalid parameters provided.", 400, error.flatten().fieldErrors);
+      }
+      throw error;
   }
 }
