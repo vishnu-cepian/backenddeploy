@@ -452,7 +452,7 @@ export const verifyVendor = async (id) => {
   }
 }
 
-export const rejectVendor = async (id, rejectionReason) => { //DELETE VENDOR
+export const rejectVendor = async (id, rejectionReason, adminUserId) => { //DELETE VENDOR
   try {
     const vendor = await vendorRepo.findOne({ where: { id }, relations: { user: true } });
     if (!vendor) {
@@ -471,14 +471,18 @@ export const rejectVendor = async (id, rejectionReason) => { //DELETE VENDOR
     });
 
     await vendorRepo.delete(id); 
-    /**
-     * 
-     * 
-     * 
-     * log this 
-     * 
-     * 
-     */
+
+    const adminAction = AppDataSource.getRepository(AdminActions).create({
+      adminUserId: adminUserId,
+      action: "rejectVendor",
+      actionData: {
+        vendorEmail: vendor.user.email,
+        vendorName: vendor.user.name,
+        rejectionReason
+      }
+    });
+    await AppDataSource.getRepository(AdminActions).save(adminAction);
+
     return { message: "Vendor rejected successfully" };
   } catch (err) {
     logger.error(err);

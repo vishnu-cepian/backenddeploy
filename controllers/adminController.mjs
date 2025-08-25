@@ -139,7 +139,8 @@ export const rejectVendor = async (req, res, next) => {
     try {
         const vendorId = req.params.id;
         const rejectionReason = req.body.rejectionReason;
-        const response = await adminService.rejectVendor(vendorId, rejectionReason);
+        const adminUserId = req.user.id;
+        const response = await adminService.rejectVendor(vendorId, rejectionReason, adminUserId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
