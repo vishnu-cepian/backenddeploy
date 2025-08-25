@@ -10,6 +10,7 @@ let logResponse = false
 
 router.post("/login", controllerWrapper(adminController.login, { logRequest, logResponse }));
 router.post("/refreshAccessToken", controllerWrapper(adminController.refreshAccessToken, { logRequest, logResponse }));
+router.patch("/logout", verifyAdminAccessToken, controllerWrapper(adminController.logout, { logRequest, logResponse }));
 
 logRequest = true;
 logResponse = true;

@@ -22,6 +22,7 @@ import { Settings } from "../entities/Settings.mjs";
 import { delCache } from "../utils/cache.mjs";
 import { emailQueue } from "../queues/index.mjs";
 import { AdminActions } from "../entities/AdminActions.mjs";
+import { AdminLoginHistory } from "../entities/AdminLoginHistory.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -104,7 +105,7 @@ export const refreshAccessToken = async (refreshToken) => {  //if token is expir
       }
   };
 
-export const login = async (data) => {
+export const login = async (data, ipAddress) => {
     /*
   input:- email,password
   ouput:- role, accessTokken, refreshToken, message
@@ -145,6 +146,8 @@ try {
             { id: user.id },
             { refreshToken } // add refreshToken field to User entity
         );
+        const adminLoginHistory = AppDataSource.getRepository(AdminLoginHistory).create({ adminUserId: user.id, adminEmail: user.email, ipAddress: ipAddress, loginTime: new Date() });
+        await AppDataSource.getRepository(AdminLoginHistory).save(adminLoginHistory);
         return {
             user: {
                 id: user.id,
@@ -161,6 +164,15 @@ try {
   }
 };
 
+export const logout = async (id) => {
+  try {
+    const adminLoginHistory = await AppDataSource.getRepository(AdminLoginHistory).update({ adminUserId: id }, { logoutTime: new Date() });
+    return { message: "Logout successful" };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
 export const stats = async () => {
   try {
     const userRepository = AppDataSource.getRepository(User);

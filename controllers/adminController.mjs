@@ -6,7 +6,8 @@ import * as adminService from "../services/adminService.mjs";
 export const login = async (req, res, next) => {
     try {
         const data = req.body;
-        const response = await adminService.login(data);
+        const ipAddress = req.headers['x-forwarded-for'] || req.ip || req.connection.remoteAddress;
+        const response = await adminService.login(data, ipAddress);
         if (!response) {
             throw new Error(formatError("No login response", response));
         }
@@ -23,6 +24,19 @@ export const refreshAccessToken = async (req, res, next) => {
         const response = await adminService.refreshAccessToken(data);
         if (!response) {
             throw new Error(formatError("No login response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
+export const logout = async (req, res, next) => {
+    try {
+        const response = await adminService.logout(req.user.id);
+        if (!response) {
+            throw new Error(formatError("No logout response", response));
         }
         res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
     } catch (error) {
