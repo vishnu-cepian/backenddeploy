@@ -46,6 +46,8 @@ const orderItemSchema = z.object({
     customMeasurements: z.any().optional().nullable().default(null),
     designImage1: z.string().optional().nullable().default(null),
     designImage2: z.string().optional().nullable().default(null),
+    clothProvided: z.boolean().optional().nullable().default(false),
+    tailorService: z.string().optional().nullable().default(null),
 }).refine(data => {
     if (!data.laundryService) {
         if (data.stdMeasurements && data.customMeasurements) {
@@ -211,7 +213,7 @@ export const createOrder = async (data) => {
                 ...item,
             })
         );
-
+console.log(itemToSave)
         await queryRunner.manager.save(OrderItems, itemToSave);
 
         await queryRunner.commitTransaction();
