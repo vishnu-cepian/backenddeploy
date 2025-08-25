@@ -42,4 +42,5 @@ router.get("/getComplaints", verifyAdminAccessToken, controllerWrapper(adminCont
 router.patch("/resolveComplaint/:id", verifyAdminAccessToken, controllerWrapper(adminController.resolveComplaint, {logRequest, logResponse}))
 router.get("/complaints/export", verifyAdminAccessToken, controllerWrapper(adminController.exportComplaints, {logRequest, logResponse}))
 router.get("/loginHistory", verifyAdminAccessToken, controllerWrapper(adminController.loginHistory, {logRequest, logResponse}))
+router.get("/getAdminActions", verifyAdminAccessToken, controllerWrapper(adminController.getAdminActions, {logRequest, logResponse}))
 export default router;

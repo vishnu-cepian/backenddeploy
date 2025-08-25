@@ -110,7 +110,8 @@ export const getVendorById = async (req, res, next) => {
 export const blockOrUnblockVendor = async (req, res, next) => {
     try {
         const vendorId = req.params.id;
-        const response = await adminService.blockOrUnblockVendor(vendorId);
+        const adminUserId = req.user.id;
+        const response = await adminService.blockOrUnblockVendor(vendorId, adminUserId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
@@ -124,7 +125,8 @@ export const blockOrUnblockVendor = async (req, res, next) => {
 export const verifyVendor = async (req, res, next) => {
     try {
         const vendorId = req.params.id;
-        const response = await adminService.verifyVendor(vendorId);
+        const adminUserId = req.user.id;
+        const response = await adminService.verifyVendor(vendorId, adminUserId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
@@ -240,7 +242,8 @@ export const updateCustomer = async (req, res, next) => {
             ...req.body,
             customerId: req.params.id
         }
-        const response = await adminService.updateCustomer(data);
+        const adminUserId = req.user.id;
+        const response = await adminService.updateCustomer(data, adminUserId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
@@ -254,7 +257,8 @@ export const updateCustomer = async (req, res, next) => {
 export const blockOrUnblockCustomer = async (req, res, next) => {
     try {
         const customerId = req.params.id;
-        const response = await adminService.blockOrUnblockCustomer(customerId);
+        const adminUserId = req.user.id;
+        const response = await adminService.blockOrUnblockCustomer(customerId, adminUserId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
@@ -368,8 +372,8 @@ export const updateSettings = async (req, res, next) => {
         const userId = req.user.id;
         const key = Object.keys(req.body)[0];
         const value = Object.values(req.body)[0];
-
-        const response = await adminService.updateSettings(key, value, userId);
+        const adminUserId = req.user.id;
+        const response = await adminService.updateSettings(key, value, userId, adminUserId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
@@ -415,7 +419,8 @@ export const resolveComplaint = async (req, res, next) => {
     try {
         const complaintId = req.params.id;
         const resolutionNotes = req.body.resolutionNotes;
-        const response = await adminService.resolveComplaint(complaintId, resolutionNotes);
+        const adminUserId = req.user.id;
+        const response = await adminService.resolveComplaint(complaintId, resolutionNotes, adminUserId);
         if (!response) {
             throw new Error(formatError("No response", response));
         }
@@ -442,6 +447,19 @@ export const exportComplaints = async (req, res, next) => {
 export const loginHistory = async (req, res, next) => {
     try {
         const response = await adminService.loginHistory(req.query);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};  
+
+export const getAdminActions = async (req, res, next) => {
+    try {
+        const response = await adminService.getAdminActions(req.query);
         if (!response) {
             throw new Error(formatError("No response", response));
         }

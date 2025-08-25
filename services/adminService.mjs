@@ -409,7 +409,7 @@ export const getVendorById = async (id) => {
   }
 }
 
-export const blockOrUnblockVendor = async (id) => {
+export const blockOrUnblockVendor = async (id, adminUserId) => {
   try {
     const vendor = await vendorRepo.findOne({ where: { id } });
     if (!vendor) {
@@ -423,6 +423,16 @@ export const blockOrUnblockVendor = async (id) => {
       }
     }
     await userRepo.update(vendor.userId, { isBlocked: !blockStatus.isBlocked });
+
+    const adminAction = AppDataSource.getRepository(AdminActions).create({
+      adminUserId: adminUserId,
+      action: "blockOrUnblockVendor",
+      actionData: {
+        vendorId: vendor.id,
+        blockStatus: !blockStatus.isBlocked
+      }
+    });
+    await AppDataSource.getRepository(AdminActions).save(adminAction);
     return { message: "Vendor blocked successfully" };
   } catch (err) {
     logger.error(err);
@@ -430,27 +440,43 @@ export const blockOrUnblockVendor = async (id) => {
   }
 }
 
-export const unblockVendor = async (id) => {
-  try {
-    const vendor = await vendorRepo.findOne({ where: { id } });
-    if (!vendor) {
-      throw sendError('Vendor not found', 404);
-    }
-    await userRepo.update(vendor.userId, { isBlocked: false });
-    return { message: "Vendor unblocked successfully" };
-  } catch (err) {
-    logger.error(err);
-    throw err;
-  }
-}
+// export const unblockVendor = async (id, adminUserId) => {
+//   try {
+//     const vendor = await vendorRepo.findOne({ where: { id } });
+//     if (!vendor) {
+//       throw sendError('Vendor not found', 404);
+//     }
+//     await userRepo.update(vendor.userId, { isBlocked: false });
+//     const adminAction = AppDataSource.getRepository(AdminActions).create({
+//       adminUserId: adminUserId,
+//       action: "unblockVendor",
+//       actionData: {
+//         vendorId: vendor.id
+//       }
+//     });
+//     await AppDataSource.getRepository(AdminActions).save(adminAction);
+//     return { message: "Vendor unblocked successfully" };
+//   } catch (err) {
+//     logger.error(err);
+//     throw err;
+//   }
+// }
 
-export const verifyVendor = async (id) => {
+export const verifyVendor = async (id, adminUserId) => {
   try {
     const vendor = await vendorRepo.findOne({ where: { id } });
     if (!vendor) {
       throw sendError('Vendor not found', 404);
     }
     await vendorRepo.update(id, { status: "VERIFIED" });
+    const adminAction = AppDataSource.getRepository(AdminActions).create({
+      adminUserId: adminUserId,
+      action: "verifyVendor",
+      actionData: {
+        vendorId: vendor.id
+      }
+    });
+    await AppDataSource.getRepository(AdminActions).save(adminAction);
     return { message: "Vendor verified successfully" };
   } catch (err) {
     logger.error(err);
@@ -788,7 +814,7 @@ export const getCustomerById = async (id) => {
   }
 }
 
-export const updateCustomer = async (data) => {
+export const updateCustomer = async (data, adminUserId) => {
   try {
     const {customerId, ...rest} = data;
     const customer = await customerRepo.findOne({ where: { id: customerId }, select: {userId : true} });
@@ -797,13 +823,24 @@ export const updateCustomer = async (data) => {
       throw sendError('User not found', 404);
     }
     await userRepo.update(user.id, rest);
+    const adminAction = AppDataSource.getRepository(AdminActions).create({
+      adminUserId: adminUserId,
+      action: "updateCustomer",
+      actionData: {
+        customerId: customer.id,
+        oldData: user,
+        newData: data
+      }
+    });
+    await AppDataSource.getRepository(AdminActions).save(adminAction);
     return { message: "Customer updated successfully" };
   } catch (err) {
     logger.error(err);
     throw err;
   }
 }
-export const blockOrUnblockCustomer = async (id) => {
+
+export const blockOrUnblockCustomer = async (id, adminUserId) => {
   try {
     const customer = await customerRepo.findOne({ where: { id } });
     if (!customer) {
@@ -811,6 +848,15 @@ export const blockOrUnblockCustomer = async (id) => {
     }
     const blockStatus = await userRepo.findOne({ where: { id: customer.userId }, select: ["isBlocked"] });
     await userRepo.update(customer.userId, { isBlocked: !blockStatus.isBlocked });
+    const adminAction = AppDataSource.getRepository(AdminActions).create({
+      adminUserId: adminUserId,
+      action: "blockOrUnblockCustomer",
+      actionData: {
+        customerId: customer.id,
+        blockStatus: !blockStatus.isBlocked
+      }
+    });
+    await AppDataSource.getRepository(AdminActions).save(adminAction);
     return { message: "Customer blocked successfully" };
   } catch (err) {
     logger.error(err);
@@ -951,7 +997,7 @@ export const getOrSetSettings = async (key) => {
   }
 }
 
-export const updateSettings = async (key, value, userId) => {
+export const updateSettings = async (key, value, userId, adminUserId) => {
   const queryRunner = AppDataSource.createQueryRunner();
   await queryRunner.connect();
   await queryRunner.startTransaction();
@@ -966,6 +1012,15 @@ export const updateSettings = async (key, value, userId) => {
     await queryRunner.manager.save(Settings, settings);
     await delCache(key);
     await queryRunner.commitTransaction();
+    const adminAction = AppDataSource.getRepository(AdminActions).create({
+      adminUserId: adminUserId,
+      action: "updateSettings",
+      actionData: {
+        key: key,
+        value: value
+      }
+    });
+    await AppDataSource.getRepository(AdminActions).save(adminAction);
     return { message: "Settings updated successfully" };
   } catch (error) {
     logger.error("Error updating settings", error);
@@ -1131,7 +1186,7 @@ export const getComplaints = async (filters) => {
   }
 }
 
-export const resolveComplaint = async (complaintId, resolutionNotes) => {
+export const resolveComplaint = async (complaintId, resolutionNotes, adminUserId) => {
   try {
     const complaint = await AppDataSource.getRepository(Complaints).findOne({ where: { id: complaintId } });
     if (!complaint) throw sendError("Complaint not found", 404);
@@ -1139,6 +1194,15 @@ export const resolveComplaint = async (complaintId, resolutionNotes) => {
     complaint.resolvedAt = new Date();
     complaint.resolutionNotes = resolutionNotes;
     await AppDataSource.getRepository(Complaints).save(complaint);
+    const adminAction = AppDataSource.getRepository(AdminActions).create({
+      adminUserId: adminUserId,
+      action: "resolveComplaint",
+      actionData: {
+        complaintId: complaint.id,
+        resolutionNotes: resolutionNotes
+      }
+    });
+    await AppDataSource.getRepository(AdminActions).save(adminAction);
     return { message: "Complaint resolved successfully" };
   }
   catch (err) {
@@ -1194,6 +1258,39 @@ export const loginHistory = async (filters) => {
       hasMore: filters.page * filters.limit < totalCount
     } };
   } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getAdminActions = async (filters) => {
+  try {
+    const queryBuilder = AppDataSource.getRepository(AdminActions).createQueryBuilder("adminActions");
+    if (filters.action) {
+      queryBuilder.andWhere("adminActions.action LIKE :action", { action: `%${filters.action}%` });
+    }
+    if (filters.from && filters.to) {
+      queryBuilder.andWhere("adminActions.createdAt BETWEEN :from AND :to", { from: filters.from, to: filters.to });
+    }
+
+    const [adminActions, totalCount] = await Promise.all([
+      queryBuilder
+        .orderBy("adminActions.createdAt", "DESC")
+        .skip((filters.page - 1) * filters.limit)
+        .take(filters.limit)
+        .getMany(),
+      queryBuilder.getCount()
+    ]);
+
+    return { adminActions, totalCount, pagination: {
+      currentPage: filters.page,
+      itemsPerPage: filters.limit,
+      totalItems: totalCount,
+      totalPages: Math.ceil(totalCount / filters.limit),
+      hasMore: filters.page * filters.limit < totalCount
+    } };
+  }
+  catch (err) {
     logger.error(err);
     throw err;
   }
