@@ -402,8 +402,8 @@ export const vendorOrderResponse = async (data) => {
             * 
             */
 
-            const vendorPayoutAfterCommission = calculateVendorPayoutAmount(quotedPrice);
-            const priceAfterPlatformFee = calculateOrderAmount(quotedPrice);
+            const vendorPayoutAfterCommission = await calculateVendorPayoutAmount(quotedPrice);
+            const priceAfterPlatformFee = await calculateOrderAmount(quotedPrice);
             const deliveryCharge = 40;          ////////////////////////////// TO BE CHANGED
             const finalPrice = priceAfterPlatformFee + deliveryCharge;
 
