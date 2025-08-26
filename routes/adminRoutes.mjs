@@ -47,5 +47,6 @@ router.get("/getPaymentsList", verifyAdminAccessToken, controllerWrapper(adminCo
 router.get("/getRefundsList", verifyAdminAccessToken, controllerWrapper(adminController.getRefundsList, {logRequest, logResponse}))
 router.get("/getPaymentFailuresList", verifyAdminAccessToken, controllerWrapper(adminController.getPaymentFailuresList, {logRequest, logResponse}))
 router.get("/getQueueLogs", verifyAdminAccessToken, controllerWrapper(adminController.getQueueLogs, {logRequest, logResponse}))
+router.get("/getOutboxFailures", verifyAdminAccessToken, controllerWrapper(adminController.getOutboxFailures, {logRequest, logResponse}))
 
 export default router;

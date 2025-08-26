@@ -1529,3 +1529,51 @@ export const getQueueLogs = async (filters) => {
     throw err;
   }
 }
+
+export const getOutboxFailures = async (filters) => {
+  try {
+    const repo = AppDataSource.getRepository(Outbox);
+
+    const failedCount = await repo.createQueryBuilder("outbox").where("outbox.status = :status", { status: "FAILED" }).getCount();
+
+    let qb = repo.createQueryBuilder("outbox");
+
+    if(filters.from && filters.to) {
+      qb = qb.andWhere("outbox.statusUpdatedAt BETWEEN :from AND :to", { from: filters.from, to: filters.to });
+    }
+
+    if(filters.status) {
+      qb = qb.andWhere("outbox.status = :status", { status: filters.status });
+    }
+
+    if(filters.export) {
+      return qb.getMany();
+    }
+
+    const countQb = qb.clone();
+
+    const [outboxFailures, filteredCount] = await Promise.all([
+      qb.orderBy("outbox.statusUpdatedAt", "DESC")
+        .skip((filters.page - 1) * filters.limit)
+        .take(filters.limit)
+        .getMany(),
+      countQb.getCount(),
+    ]);
+
+    return {
+      outboxFailures,
+      totalCount: failedCount,
+      filteredCount,
+      pagination: {
+        currentPage: filters.page,
+        itemsPerPage: filters.limit,
+        totalItems: filteredCount,
+        totalPages: Math.ceil(filteredCount / filters.limit),
+        hasMore: filters.page * filters.limit < filteredCount,
+      },
+    }
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
