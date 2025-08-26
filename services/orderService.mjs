@@ -557,6 +557,8 @@ export const refundRazorpayPayment = async (paymentId, reason) => {
             paymentId: paymentId,
             amount: refund.amount,
             status: refund.status,
+            speedRequested: refund.speed_requested,
+            speedProcessed: refund.speed_processed,
             notes: reason
         });
         logger.info(`Refunded payment ${paymentId} for reason ${reason}`);
@@ -565,7 +567,7 @@ export const refundRazorpayPayment = async (paymentId, reason) => {
         try{
             await refundRepo.save({
                 paymentId: paymentId,
-                status: "FAILED",
+                status: "failed",
                 notes: reason,
                 comment: err
             });
@@ -738,6 +740,8 @@ export const handleRazorpayWebhook = async(req, res) => {
                     paymentId: paymentId,
                     amount: refund.amount,
                     status: refund.status,
+                    speedRequested: refund.speed_requested,
+                    speedProcessed: refund.speed_processed,
                     notes: "Internal server error during order processing.",
                 });
 
@@ -746,7 +750,7 @@ export const handleRazorpayWebhook = async(req, res) => {
                 try{
                     await refundRepo.save({
                         paymentId: paymentId,
-                        status: "FAILED",
+                        status: "failed",
                         notes: "Internal server error during order processing.",
                         comment: refundError
                     });

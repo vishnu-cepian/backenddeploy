@@ -21,6 +21,14 @@ export const Refunds = new EntitySchema({
             type: "varchar",
             nullable: true
         },
+        speedRequested: {
+            type: "varchar",
+            nullable: true
+        },
+        speedProcessed: {
+            type: "varchar",
+            nullable:true
+        },
         notes: {
             type: "varchar",
             nullable: true
