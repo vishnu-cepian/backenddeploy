@@ -50,6 +50,9 @@ const orderItemSchema = z.object({
     tailorService: z.string().optional().nullable().default(null),
 }).refine(data => {
     if (!data.laundryService) {
+        if(data.measurementType === "refCloth") {
+            return true;
+        }
         if (data.stdMeasurements && data.customMeasurements) {
             return false; // Only one of custom/standard measurements can be provided
         }
@@ -213,7 +216,7 @@ export const createOrder = async (data) => {
                 ...item,
             })
         );
-console.log(itemToSave)
+
         await queryRunner.manager.save(OrderItems, itemToSave);
 
         await queryRunner.commitTransaction();
