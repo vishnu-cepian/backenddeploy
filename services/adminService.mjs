@@ -1295,3 +1295,67 @@ export const getAdminActions = async (filters) => {
     throw err;
   }
 }
+
+export const getPaymentsList = async (filters) => {
+  try {
+    const repo = AppDataSource.getRepository(Payments);
+
+    let qb = repo.createQueryBuilder("payments");
+
+    if (filters.from && filters.to) {
+      qb = qb.andWhere("payments.paymentDate BETWEEN :from AND :to", { from: filters.from, to: filters.to });
+    }
+    if (filters.paymentMethod) {
+      qb = qb.andWhere("payments.paymentMethod = :paymentMethod", { paymentMethod: filters.paymentMethod });
+    }
+    if (filters.orderId) {
+      qb = qb.andWhere("payments.orderId = :orderId", { orderId: filters.orderId });
+    }
+    if (filters.razorpayPaymentId) {
+      qb = qb.andWhere("payments.razorpayPaymentId = :razorpayPaymentId", { razorpayPaymentId: filters.razorpayPaymentId });
+    }
+
+    if(filters.export) {
+      return qb.getMany();
+    }
+
+    const countQb = qb.clone();
+    const amountQb = qb.clone();
+
+    const [payments, filteredCount] = await Promise.all([
+      qb.orderBy("payments.paymentDate", "DESC")
+        .skip((filters.page - 1) * filters.limit)
+        .take(filters.limit)
+        .getMany(),
+      countQb.getCount(),
+    ]);
+
+    const { totalAmount } = await repo
+      .createQueryBuilder("payments")
+      .select("SUM(payments.paymentAmount)", "totalAmount")
+      .getRawOne();
+
+    const { filteredAmount } = await amountQb
+      .select("SUM(payments.paymentAmount)", "filteredAmount")
+      .getRawOne();
+
+
+    return {
+      payments,
+      totalCount: await repo.count(),
+      totalAmount: parseFloat(totalAmount) || 0,
+      filteredAmount: parseFloat(filteredAmount) || 0,
+      filteredCount,
+      pagination: {
+        currentPage: filters.page,
+        itemsPerPage: filters.limit,
+        totalItems: filteredCount,
+        totalPages: Math.ceil(filteredCount / filters.limit),
+        hasMore: filters.page * filters.limit < filteredCount,
+      },
+    };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+};
