@@ -1439,7 +1439,7 @@ export const getPaymentFailuresList = async (filters) => {
     if (filters.paymentId) {
       qb = qb.andWhere("paymentFailures.paymentId = :paymentId", { paymentId: filters.paymentId });
     }
-    
+
     if(filters.export) {
       return qb.getMany();
     }
@@ -1469,6 +1469,52 @@ export const getPaymentFailuresList = async (filters) => {
       totalCount: await repo.count(),
       totalAmount: parseFloat(totalAmount) || 0,
       filteredAmount: parseFloat(filteredAmount) || 0,
+      filteredCount,
+      pagination: {
+        currentPage: filters.page,
+        itemsPerPage: filters.limit,
+        totalItems: filteredCount,
+        totalPages: Math.ceil(filteredCount / filters.limit),
+        hasMore: filters.page * filters.limit < filteredCount,
+      },
+    }
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getQueueLogs = async (filters) => {
+  try {
+    const repo = AppDataSource.getRepository(QueueLogs);
+
+    let qb = repo.createQueryBuilder("queueLogs");
+
+    if(filters.queueName) {
+      qb = qb.andWhere("queueLogs.queueName = :queueName", { queueName: filters.queueName });
+    }
+
+    if(filters.from && filters.to) {
+      qb = qb.andWhere("queueLogs.failedAt BETWEEN :from AND :to", { from: filters.from, to: filters.to });
+    }
+
+    if(filters.export) {
+      return qb.getMany();
+    }
+
+    const countQb = qb.clone();
+
+    const [queueLogs, filteredCount] = await Promise.all([
+      qb.orderBy("queueLogs.failedAt", "DESC")
+        .skip((filters.page - 1) * filters.limit)
+        .take(filters.limit)
+        .getMany(),
+      countQb.getCount(),
+    ]);
+
+    return {
+      queueLogs,
+      totalCount: await repo.count(),
       filteredCount,
       pagination: {
         currentPage: filters.page,
