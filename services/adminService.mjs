@@ -174,7 +174,12 @@ try {
 
 export const logout = async (id) => {
   try {
-    const adminLoginHistory = await AppDataSource.getRepository(AdminLoginHistory).update({ adminUserId: id }, { logoutTime: new Date() });
+    const adminLoginHistory = await AppDataSource.getRepository(AdminLoginHistory).findOne({ where: {adminUserId: id}, order: { loginTime: "DESC" }, take: 1 });
+    if (!adminLoginHistory) {
+      throw sendError('Admin not found', 404);
+    }
+    const updatedAdminLoginHistory = await AppDataSource.getRepository(AdminLoginHistory).update(adminLoginHistory.id, { logoutTime: new Date() });
+    console.log(updatedAdminLoginHistory);
     return { message: "Logout successful" };
   } catch (err) {
     logger.error(err);
@@ -445,28 +450,6 @@ export const blockOrUnblockVendor = async (id, adminUserId) => {
     throw err;
   }
 }
-
-// export const unblockVendor = async (id, adminUserId) => {
-//   try {
-//     const vendor = await vendorRepo.findOne({ where: { id } });
-//     if (!vendor) {
-//       throw sendError('Vendor not found', 404);
-//     }
-//     await userRepo.update(vendor.userId, { isBlocked: false });
-//     const adminAction = AppDataSource.getRepository(AdminActions).create({
-//       adminUserId: adminUserId,
-//       action: "unblockVendor",
-//       actionData: {
-//         vendorId: vendor.id
-//       }
-//     });
-//     await AppDataSource.getRepository(AdminActions).save(adminAction);
-//     return { message: "Vendor unblocked successfully" };
-//   } catch (err) {
-//     logger.error(err);
-//     throw err;
-//   }
-// }
 
 export const verifyVendor = async (id, adminUserId) => {
   const queryRunner = AppDataSource.createQueryRunner();
