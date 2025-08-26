@@ -1421,3 +1421,65 @@ export const getRefundsList = async (filters) => {
     throw err;
   }
 }
+
+export const getPaymentFailuresList = async (filters) => {
+  try {
+    const repo = AppDataSource.getRepository(PaymentFailures);
+
+    let qb = repo.createQueryBuilder("paymentFailures");
+
+    if(filters.from && filters.to) {
+      qb = qb.andWhere("paymentFailures.timestamp BETWEEN :from AND :to", { from: filters.from, to: filters.to });
+    }
+
+    if (filters.orderId) {
+      qb = qb.andWhere("paymentFailures.orderId = :orderId", { orderId: filters.orderId });
+    }
+
+    if (filters.paymentId) {
+      qb = qb.andWhere("paymentFailures.paymentId = :paymentId", { paymentId: filters.paymentId });
+    }
+    
+    if(filters.export) {
+      return qb.getMany();
+    }
+
+    const countQb = qb.clone();
+    const amountQb = qb.clone();
+
+    const [paymentFailures, filteredCount] = await Promise.all([
+      qb.orderBy("paymentFailures.timestamp", "DESC")
+        .skip((filters.page - 1) * filters.limit)
+        .take(filters.limit)
+        .getMany(),
+      countQb.getCount(),
+    ]);
+
+    const { totalAmount } = await repo
+      .createQueryBuilder("paymentFailures")
+      .select("SUM(paymentFailures.amount)", "totalAmount")
+      .getRawOne();
+
+    const { filteredAmount } = await amountQb
+      .select("SUM(paymentFailures.amount)", "filteredAmount")
+      .getRawOne();
+
+    return {
+      paymentFailures,
+      totalCount: await repo.count(),
+      totalAmount: parseFloat(totalAmount) || 0,
+      filteredAmount: parseFloat(filteredAmount) || 0,
+      filteredCount,
+      pagination: {
+        currentPage: filters.page,
+        itemsPerPage: filters.limit,
+        totalItems: filteredCount,
+        totalPages: Math.ceil(filteredCount / filters.limit),
+        hasMore: filters.page * filters.limit < filteredCount,
+      },
+    }
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
