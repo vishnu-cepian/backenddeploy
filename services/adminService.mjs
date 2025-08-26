@@ -179,7 +179,7 @@ export const logout = async (id) => {
       throw sendError('Admin not found', 404);
     }
     const updatedAdminLoginHistory = await AppDataSource.getRepository(AdminLoginHistory).update(adminLoginHistory.id, { logoutTime: new Date() });
-    console.log(updatedAdminLoginHistory);
+    
     return { message: "Logout successful" };
   } catch (err) {
     logger.error(err);
