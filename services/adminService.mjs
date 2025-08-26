@@ -1546,6 +1546,10 @@ export const getOutboxFailures = async (filters) => {
       qb = qb.andWhere("outbox.status = :status", { status: filters.status });
     }
 
+    if (filters.eventType) {
+      qb = qb.andWhere("outbox.eventType = :eventType", { eventType: filters.eventType });
+    }
+
     if(filters.export) {
       return qb.getMany();
     }
