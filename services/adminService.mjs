@@ -1359,3 +1359,65 @@ export const getPaymentsList = async (filters) => {
     throw err;
   }
 };
+
+export const getRefundsList = async (filters) => {
+  try {
+    const repo = AppDataSource.getRepository(Refunds);
+
+    let qb = repo.createQueryBuilder("refunds");
+
+    if(filters.from && filters.to) {
+      qb = qb.andWhere("refunds.createdAt BETWEEN :from AND :to", { from: filters.from, to: filters.to });
+    }
+
+    if(filters.paymentId) {
+      qb = qb.andWhere("refunds.paymentId = :paymentId", { paymentId: filters.paymentId });
+    }
+
+    if(filters.status) {
+      qb = qb.andWhere("refunds.status = :status", { status: filters.status });
+    }
+
+    if(filters.export) {
+      return qb.getMany();
+    }
+
+    const countQb = qb.clone();
+    const amountQb = qb.clone();
+
+    const [refunds, filteredCount] = await Promise.all([
+      qb.orderBy("refunds.createdAt", "DESC")
+        .skip((filters.page - 1) * filters.limit)
+        .take(filters.limit)
+        .getMany(),
+      countQb.getCount(),
+    ]);
+
+    const { totalAmount } = await repo
+      .createQueryBuilder("refunds")
+      .select("SUM(refunds.amount)", "totalAmount")
+      .getRawOne();
+
+    const { filteredAmount } = await amountQb
+      .select("SUM(refunds.amount)", "filteredAmount")
+      .getRawOne();
+
+    return {
+      refunds,
+      totalCount: await repo.count(),
+      totalAmount: parseFloat(totalAmount) || 0,
+      filteredAmount: parseFloat(filteredAmount) || 0,
+      filteredCount,
+      pagination: {
+        currentPage: filters.page,
+        itemsPerPage: filters.limit,
+        totalItems: filteredCount,
+        totalPages: Math.ceil(filteredCount / filters.limit),
+        hasMore: filters.page * filters.limit < filteredCount,
+      },
+    };
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
