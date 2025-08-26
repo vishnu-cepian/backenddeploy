@@ -48,3 +48,92 @@ export const refundRazorpayPayment = async (paymentId, reason, speed = "normal")
         throw err;
     }
 }
+/**
+ * Creates a Razorpay contact.
+ * 
+ * @param {string} name - The name of the contact.
+ * @param {string} email - The email of the contact.
+ * @param {string} phoneNumber - The phone number of the contact.
+ * @param {string} type - The type of the contact.
+ * @param {string} referenceId - The reference ID of the contact.
+ * @returns {Promise<object>} The created contact.
+ */
+export const createRazorpayContact = async (name, email, phoneNumber, type, referenceId) => {
+    try {
+        const url = new URL("https://api.razorpay.com/v1/contacts");
+
+        const authString = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
+
+        let headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Basic ${authString}`
+        };
+
+        let body = {
+            name: name,
+            email: email,
+            contact: phoneNumber,
+            type: type,
+            reference_id: referenceId
+        };
+
+        const response = await fetch(url, { 
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+        return data;
+    }
+    catch(err) {
+        logger.error("Error in createRazorpayContact service:", err);
+        throw err;
+    }
+}
+
+/**
+ * Creates a Razorpay fund account.
+ * 
+ * @param {string} contactId - The ID of the contact.
+ * @param {string} accountType - The type of the account.
+ * @param {string} name - The name of the account.
+ * @param {string} ifsc - The IFSC code of the account.
+ * @param {string} accountNumber - The account number of the account.
+ * @returns {Promise<object>} The created fund account.
+ */
+export const createFundAccount = async (contactId, accountType, name, ifsc, accountNumber) => {
+    try {
+        const url = new URL("https://api.razorpay.com/v1/fund_accounts");
+
+        const authString = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
+
+        let headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Basic ${authString}`
+        };
+
+        let body = {
+            contact_id: contactId,
+            account_type: accountType,
+            bank_account: {
+                name: name,
+                ifsc: ifsc,
+                account_number: accountNumber
+            }
+        };
+
+        const response = await fetch(url, {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(body)
+        });
+        const data = await response.json();
+        return data;
+    }
+    catch(err) {
+        logger.error("Error in createFundAccount service:", err);
+        throw err;
+    }
+}
+

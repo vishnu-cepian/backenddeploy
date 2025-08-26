@@ -30,6 +30,8 @@ import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { QueueLogs } from "../entities/queueLogs.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 
+import { createRazorpayContact, createFundAccount } from "../utils/razorpay-utils.mjs";
+
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
 const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
@@ -467,24 +469,47 @@ export const blockOrUnblockVendor = async (id, adminUserId) => {
 // }
 
 export const verifyVendor = async (id, adminUserId) => {
+  const queryRunner = AppDataSource.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
   try {
-    const vendor = await vendorRepo.findOne({ where: { id } });
+    const vendor = await queryRunner.manager.findOne(Vendors, { where: { id }, relations: { user: true } });
     if (!vendor) {
       throw sendError('Vendor not found', 404);
     }
-    await vendorRepo.update(id, { status: "VERIFIED" });
-    const adminAction = AppDataSource.getRepository(AdminActions).create({
+    await queryRunner.manager.update(Vendors, id, { status: "VERIFIED" });
+
+    const contact = await createRazorpayContact(vendor.user.name, vendor.user.email, vendor.user.phoneNumber, "vendor", vendor.id);
+    if (contact.error) throw sendError("Razorpay contact creation failed: "+contact.error.description,400);
+
+    const fundAccount = await createFundAccount(contact.id, "bank_account", vendor.user.name, vendor.ifscCode, vendor.accountNumber);
+    if (fundAccount.error) throw sendError("Razorpay fund account creation failed: "+fundAccount.error.description,400);
+
+    await queryRunner.manager.update(Vendors, vendor.id, {
+      razorpay_contact_id: contact.id,
+      razorpay_fund_account_id: fundAccount.id,
+    });
+
+    const adminAction = queryRunner.manager.create(AdminActions, {
       adminUserId: adminUserId,
       action: "verifyVendor",
       actionData: {
-        vendorId: vendor.id
+        vendorId: vendor.id,
+        contactId: contact.id,
+        fundAccountId: fundAccount.id
       }
     });
-    await AppDataSource.getRepository(AdminActions).save(adminAction);
+    await queryRunner.manager.save(AdminActions, adminAction);
+    await queryRunner.commitTransaction();
     return { message: "Vendor verified successfully" };
   } catch (err) {
+    if (queryRunner.isTransactionActive) {  
+      await queryRunner.rollbackTransaction();
+    }
     logger.error(err);
     throw err;
+  } finally {
+    await queryRunner.release();
   }
 }
 
