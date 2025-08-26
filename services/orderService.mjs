@@ -539,48 +539,6 @@ export const createRazorpayOrder = async (data) => {
     }
 }
 
-/**
- * Refunds a payment from Razorpay.
- * 
- * @param {string} paymentId - The ID of the payment to refund.
- * @param {string} reason - The reason for the refund.
- * @returns {Promise<void>}
- */
-export const refundRazorpayPayment = async (paymentId, reason) => {
-    try {
-        const razorpay = new Razorpay({
-            key_id: process.env.RAZORPAY_KEY_ID,
-            key_secret: process.env.RAZORPAY_KEY_SECRET
-        });
-        const refund = await razorpay.payments.refund(paymentId, {
-            speed: "normal",
-            notes: { reason: reason }
-        });
-        await refundRepo.save({
-            paymentId: paymentId,
-            amount: refund.amount,
-            status: refund.status,
-            speedRequested: refund.speed_requested,
-            speedProcessed: refund.speed_processed,
-            notes: reason
-        });
-        logger.info(`Refunded payment ${paymentId} for reason ${reason}`);
-    } catch(err) {
-        logger.error(`Error refunding payment ${paymentId} for reason ${reason}`);
-        try{
-            await refundRepo.save({
-                paymentId: paymentId,
-                status: "failed",
-                notes: reason,
-                comment: err
-            });
-        } catch(err2) {
-            logger.error("Error in refundRazorpayPayment service:", err2);
-        }
-        logger.error("Error in refundRazorpayPayment service:", err);
-        throw err;
-    }
-}
 
 /**
  * Handles incoming webhooks from Razorpay to process payment events.
