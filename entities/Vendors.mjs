@@ -12,7 +12,8 @@ export const Vendors = new EntitySchema({
         { name: "vendor_all_time_review_count_idx", columns: ["allTimeReviewCount"] },
         { name: "vendor_shopname_idx", columns: ["shopName"] },
         { name: "vendor_servicetype_idx", columns: ["serviceType"] },
-        { name: "vendor_status_idx", columns: ["status"] }
+        { name: "vendor_status_idx", columns: ["status"] },
+        { name: "vendor_razorpay_fund_account_id_idx", columns: ["razorpay_fund_account_id"] }
     ],
     columns: {
         id: {
@@ -112,6 +113,14 @@ export const Vendors = new EntitySchema({
             type: "varchar",
             nullable: false
         },       
+        razorpay_contact_id: {
+            type: "varchar",
+            nullable: true
+        },
+        razorpay_fund_account_id: {
+            type: "varchar",
+            nullable: true
+        },
         location: {     //  { type: 'Point', coordinates: [lng, lat] }
             type: "geography",
             spatialFeatureType: "Point", 

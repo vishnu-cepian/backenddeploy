@@ -383,6 +383,8 @@ export const getVendorById = async (id) => {
       "vendors.ifscCode",
       "vendors.accountHolderName",
       "vendors.bankPassbookUrlPath",
+      "vendors.razorpay_contact_id",
+      "vendors.razorpay_fund_account_id",
       "vendors.shopDescription",
       "vendors.status",
       "vendors.createdAt",
@@ -544,6 +546,9 @@ const updateVendorSchema = z.object({
   accountHolderName: z.string().min(1),
   accountNumber: z.string().min(1),
   ifscCode: z.string().min(1),
+
+  razorpay_contact_id: z.string().optional(),
+  razorpay_fund_account_id: z.string().optional(),
 
   bankPassbookUrlPath: z.string().optional(),
   aadhaarUrlPath: z.string().optional(),
