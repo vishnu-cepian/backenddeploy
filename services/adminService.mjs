@@ -181,12 +181,10 @@ export const logout = async (id) => {
 }
 export const stats = async () => {
   try {
-    const userRepository = AppDataSource.getRepository(User);
+ 
     const customers = await customerRepo.find();
 
     const totalCustomers = customers.length;
-    // const totalOrders = await orderRepo.count();
-    // const totalRevenue = await orderRepository.sum('totalAmount');
 
     const totalVerifiedVendors = await vendorRepo.find({ where: { status: "VERIFIED" } });
     const totalUnverifiedVendors = await vendorRepo.find({ where: { status: "PENDING" } });
@@ -194,13 +192,17 @@ export const stats = async () => {
     const totalBlockedVendors = await vendorRepo.find({ where: { status: "BLOCKED" } });
     const totalVendors = totalVerifiedVendors.length + totalUnverifiedVendors.length + totalRejectedVendors.length + totalBlockedVendors.length;
 
+    const completedOrders = await orderRepo.count({ where: { orderStatus: ORDER_STATUS.COMPLETED } });
+    const inProgressOrders = await orderRepo.count({ where: { orderStatus: ORDER_STATUS.IN_PROGRESS } });
+
     return {
       totalCustomers,
       totalVendors,
       totalUnverifiedVendors: totalUnverifiedVendors.length,
       totalRejectedVendors: totalRejectedVendors.length,
       totalBlockedVendors: totalBlockedVendors.length,
-      totalOrders: 0
+      completedOrders,
+      inProgressOrders
     }
   } catch (err) {
     logger.error(err);
