@@ -32,6 +32,8 @@ import { Outbox } from "../entities/Outbox.mjs";
 
 import { createRazorpayContact, createFundAccount } from "../utils/razorpay-utils.mjs";
 
+import { Payouts } from "../entities/Payouts.mjs";
+
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
 const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
@@ -1583,6 +1585,110 @@ export const getOutboxFailures = async (filters) => {
       outboxFailures,
       totalCount: failedCount,
       filteredCount,
+      pagination: {
+        currentPage: filters.page,
+        itemsPerPage: filters.limit,
+        totalItems: filteredCount,
+        totalPages: Math.ceil(filteredCount / filters.limit),
+        hasMore: filters.page * filters.limit < filteredCount,
+      },
+    }
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const getPayoutsList = async (filters) => {
+  try {
+    const repo = AppDataSource.getRepository(Payouts);
+    let qb = repo.createQueryBuilder("payouts");
+
+    if (filters.id) {
+      qb = qb.andWhere("payouts.id = :id", { id: filters.id });
+    }
+
+    if (filters.orderId) {
+      qb = qb.andWhere("payouts.orderId = :orderId", { orderId: filters.orderId });
+    }
+
+    if (filters.vendorId) {
+      qb = qb.andWhere("payouts.vendorId = :vendorId", { vendorId: filters.vendorId });
+    }
+    
+    if (filters.status) {
+      qb = qb.andWhere("payouts.status = :status", { status: filters.status });
+    }
+
+    if (filters.utr) {
+      qb = qb.andWhere("payouts.utr = :utr", { utr: filters.utr });
+    }
+
+    if (filters.payoutId) {
+      qb = qb.andWhere("payouts.payout_id = :payoutId", { payoutId: filters.payoutId });
+    }
+
+    if (filters.retryCount === "gt:0") {
+      console.log("retryCount is gt:0");
+      qb = qb.andWhere("payouts.retry_count > 0");
+    }
+
+    if (filters.retryCount === "0") {
+      console.log("retryCount is 0");
+      qb = qb.andWhere("payouts.retry_count = 0");
+    }
+
+    if (filters.from && filters.to) {
+      qb = qb.andWhere("payouts.entry_created_at BETWEEN :from AND :to", { from: filters.from, to: filters.to });
+    }
+
+    const countQb = qb.clone();
+    const amountQb = qb.clone();
+
+    const [payouts, filteredCount] = await Promise.all([
+      qb.orderBy("payouts.entry_created_at", "DESC")
+        .skip((filters.page - 1) * filters.limit)
+        .take(filters.limit)
+        .getMany(),
+      countQb.getCount(),
+    ]);
+
+    const { pendingPayoutAmount, pendingPayoutCount } = await repo
+      .createQueryBuilder("payouts")
+      .select("SUM(payouts.expected_amount)", "pendingPayoutAmount")
+      .addSelect("COUNT(payouts.id)", "pendingPayoutCount")
+      .where("payouts.status = :status", { status: "action_required" })
+      .getRawOne();
+
+    const { processedPayoutAmount, processedPayoutCount } = await repo
+      .createQueryBuilder("payouts")
+      .select("SUM(payouts.actual_paid_amount)", "processedPayoutAmount")
+      .addSelect("COUNT(payouts.id)", "processedPayoutCount")
+      .where("payouts.status = :status", { status: "processed" })
+      .getRawOne();
+
+    
+    const { filteredExpectedAmount } = await amountQb
+      .select("SUM(payouts.expected_amount)", "filteredExpectedAmount")
+      .getRawOne();
+
+    const { filteredActualPaidAmount } = await amountQb
+      .select("SUM(payouts.actual_paid_amount)", "filteredActualPaidAmount")
+      .getRawOne();
+
+    return {
+      payouts,
+  
+      pendingPayoutAmount: parseFloat(pendingPayoutAmount) || 0,
+      pendingPayoutCount: pendingPayoutCount,
+
+      processedPayoutAmount: parseFloat(processedPayoutAmount) || 0,
+      processedPayoutCount: processedPayoutCount,
+
+      filteredExpectedAmount: parseFloat(filteredExpectedAmount) || 0,
+      filteredActualPaidAmount: parseFloat(filteredActualPaidAmount) || 0,
+      filteredCount,
+
       pagination: {
         currentPage: filters.page,
         itemsPerPage: filters.limit,
