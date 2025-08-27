@@ -4,6 +4,6 @@ import { controllerWrapper } from "../controllers/index.mjs";
 
 const router = Router();
 
-router.post("/handleRazorpayWebhook", controllerWrapper(webhookServices.handleRazorpayWebhook, { logRequest: true, logResponse: true }));
+router.post("/handleRazorpayPaymentWebhook", controllerWrapper(webhookServices.handleRazorpayPaymentWebhook, { logRequest: true, logResponse: true }));
 
 export default router;

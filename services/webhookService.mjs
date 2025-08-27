@@ -58,7 +58,7 @@ export const createTimelineEntry = async (queryRunner, orderId, previousStatus, 
  * @param {Object} req 
  * @param {Object} res 
  */
-export const handleRazorpayWebhook = async(req, res) => {
+export const handleRazorpayPaymentWebhook = async(req, res) => {
     
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers["x-razorpay-signature"];
