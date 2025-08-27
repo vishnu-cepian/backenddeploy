@@ -10,6 +10,7 @@ import { ROLE } from '../types/enums/index.mjs';
 import { ChatReadState } from '../entities/ChatReadState.mjs';
 import { getPresignedViewUrl } from "./s3service.mjs";
 import { Not } from "typeorm";
+import { pubClient } from '../config/redis-config.mjs';
 //=================== ZOD VALIDATION SCHEMAS ====================
 
 const getOrCreateChatRoomSchema = z.object({
@@ -156,6 +157,7 @@ export const getChatRoomsForUser = async (userId) => {
                 receiverName: raw.receiverName,
                 receiverImage: raw.receiverImage ? await getPresignedViewUrl(raw.receiverImage) : null,
                 receiverUserId: raw.receiverUserId,
+                status: await pubClient.hget("online_users", raw.receiverUserId) ? "online" : "offline",
                 updatedAt: raw.room_updatedAt,
                 lastMessage: raw.lastMessageContent,
                 unreadCount: parseInt(raw.unreadCount, 10) || 0,
