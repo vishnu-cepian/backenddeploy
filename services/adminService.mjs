@@ -204,6 +204,8 @@ export const stats = async () => {
     const completedOrders = await orderRepo.count({ where: { orderStatus: ORDER_STATUS.COMPLETED } });
     const inProgressOrders = await orderRepo.count({ where: { orderStatus: ORDER_STATUS.IN_PROGRESS } });
 
+    const pendingPayouts = await AppDataSource.getRepository(Payouts).count({ where: { status: "action_required" } });
+
     return {
       totalCustomers,
       totalVendors,
@@ -211,7 +213,8 @@ export const stats = async () => {
       totalRejectedVendors: totalRejectedVendors.length,
       totalBlockedVendors: totalBlockedVendors.length,
       completedOrders,
-      inProgressOrders
+      inProgressOrders,
+      pendingPayouts
     }
   } catch (err) {
     logger.error(err);
