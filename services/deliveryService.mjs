@@ -8,6 +8,7 @@ import { OrderQuotes } from "../entities/OrderQuote.mjs";
 import { VendorStats } from "../entities/VendorStats.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { OrderVendors } from "../entities/OrderVendors.mjs";
+import { Payouts } from "../entities/Payouts.mjs";
 
 export const sendDeliveryRequest = async (payload) => {
     throw new Error("Not implemented");
@@ -224,6 +225,31 @@ export const handleDeliveryWebhook = async (req, res) => {
                      * INITATE PUSH NOTIFICATION TO CUSTOMER FOR RATING & also to vendor for feedback
                      * 
                      */
+
+                    const vendor = await queryRunner.manager.findOne(Vendors, { where: { id: order.selectedVendorId }, select: { razorpay_fund_account_id: true } });
+                    if(!vendor) throw sendError("Vendor not found", 404);
+
+                    const payout = queryRunner.manager.create(Payouts, {
+                        orderId: order.id,
+                        vendorId: order.selectedVendorId,
+                        razorpay_fund_account_id: vendor.razorpay_fund_account_id,
+                        expected_amount: orderQuote.vendorPayoutAfterCommission,
+                        status: "action_required",
+                        payout_status_history: {
+                            "action_required_at": new Date().toString(),
+                            "payout_initiated_by_admin_at": null,
+                            "queued_at": null,
+                            "processing_at": null,
+                            "processed_at": null,
+                            "failed_at": null,
+                            "reversed_at": null,
+                            "cancelled_at": null
+                        }
+                    });
+                    const payout_created = await queryRunner.manager.save(Payouts, payout);
+                    if(!payout_created) throw sendError("Failed to create payout", 500);
+
+
                 }
                 break;
 
