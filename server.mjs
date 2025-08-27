@@ -19,6 +19,7 @@ import adminRoutes from "./routes/adminRoutes.mjs"
 import ratingRoutes from "./routes/ratingRoutes.mjs"
 import deliveryRoutes from "./routes/deliveryRoutes.mjs"
 import customerRoutes from "./routes/customerRoutes.mjs"
+import webhookRoutes from "./routes/webhookRoutes.mjs"
 
 // Import Utils and config files
 import { MESSAGE } from "./types/enums/index.mjs";
@@ -68,6 +69,7 @@ app.use("/api/admin",adminRoutes)
 app.use("/api/rating", ratingRoutes)
 app.use("/api/delivery", deliveryRoutes)
 app.use("/api/customer", customerRoutes)
+app.use("/api/webhook", webhookRoutes)
 app.get("/api/health", (req, res) => {
   res.json({
     env: process.env.NODE_ENV,
