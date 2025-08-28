@@ -238,12 +238,26 @@ export const handleDeliveryWebhook = async (req, res) => {
                         payout_status_history: {
                             "action_required_at": new Date().toString(),
                             "payout_initiated_by_admin_at": null,
+                            "pending_for_approval_at": null,
+                            "payout_rejected_at": null,
                             "queued_at": null,
                             "processing_at": null,
                             "processed_at": null,
                             "failed_at": null,
                             "reversed_at": null,
                             "cancelled_at": null
+                        },
+                        payout_status_description: {
+                            "action_required": "Payout is pending for approval by admin",
+                            "payout_initiated_by_admin": "Payout initiated by admin",
+                            "pending_for_approval": null,
+                            "payout_rejected": null,
+                            "queued": null,
+                            "processing": null,
+                            "processed": null,
+                            "failed": null,
+                            "reversed": null,
+                            "cancelled": null
                         }
                     });
                     const payout_created = await queryRunner.manager.save(Payouts, payout);
