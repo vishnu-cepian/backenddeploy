@@ -137,3 +137,57 @@ export const createFundAccount = async (contactId, accountType, name, ifsc, acco
     }
 }
 
+export const createPayout = async (
+    idempotencyKey, 
+    fundAccountId, 
+    amount, 
+    currency = "INR", 
+    mode = "IMPS", 
+    purpose = "payout", 
+    queueIfLowBalance = true, 
+    referenceId, 
+    narration = "NEXS DEVELOPMENT PRIVATE LIMIT", 
+    notes
+) => {
+    
+    try {
+        const url = new URL("https://api.razorpay.com/v1/payouts");
+
+        const authString = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
+ 
+        const accountNumber = process.env.RAZORPAYX_ACCOUNT_NUMBER;
+
+        let headers = {
+            "Content-Type": "application/json",
+            "Authorization": `Basic ${authString}`,
+            "X-Payout-Idempotency": idempotencyKey
+        };
+
+        let body = {
+            account_number: accountNumber,
+            fund_account_id: fundAccountId,
+            amount: amount*100,
+            currency: currency,
+            mode: mode,
+            purpose: purpose,
+            queue_if_low_balance: queueIfLowBalance,
+            reference_id: referenceId,
+            narration: narration,
+            notes: notes || {}
+        }
+
+        const response = await fetch(url, {
+            method: "POST",
+            headers: headers,
+            body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+        return data;
+    }
+    catch(err) {
+        logger.error("Error in createPayout service:", err);
+        throw err;
+    }
+}
+
