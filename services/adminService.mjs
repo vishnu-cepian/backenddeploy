@@ -1809,3 +1809,71 @@ export const processPayout = async (idempotencyKey, amount, mode, adminUserId) =
     throw err;
   }
 }
+
+export const retryPayout = async (idempotencyKey, adminUserId) => {
+  try {
+    const repo = AppDataSource.getRepository(Payouts);
+    const payout = await repo.findOne({ where: { id: idempotencyKey } });
+
+    if (!payout) {
+      throw sendError("Payout not found", 404);
+    }
+
+    if (payout.status !== "failed") {
+      throw sendError("Payout is not in failed status", 400);
+    }
+
+    const newPayoutEntry = repo.create({
+      orderId: payout.orderId,
+      vendorId: payout.vendorId,
+      razorpay_fund_account_id: payout.razorpay_fund_account_id,
+      expected_amount: payout.expected_amount,
+      status: "action_required",
+      retry_count: payout.retry_count + 1,
+      retry_at: new Date(),
+      payout_status_history: {
+        "action_required_at": new Date().toString(),
+        "payout_initiated_by_admin_at": null,
+        "pending_for_approval_at": null,
+        "payout_rejected_at": null,
+        "queued_at": null,
+        "processing_at": null,
+        "processed_at": null,
+        "failed_at": null,
+        "reversed_at": null,
+        "cancelled_at": null
+      },
+      payout_status_description: {
+          "action_required": "Payout is pending for approval by admin",
+          "payout_initiated_by_admin": "Payout initiated by admin",
+          "pending_for_approval": null,
+          "payout_rejected": null,
+          "queued": null,
+          "processing": null,
+          "processed": null,
+          "failed": null,
+          "reversed": null,
+          "cancelled": null
+      },
+      retry_details: {
+        ...payout.retry_details,
+        [`retry_count_${payout.retry_count + 1}`]: payout.retry_count + 1,
+        [`retry_at_${payout.retry_count + 1}`]: new Date(),
+        [`failure_reason_${payout.retry_count + 1}`]: payout.failure_reason,
+      }
+    })
+    await repo.save(newPayoutEntry);
+    await AppDataSource.getRepository(AdminActions).save({
+      adminUserId: adminUserId,
+      action: "payout_retried",
+      actionData: {
+        payoutId: payout.id,
+        payoutResponse: newPayoutEntry,
+      }
+    });
+    return "Payout retried successfully";
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}

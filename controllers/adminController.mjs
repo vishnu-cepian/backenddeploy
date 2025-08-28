@@ -566,3 +566,17 @@ export const processPayout = async (req, res, next) => {
     }
 };
 
+export const retryPayout = async (req, res, next) => {
+    try {
+        const idempotencyKey = req.body.idempotencyKey;
+        const adminUserId = req.user.id;
+        const response = await adminService.retryPayout(idempotencyKey, adminUserId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};

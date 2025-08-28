@@ -50,5 +50,6 @@ router.get("/getQueueLogs", verifyAdminAccessToken, controllerWrapper(adminContr
 router.get("/getOutboxFailures", verifyAdminAccessToken, controllerWrapper(adminController.getOutboxFailures, {logRequest, logResponse}))
 router.get("/getPayoutsList", verifyAdminAccessToken, controllerWrapper(adminController.getPayoutsList, {logRequest, logResponse}))
 router.post("/processPayout", verifyAdminAccessToken, controllerWrapper(adminController.processPayout, {logRequest, logResponse}))
+router.post("/retryPayout", verifyAdminAccessToken, controllerWrapper(adminController.retryPayout, {logRequest, logResponse}))
 
 export default router;
