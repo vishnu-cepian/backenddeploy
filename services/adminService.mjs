@@ -30,7 +30,7 @@ import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { QueueLogs } from "../entities/queueLogs.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 
-import { createRazorpayContact, createFundAccount } from "../utils/razorpay-utils.mjs";
+import { createRazorpayContact, createFundAccount, createPayout } from "../utils/razorpay-utils.mjs";
 
 import { Payouts } from "../entities/Payouts.mjs";
 
@@ -188,6 +188,7 @@ export const logout = async (id) => {
     throw err;
   }
 }
+
 export const stats = async () => {
   try {
  
@@ -221,7 +222,6 @@ export const stats = async () => {
     throw err;
   }
 };
-
 
 export const getAllVendors = async (pageNumber = 1, limitNumber = 10) => {
   try {
@@ -1631,6 +1631,10 @@ export const getPayoutsList = async (filters) => {
       qb = qb.andWhere("payouts.payout_id = :payoutId", { payoutId: filters.payoutId });
     }
 
+    if (filters.mode) {
+      qb = qb.andWhere("payouts.mode = :mode", { mode: filters.mode });
+    }
+
     if (filters.retryCount === "gt:0") {
       console.log("retryCount is gt:0");
       qb = qb.andWhere("payouts.retry_count > 0");
@@ -1700,6 +1704,102 @@ export const getPayoutsList = async (filters) => {
         hasMore: filters.page * filters.limit < filteredCount,
       },
     }
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+const createUpdatePayload = (payout, amount, payoutResponse, statusKey) => {
+  return {
+    actual_paid_amount: amount,
+    status: payoutResponse.status,
+    payout_id: payoutResponse.id,
+    mode: payoutResponse.mode,
+    payout_initiated_by_admin_at: new Date(payoutResponse.created_at),
+      payout_status_history: {
+          ...payout.payout_status_history,
+          [`${statusKey}_at`]: new Date(payoutResponse.created_at),
+          payout_initiated_by_admin_at: new Date(payoutResponse.created_at),
+      },
+      payout_status_description: {
+        ...payout.payout_status_description,
+        payout_initiated_by_admin: "Payout initiated by admin",
+      },
+  };
+};
+
+export const processPayout = async (idempotencyKey, amount, mode, adminUserId) => {
+  try {
+    const repo = AppDataSource.getRepository(Payouts);
+    const payout = await repo.findOne({ where: { id: idempotencyKey },
+     });
+    
+    if (!payout) {
+      throw sendError("Payout not found", 404);
+    }
+
+    if (payout.status !== "action_required") {
+      throw sendError("Payout is not in action_required status", 400);
+    }
+
+    const payoutData = {
+      idempotencyKey: idempotencyKey,
+      fundAccountId: payout.razorpay_fund_account_id,
+      amount: amount,
+      currency: "INR",
+      mode: mode,
+      purpose: "payout",
+      queueIfLowBalance: true,
+      referenceId: idempotencyKey,
+      narration: "NEXS DEVELOPMENT PRIVATE LIMIT",
+      notes: {
+        orderId: payout.orderId,
+        vendorId: payout.vendorId,
+      }
+    }
+
+    const payoutResponse = await createPayout(
+      payoutData.idempotencyKey,
+      payoutData.fundAccountId,
+      payoutData.amount,
+      payoutData.currency,
+      payoutData.mode,
+      payoutData.purpose,
+      payoutData.queueIfLowBalance,
+      payoutData.referenceId,
+      payoutData.narration,
+      payoutData.notes
+    );
+
+    const eventHandlers = {
+        'pending':   { key: 'pending_for_approval' },
+        'rejected':  { key: 'payout_rejected' },
+        'queued':    { key: 'queued' },
+        'initiated': { key: 'processing' },
+        'processing': { key: 'processing' },
+        'processed': { key: 'processed' },
+        'cancelled': { key: 'cancelled' },
+        'reversed': { key: 'reversed' },
+        'failed': { key: 'failed' },
+    };
+   
+    const handler = eventHandlers[payoutResponse.status];
+
+    const updatePayload = createUpdatePayload(payout, amount, payoutResponse, handler.key);
+
+    await repo.update(payout.id, updatePayload);
+
+    await AppDataSource.getRepository(AdminActions).save({
+      adminUserId: adminUserId,
+      action: "payout_initiated",
+      actionData: {
+        payoutId: payout.id,
+        payoutResponse: updatePayload,
+      }
+    });
+
+    return "Payout processed successfully";
   } catch (err) {
     logger.error(err);
     throw err;

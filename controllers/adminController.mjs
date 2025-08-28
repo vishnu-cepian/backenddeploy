@@ -549,3 +549,20 @@ export const getPayoutsList = async (req, res, next) => {
     }
 }; 
 
+export const processPayout = async (req, res, next) => {
+    try {
+        const idempotencyKey = req.body.idempotencyKey;
+        const amount = req.body.amount;
+        const mode = req.body.mode;
+        const adminUserId = req.user.id;
+        const response = await adminService.processPayout(idempotencyKey, amount, mode, adminUserId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
