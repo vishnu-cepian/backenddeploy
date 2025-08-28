@@ -19,6 +19,7 @@ import { pushQueue, emailQueue } from "../queues/index.mjs";
 import { Refunds } from "../entities/Refunds.mjs";
 import { VendorStats } from "../entities/VendorStats.mjs";
 import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
+import { Payouts } from "../entities/Payouts.mjs";
 
 const refundRepo = AppDataSource.getRepository(Refunds);
 
@@ -291,5 +292,124 @@ export const handleRazorpayPaymentWebhook = async(req, res) => {
         } catch (notificationError) {
             logger.error(`Failed to queue notifications for order ${notificationDetails.orderId}`, notificationError);
         }
+    }
+}
+
+//=================== HELPER FUNCTION ====================
+const createUpdatePayload = (payout, payoutEntity, statusKey) => {
+    const dateObject = new Date(payoutEntity.created_at * 1000);
+    const isoString = dateObject.toISOString();
+    return {
+        status: payoutEntity.status,
+        payout_status_history: {
+            ...payout.payout_status_history,
+            [`${statusKey}_at`]: isoString,
+        },
+        payout_status_description: {
+            ...payout.payout_status_description,
+            [statusKey]: payoutEntity.status_details.description,
+        },
+    };
+};
+//=================== END OF HELPER FUNCTION ====================
+
+
+/**
+ * Handles incoming webhooks from Razorpay to process payout events.
+ * This function is secure, idempotent, and transactional.
+ *
+ * @param {Object} req 
+ * @param {Object} res 
+ */
+export const handleRazorpayPayoutWebhook = async(req, res) => {
+
+    const secret = process.env.RAZORPAYX_PAYOUT_WEBHOOK_SECRET;
+    const signature = req.headers["x-razorpay-signature"];
+
+    try {
+        const expectedSignature = crypto.createHmac("sha256", secret).update(JSON.stringify(req.body)).digest("hex");
+        if (signature !== expectedSignature) {
+            logger.warn("Invalid Razorpay webhook signature received.");
+            return res.status(400).json({ status: "Signature mismatch" });
+        }
+    } catch (err) {
+        logger.error("Error during signature verification.", err);
+        return res.status(400).json({ status: "Invalid request body" });
+    }
+
+    const { event, payload } = req.body;
+    const payoutEntity = payload.payout.entity;
+    const payoutId = payoutEntity.id;
+    
+    if (!event || !payoutId) {
+        return res.status(400).json({ status: "Missing event or payout ID" });
+    }
+
+    const queryRunner = AppDataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+        const payout = await queryRunner.manager.findOne(Payouts, {
+            where: { payout_id: payoutId },
+        });
+
+        if (!payout) {
+            logger.info(`Webhook received for a payout not found in our system: ${payoutId}`);
+            // Return 200 OK as the webhook itself is valid
+            return res.status(200).json({ status: "Payout not found" });
+        }
+
+        const eventHandlers = {
+            'payout.pending':   { key: 'pending_for_approval' },
+            'payout.rejected':  { key: 'payout_rejected' },
+            'payout.queued':    { key: 'queued' },
+            'payout.initiated': { key: 'processing' },
+            'payout.reversed':  { key: 'reversed' },
+            'payout.processed': { 
+                key: 'processed', 
+                extra: { utr: payoutEntity.utr } 
+            },
+            'payout.failed': { 
+                key: 'failed', 
+                extra: { failure_reason: payoutEntity.status_details.reason }
+            },
+            // The 'payout.updated' event is generic. We map its status to a key.
+            'payout.updated': {
+                key: payoutEntity.status, // e.g., 'processed', 'reversed'
+                extra: { utr: payoutEntity.utr } // UTR might be updated
+            }
+        };
+
+        const handler = eventHandlers[event];
+
+        if (!handler) {
+            logger.info(`No handler for webhook event: ${event}`);
+            return res.status(200).json({ status: `No handler for ${event}` });
+        }
+        
+        if (payout.payout_status_history[`${handler.key}_at`]) {
+            logger.info(`Duplicate webhook for already processed payout: ${payoutId}, event: ${event}`);
+            return res.status(200).json({ status: "Already processed" });
+        }
+
+        const updatePayload = createUpdatePayload(payout, payoutEntity, handler.key);
+        const finalPayload = { ...updatePayload, ...handler.extra };
+
+        await queryRunner.manager.update(Payouts, { payout_id: payoutId }, finalPayload);
+
+        await queryRunner.commitTransaction();
+        logger.info(`Successfully processed webhook for payout: ${payoutId}, event: ${event}`);
+
+        return res.status(200).json({ status: "Success" });
+
+    } catch (err) {
+        if (queryRunner.isTransactionActive) {
+            await queryRunner.rollbackTransaction();
+        }
+        logger.error(`Webhook processing failed for payout ${payoutId}.`, err);
+        return res.status(500).json({ status: "Error processing webhook" });
+    } finally {
+        await queryRunner.release();
     }
 }
