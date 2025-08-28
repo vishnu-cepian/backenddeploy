@@ -1711,20 +1711,23 @@ export const getPayoutsList = async (filters) => {
 }
 
 const createUpdatePayload = (payout, amount, payoutResponse, statusKey) => {
+  const dateObject = new Date(payoutResponse.created_at * 1000);
+  const isoString = dateObject.toISOString();
   return {
     actual_paid_amount: amount,
     status: payoutResponse.status,
     payout_id: payoutResponse.id,
     mode: payoutResponse.mode,
-    payout_initiated_by_admin_at: new Date(payoutResponse.created_at),
+    payout_initiated_by_admin_at: isoString,
       payout_status_history: {
           ...payout.payout_status_history,
-          [`${statusKey}_at`]: new Date(payoutResponse.created_at),
-          payout_initiated_by_admin_at: new Date(payoutResponse.created_at),
+          [`${statusKey}_at`]: isoString,
+          payout_initiated_by_admin_at: isoString,
       },
       payout_status_description: {
         ...payout.payout_status_description,
         payout_initiated_by_admin: "Payout initiated by admin",
+        [statusKey]: payoutResponse.status_details.description,
       },
   };
 };
@@ -1781,21 +1784,22 @@ export const processPayout = async (idempotencyKey, amount, mode, adminUserId) =
         'processed': { key: 'processed' },
         'cancelled': { key: 'cancelled' },
         'reversed': { key: 'reversed' },
-        'failed': { key: 'failed' },
+        'failed': { key: 'failed', extra: { failure_reason: payoutResponse.status_details.reason } },
     };
    
     const handler = eventHandlers[payoutResponse.status];
 
     const updatePayload = createUpdatePayload(payout, amount, payoutResponse, handler.key);
+    const finalPayload = { ...updatePayload, ...handler.extra };
 
-    await repo.update(payout.id, updatePayload);
+    await repo.update(payout.id, finalPayload);
 
     await AppDataSource.getRepository(AdminActions).save({
       adminUserId: adminUserId,
       action: "payout_initiated",
       actionData: {
         payoutId: payout.id,
-        payoutResponse: updatePayload,
+        payoutResponse: finalPayload,
       }
     });
 
