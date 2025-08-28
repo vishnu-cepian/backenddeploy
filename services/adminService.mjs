@@ -1877,3 +1877,37 @@ export const retryPayout = async (idempotencyKey, adminUserId) => {
     throw err;
   }
 }
+
+export const cancelPayout = async (data, adminUserId) => {
+  try {
+    const repo = AppDataSource.getRepository(Payouts);
+    const payout = await repo.findOne({ where: { id: data.idempotencyKey } });
+
+    if (!payout) {
+      throw sendError("Payout not found", 404);
+    }
+
+    if (payout.status !== "action_required") {
+      throw sendError("Payout is not in action_required status", 400);
+    }
+
+    payout.status = "cancelled";
+    payout.payout_status_history.cancelled_at = new Date();
+    payout.payout_status_description.cancelled = "Payout cancelled by admin" + (data.notes ? `: ${data.notes}` : "");
+    await repo.save(payout);
+
+    await AppDataSource.getRepository(AdminActions).save({
+      adminUserId: adminUserId,
+      action: "payout_cancelled",
+      actionData: {
+        payoutId: payout.id,
+        notes: data.notes || "Payout cancelled by admin",
+      }
+    });
+
+    return "Payout cancelled successfully";
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
