@@ -50,12 +50,24 @@ export const Payouts = new EntitySchema({
             type: "varchar",
             nullable: true
         },
-        payout_created_at: {
+        mode: {
+            type: "varchar",
+            nullable: true
+        },
+        payout_initiated_by_admin_at: {
             type: "timestamp",
             nullable: true
         },
         payout_status_history: {
             type: "jsonb",
+            nullable: true
+        },
+        payout_status_description: {
+            type: "jsonb",
+            nullable: true
+        },
+        failure_reason: {
+            type: "varchar",
             nullable: true
         },
         retry_count: {
@@ -65,10 +77,6 @@ export const Payouts = new EntitySchema({
         },
         retry_at: {
             type: "timestamp",
-            nullable: true
-        },
-        failure_reason: {
-            type: "varchar",
             nullable: true
         },
         retry_details: {
