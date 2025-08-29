@@ -52,5 +52,6 @@ router.get("/getPayoutsList", verifyAdminAccessToken, controllerWrapper(adminCon
 router.post("/processPayout", verifyAdminAccessToken, controllerWrapper(adminController.processPayout, {logRequest, logResponse}))
 router.post("/retryPayout", verifyAdminAccessToken, controllerWrapper(adminController.retryPayout, {logRequest, logResponse}))
 router.post("/cancelPayout", verifyAdminAccessToken, controllerWrapper(adminController.cancelPayout, {logRequest, logResponse}))
+router.post("/refundRazorpayPaymentByAdmin", verifyAdminAccessToken, controllerWrapper(adminController.refundRazorpayPaymentByAdmin, {logRequest, logResponse}))
 
 export default router;

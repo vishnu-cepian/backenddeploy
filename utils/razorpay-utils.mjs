@@ -2,6 +2,7 @@ import Razorpay from "razorpay";
 import { logger } from "../utils/logger-utils.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
 import { Refunds } from "../entities/Refunds.mjs";
+import { promisify } from "util";
 
 const refundRepo = AppDataSource.getRepository(Refunds);
 
@@ -11,18 +12,23 @@ const refundRepo = AppDataSource.getRepository(Refunds);
  * @param {string} paymentId - The ID of the payment to refund.
  * @param {string} reason - The reason for the refund.
  * @param {string} speed - The speed of the refund (default: normal).
+ * @param {number} amount - The amount to refund (default: null).
  * @returns {Promise<void>}
  */
-export const refundRazorpayPayment = async (paymentId, reason, speed = "normal") => {
+export const refundRazorpayPayment = async (paymentId, reason, speed = "normal", amount = null) => {
     try {
         const razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID,
             key_secret: process.env.RAZORPAY_KEY_SECRET
         });
-        const refund = await razorpay.payments.refund(paymentId, {
+
+        const refundFn = promisify(razorpay.payments.refund.bind(razorpay.payments));
+        const refund = await refundFn(paymentId, {
             speed: speed,
+            amount: amount ? amount * 100 : undefined,
             notes: { reason: reason }
         });
+
         await refundRepo.save({
             paymentId: paymentId,
             amount: refund.amount,
@@ -32,6 +38,7 @@ export const refundRazorpayPayment = async (paymentId, reason, speed = "normal")
             notes: reason
         });
         logger.info(`Refunded payment ${paymentId} for reason ${reason}`);
+        return refund;
     } catch(err) {
         logger.error(`Error refunding payment ${paymentId} for reason ${reason}`);
         try{

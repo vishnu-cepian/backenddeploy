@@ -30,7 +30,7 @@ import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { QueueLogs } from "../entities/queueLogs.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 
-import { createRazorpayContact, createFundAccount, createPayout } from "../utils/razorpay-utils.mjs";
+import { createRazorpayContact, createFundAccount, createPayout, refundRazorpayPayment } from "../utils/razorpay-utils.mjs";
 
 import { Payouts } from "../entities/Payouts.mjs";
 
@@ -1906,6 +1906,31 @@ export const cancelPayout = async (data, adminUserId) => {
     });
 
     return "Payout cancelled successfully";
+  } catch (err) {
+    logger.error(err);
+    throw err;
+  }
+}
+
+export const refundRazorpayPaymentByAdmin = async (data, adminUserId) => {
+  try {
+    const payment = await refundRazorpayPayment(data.razorpayPaymentId, data.reason, data.speed, data.amount);
+ 
+    if(payment.status === "processed") {
+      const order = await AppDataSource.getRepository(Orders).findOne({ where: { id: data.orderId }, select: ["id", "isRefunded" ] });
+   
+      order.isRefunded = true;
+      await AppDataSource.getRepository(Orders).save(order);
+    }
+    await AppDataSource.getRepository(AdminActions).save({
+      adminUserId: adminUserId,
+      action: "refund_razorpay_payment",
+      actionData: {
+        paymentId: data.razorpayPaymentId,
+        paymentResponse: payment,
+      }
+    });
+    return payment;
   } catch (err) {
     logger.error(err);
     throw err;
