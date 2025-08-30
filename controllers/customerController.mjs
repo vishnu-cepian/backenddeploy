@@ -200,3 +200,17 @@ export const addComplaint = async (req, res, next) => {
       next(error);
   }
 };
+
+export const getCustomerPayments = async (req, res, next) => {
+  try {
+      const data = { userId: req.user.id, page: parseInt(req.params.page), limit: parseInt(req.params.limit), status: req.query.status };
+      const response = await customerService.getCustomerPayments(data);
+      if (!response) {
+          throw new Error(formatError("Payments not found", response));
+      }
+      res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (error) {
+      logger.error(error);
+      next(error);
+  }
+};

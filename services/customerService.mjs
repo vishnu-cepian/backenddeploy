@@ -14,12 +14,16 @@ import { SERVICE_TYPE, ORDER_STATUS, ORDER_VENDOR_STATUS } from "../types/enums/
 import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs";
 import { Complaints } from "../entities/Complaints.mjs";
+import { Payments } from "../entities/Payments.mjs";
+import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 
 const customerRepo = AppDataSource.getRepository(Customers);
 const customerAddressRepo = AppDataSource.getRepository(CustomerAddress);
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
 const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
+const paymentRepo = AppDataSource.getRepository(Payments);
+const paymentFailureRepo = AppDataSource.getRepository(PaymentFailures);
 
 //============================ ZOD VALIDATION SCHEMAS ==============================================
 
@@ -55,6 +59,13 @@ const addComplaintSchema = z.object({
     userId: z.string().uuid(),
     orderId: z.string().uuid().optional(),
     complaint: z.string().min(1, { message: "Complaint is required" }),
+})
+
+const getCustomerPaymentsSchema = z.object({
+    userId: z.string().uuid(),
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(50).default(10),
+    status: z.string().optional(),
 })
 
 //============================ CUSTOMER SERVICE FUNCTIONS ==============================================
@@ -526,6 +537,73 @@ export const addComplaint = async (data) => {
             logger.warn("addComplaint validation failed", { errors: error.flatten().fieldErrors });
             throw sendError("Invalid parameters provided.", 400, error.flatten().fieldErrors);
         }
+        throw error;
+    }
+}
+
+export const getCustomerPayments = async (data) => {
+    try {
+        const { userId, page, limit, status } = getCustomerPaymentsSchema.parse(data);
+        const offset = (page - 1) * limit;
+
+        const customer = await customerRepo.findOne({ where: { userId: userId }, select: { id: true } });
+        if (!customer) throw sendError("Customer not found", 404);
+
+        if (status !== "captured" && status !== "failed") throw sendError("Invalid status", 400);
+
+        let payments;
+        if (status === "captured") {
+            payments = await paymentRepo.createQueryBuilder("payments")
+            .where("payments.customerId = :customerId", { customerId: customer.id })
+            .andWhere("payments.paymentStatus = :status", { status: status })
+            .select([
+                "payments.id AS id", 
+                "payments.orderId AS order_id",
+                "payments.razorpayPaymentId AS razorpay_payment_id",
+                "payments.paymentAmount AS payment_amount",
+                "payments.paymentStatus AS payment_status",
+                "payments.paymentMethod AS payment_method",
+                "payments.paymentDate AS payment_date"
+            ])
+            .orderBy("payments.paymentDate", "DESC")
+            .skip(offset)
+            .take(limit)
+            .getRawMany();
+        } else if (status === "failed") {
+            payments = await paymentFailureRepo.createQueryBuilder("paymentFailures")
+            .where("paymentFailures.customerId = :customerId", { customerId: customer.id })
+            .andWhere("paymentFailures.status = :status", { status: status })
+            .select([
+                "paymentFailures.id AS id",
+                "paymentFailures.orderId AS order_id",
+                "paymentFailures.paymentId AS razorpay_payment_id",
+                "paymentFailures.amount AS payment_amount",
+                "paymentFailures.status AS payment_status",
+                "paymentFailures.reason AS reason",
+                "paymentFailures.timestamp AS payment_date"
+            ])
+            .orderBy("paymentFailures.timestamp", "DESC")
+            .skip(offset)
+            .take(limit)
+            .getRawMany();
+        }
+
+        if (!payments) throw sendError("Payments not found", 404);
+
+        return {
+            payments,
+            pagination: {
+                currentPage: page,
+                hasMore: payments.length === limit,
+                nextPage: payments.length === limit ? page + 1 : null,
+            },
+        }
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            logger.warn("getCustomerPayments validation failed", { errors: error.flatten().fieldErrors });
+            throw sendError("Invalid parameters provided.", 400, error.flatten().fieldErrors);
+        }
+        logger.error("getCustomerPayments error", error);
         throw error;
     }
 }
