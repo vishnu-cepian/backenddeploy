@@ -17,6 +17,8 @@ import { OrderItems } from "../entities/OrderItems.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs";
 import { VendorStats } from "../entities/VendorStats.mjs";
 import { Complaints } from "../entities/Complaints.mjs";
+import { Payouts } from "../entities/Payouts.mjs";
+import { In } from "typeorm";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const vendorImagesRepo = AppDataSource.getRepository(VendorImages);
@@ -25,6 +27,7 @@ const orderRepo = AppDataSource.getRepository(Orders);
 const orderItemsRepo = AppDataSource.getRepository(OrderItems);
 const quoteRepo = AppDataSource.getRepository(OrderQuotes);
 const vendorStatsRepo = AppDataSource.getRepository(VendorStats);
+const payoutRepo = AppDataSource.getRepository(Payouts);
 //============================ ZOD VALIDATION SCHEMAS ==============================================
 /**
  * Zod schema for data validation.
@@ -849,3 +852,66 @@ export const addComplaint = async (data) => {
       throw error;
   }
 }
+
+export const getVendorPayouts = async (data) => {
+  try {
+    const { userId, page, limit, status } = data;
+
+    const offset = (page - 1) * limit;
+
+    const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: {id: true}});
+    if (!vendor) throw sendError("Vendor not found", 404);
+
+    const payouts = await payoutRepo.find(
+      {
+        where: {
+          vendorId: vendor.id,
+          status: status ? 
+                         status === "pending" ? 
+                            In(["queued", "pending", "rejected"]) 
+                                              : status === "cancelled" ? 
+                                                  In(["rejected", "cancelled"]) 
+                                                                       : In([status]) 
+                        : In(["action_required", "queued", "pending", "rejected","processing", "processed", "cancelled"]),
+        },
+        select: {
+          id: true,
+          orderId: true,
+          expected_amount: true,
+          actual_paid_amount: true,
+          status: true,
+          payout_id: true,
+          utr: true,
+          payout_status_history: true,
+        },
+        order: {
+          entry_created_at: "DESC",
+        },
+        skip: offset,
+        take: limit,
+      }
+    )
+    if (!payouts) throw sendError("Payouts not found", 404);
+
+    return {
+      payouts: payouts.map(payout => ({
+        id: payout.id,
+        orderId: payout.orderId,
+        expected_amount: payout.expected_amount,
+        actual_paid_amount: payout.actual_paid_amount,
+        status: payout.status,
+        payout_id: payout.payout_id,
+        utr: payout.utr,
+        payout_status_history: payout.payout_status_history.processed_at,
+      })),
+      pagination: {
+        currentPage: page,
+        hasMore: payouts.length === limit,
+        nextPage: payouts.length === limit ? page + 1 : null,
+      }
+    }
+  } catch (error) {
+    logger.error("getVendorPayouts error", error);
+    throw error;
+  }
+} 

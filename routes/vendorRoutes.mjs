@@ -22,5 +22,6 @@ router.get("/getVendorOrderById/:orderVendorId", verifyAccessToken, controllerWr
 router.get("/getVendorQuote/:orderVendorId", verifyAccessToken, controllerWrapper(vendorController.getVendorQuote, { logRequest: true, logResponse: true}));
 router.get("/getVendorStats", verifyAccessToken, controllerWrapper(vendorController.getVendorStats, { logRequest: true, logResponse: true}));
 router.post("/addComplaint/:orderId", verifyAccessToken, controllerWrapper(vendorController.addComplaint, { logRequest: true, logResponse: true}));
+router.get("/getVendorPayouts/:page/:limit", verifyAccessToken, controllerWrapper(vendorController.getVendorPayouts, { logRequest: true, logResponse: true}));
 
 export default router;
