@@ -4,7 +4,7 @@ import { sendError } from "../utils/core-utils.mjs";
 import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
 import { Not, IsNull } from "typeorm";
-
+import { NotificationHistory } from "../entities/NotificationHistory.mjs";
 
 /**
  * Saves the push token for a user
@@ -269,6 +269,93 @@ export const broadcastEmail = async (role, template_id, variables, batchSize = 1
         };
     } catch (error) {
         logger.error("Error sending email", error);
+        throw error;
+    }
+}
+
+/**
+ * Saves the notification history
+ * 
+ * @param {Object} data 
+ * @param {string} data.userId // User ID
+ * @param {string} data.title // Notification title
+ * @param {string} data.body // Notification body
+ * @param {Date} data.timestamp // Notification timestamp
+ * @returns {Promise<Object>} 
+ * 
+ */
+export const saveNotificationHistory = async (userId, title, body, timestamp = new Date()) => {
+    try {
+        const notificationHistoryRepository = AppDataSource.getRepository(NotificationHistory);
+        const notificationHistory = notificationHistoryRepository.create({ userId, title, body, timestamp });
+        await notificationHistoryRepository.save(notificationHistory);
+    } catch (error) {
+        logger.error("Error saving notification history", error);
+        throw error;
+    }
+}
+
+/**
+ * Gets the notification history
+ * 
+ * @param {string} userId // User ID
+ * @param {number} page // Page number
+ * @param {number} limit // Limit number
+ * @returns {Promise<Object>} 
+ * 
+ */
+export const getNotificationHistory = async (userId, page = 1, limit = 10) => {
+    try {
+        const offset = (page - 1) * limit;
+
+        const notificationHistoryRepository = AppDataSource.getRepository(NotificationHistory);
+        
+        const notificationHistory = await notificationHistoryRepository.find({ where: { userId }, skip: offset, take: limit, order: { timestamp: "DESC" } });
+
+        // batch update isRead to true
+        await notificationHistoryRepository.update({ userId }, { isRead: true });
+
+        return {
+            success: true,
+            message: "Notification history fetched successfully",
+            notifications: notificationHistory,
+            pagination: {
+                currentPage: page,
+                hasMore: notificationHistory.length === limit,
+                nextPage: notificationHistory.length === limit ? page + 1 : null,
+            }
+        }
+    } catch (error) {
+        logger.error("Error getting notification history", error);
+        throw error;
+    }
+}
+
+/**
+ * Gets the notification unread count
+ * 
+ * @param {string} userId // User ID
+ * @returns {Promise<Object>} 
+ * 
+ */
+export const getNotificationUnreadCount = async (userId) => {
+    try {
+        const notificationHistoryRepository = AppDataSource.getRepository(NotificationHistory);
+        const notificationHistoryUnreadCount = await notificationHistoryRepository.count({ where: { userId, isRead: false } });
+        if (notificationHistoryUnreadCount === 0) {
+            return {
+                success: true,
+                message: "No unread notifications",
+                unreadCount: 0
+            }
+        }
+        return {
+            success: true,
+            message: "Notification unread count fetched successfully",
+            unreadCount: notificationHistoryUnreadCount
+        }
+    } catch (error) {
+        logger.error("Error getting notification unread count", error);
         throw error;
     }
 }

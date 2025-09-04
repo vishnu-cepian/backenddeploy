@@ -18,4 +18,8 @@ router.post("/send-email", verifyAdminAccessToken, controllerWrapper(notificatio
 // NOT IMPLEMENTED
 router.post("/broadcast-email", verifyAdminAccessToken, controllerWrapper(notificationController.broadcastEmail, { logRequest: true, logResponse: true }));
 
+// User related routes
+router.get("/getNotificationHistory/:page/:limit", verifyAccessToken, controllerWrapper(notificationController.getNotificationHistory, { logRequest: true, logResponse: true }));
+router.get("/getNotificationUnreadCount", verifyAccessToken, controllerWrapper(notificationController.getNotificationUnreadCount, { logRequest: true, logResponse: true }));
+
 export default router;

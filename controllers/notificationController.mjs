@@ -99,3 +99,33 @@ export const broadcastEmail = async (req, res, next) => {
         next(error);
     }
 }
+
+export const getNotificationHistory = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const page = req.params.page;
+        const limit = req.params.limit;
+        const response = await notificationService.getNotificationHistory(userId, page, limit);
+        if (!response) {
+            throw new Error(formatError("Error in response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+}
+
+export const getNotificationUnreadCount = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+        const response = await notificationService.getNotificationUnreadCount(userId);
+        if (!response) {
+            throw new Error(formatError("Error in response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+}
