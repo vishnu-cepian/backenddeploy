@@ -15,7 +15,7 @@ import { ORDER_VENDOR_STATUS, ORDER_STATUS, ROLE, MISC } from "../types/enums/in
 import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
-import { pushQueue, emailQueue } from "../queues/index.mjs";
+import { pushQueue, emailQueue, notificationHistoryQueue } from "../queues/index.mjs";
 import { Refunds } from "../entities/Refunds.mjs";
 import { VendorStats } from "../entities/VendorStats.mjs";
 import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
@@ -268,6 +268,13 @@ export const handleRazorpayPaymentWebhook = async(req, res) => {
                     template_id: 'customer_order_confirmation',
                     variables: { orderId, paymentId }
                 });
+
+                notificationHistoryQueue.add("saveNotificationHistory", {
+                    userId: customerDetails.user.id,
+                    title: "Order Confirmed!",
+                    body: `Your payment for order #${orderId.substring(0, 8)}... was successful.`,
+                    timestamp: new Date(),
+                });
             }
 
             // Vendor Notifications
@@ -286,6 +293,13 @@ export const handleRazorpayPaymentWebhook = async(req, res) => {
                     name: vendorDetails.user.name,
                     template_id: 'vendor_new_order_alert',
                     variables: { orderId }
+                });
+
+                notificationHistoryQueue.add("saveNotificationHistory", {
+                    userId: vendorDetails.user.id,
+                    title: "You Have a New Order!",
+                    body: `You have received a new paid order: #${orderId.substring(0, 8)}...`,
+                    timestamp: new Date(),
                 });
             }
 

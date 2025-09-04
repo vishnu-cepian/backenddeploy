@@ -17,7 +17,7 @@ import { ORDER_VENDOR_STATUS, ORDER_STATUS, SERVICE_TYPE, ROLE, MISC } from "../
 import { calculateVendorPayoutAmount, calculateOrderAmount } from "../utils/pricing_utils.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
-import { pushQueue, emailQueue } from "../queues/index.mjs";
+import { pushQueue, emailQueue, notificationHistoryQueue } from "../queues/index.mjs";
 import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
@@ -315,17 +315,25 @@ export const sendOrderToVendor = async (data) => {
         try {
             const vendorsToNotify = await AppDataSource.getRepository(Vendors).createQueryBuilder("vendors")
                 .leftJoin("vendors.user", "user")
-                .select(["user.pushToken"])
+                .select(["user.pushToken", "user.id"])
                 .where("vendors.id IN (:...vendorIds)", { vendorIds: newVendorIdsToSend })
-                .andWhere("user.pushToken IS NOT NULL")
                 .getRawMany();
 
+
             vendorsToNotify.forEach(vendor => {
+                if(vendor.user_pushToken) {
                 pushQueue.add("sendNewOrderNotification", {
                     token: vendor.user_pushToken,
                     title: "New Order Request",
                     message: `You have a new order to quote. Please respond within 24 hours.`,
                     url: "",
+                });
+                }
+                notificationHistoryQueue.add("saveNotificationHistory", {
+                    userId: vendor.user_id,
+                    title: "New Order Request",
+                    body: `You have a new order to quote. Please respond within 24 hours.`,
+                    timestamp: new Date(),
                 });
             });
         } catch (notificationError) {
@@ -428,6 +436,17 @@ export const vendorOrderResponse = async (data) => {
                 orderId: orderVendor.order.id,
                 url: "",
             };
+        }
+
+        try {
+            notificationHistoryQueue.add("saveNotificationHistory", {
+                userId: customerUser.id,
+                title: action === ORDER_VENDOR_STATUS.ACCEPTED ? "You Have a New Quote!" : "Order Update",
+                body: action === ORDER_VENDOR_STATUS.ACCEPTED ? `${vendor.shopName} has sent you a quote for your order. Please respond within 24 hours.` : `${vendor.shopName} is unable to take your order at this time.`,
+                timestamp: new Date(),
+            });
+        } catch (notificationError) {
+            logger.error("Failed to queue notification history for customer", notificationError);
         }
 
         } catch (err) {
