@@ -36,6 +36,7 @@ import { initResetDailyLeadershipWorker } from "./queues/cron/leadership/daily/r
 import { initResetMonthlyLeadershipBoardWorker } from "./queues/cron/leadership/monthly/resetMonthlyLeadershipBoardWorker.mjs";
 import { initExpireAcceptedQuotesWorker } from "./queues/cron/expiringJobs/acceptedQuotes/expireAcceptedQuotesWorker.mjs";
 import { initExpirePendingVendorsWorker } from "./queues/cron/expiringJobs/pendingVendors/expirePendingVendorsWorker.mjs";
+import { initNotificationHistoryWorker } from "./queues/notification/notificationHistory/notificationHistoryWorker.mjs";
 
 let chatWorker;
 let pushWorker;
@@ -46,6 +47,7 @@ let resetDailyLeadershipWorker;
 let resetMonthlyLeadershipBoardWorker;
 let expireAcceptedQuotesWorker;
 let expirePendingVendorsWorker;
+let notificationHistoryWorker;
 let isShuttingDown = false;
 
 async function startWorker() {
@@ -71,6 +73,8 @@ async function startWorker() {
         console.log("Expire accepted quotes worker started")
         expirePendingVendorsWorker = initExpirePendingVendorsWorker();
         console.log("Expire pending vendors worker started")
+        notificationHistoryWorker = initNotificationHistoryWorker();
+        console.log("Notification history worker started")
         setupGracefulShutdown();
 
         setInterval(() => {
@@ -103,6 +107,7 @@ function setupGracefulShutdown() {
                 resetMonthlyLeadershipBoardWorker.close(),
                 expireAcceptedQuotesWorker.close(),
                 expirePendingVendorsWorker.close(),
+                notificationHistoryWorker.close(),
                 new Promise((_, reject) => 
                     setTimeout(() => reject(new Error('Worker close timeout')), 5000)
                 )

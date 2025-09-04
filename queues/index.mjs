@@ -7,3 +7,4 @@ export { resetDailyLeadershipQueue } from "./cron/leadership/daily/resetDailyLea
 export { resetMonthlyLeadershipBoardQueue } from "./cron/leadership/monthly/resetMonthlyLeadershipBoardQueue.mjs"
 export { expireAcceptedQuotesQueue } from "./cron/expiringJobs/acceptedQuotes/expireAcceptedQuotesQueue.mjs"
 export { expirePendingVendorsQueue } from "./cron/expiringJobs/pendingVendors/expirePendingVendorsQueue.mjs"
+export { notificationHistoryQueue } from "./notification/notificationHistory/notificationHistoryQueue.mjs"
