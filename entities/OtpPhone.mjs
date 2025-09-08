@@ -4,7 +4,7 @@ export const OtpPhone = new EntitySchema({
     name: "OtpPhone",
     tableName: "otp_phone",
     indices: [
-        { name: "IDX_OTP_PHONE_PHONE", columns: ["phone"], unique: true },
+        { name: "IDX_OTP_PHONE_PHONE_NUMBER", columns: ["phoneNumber"], unique: true },
     ],
     columns: {
         id: {
@@ -12,7 +12,7 @@ export const OtpPhone = new EntitySchema({
             primary: true,
             generated: "uuid",
         },
-        phone: {
+        phoneNumber: {
             type: "varchar",
             unique: true,
             nullable: false,
