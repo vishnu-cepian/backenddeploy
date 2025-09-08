@@ -150,8 +150,8 @@ export const refreshAccessToken = async (refreshToken) => {
             { refreshToken: newRefreshToken }
         );
         return {
-            accessToken: newAccessToken,
-            refreshToken: newRefreshToken,
+            newAccessToken,
+            newRefreshToken,
             message: "Token refreshed successfully",
         };
     } catch (err) {
