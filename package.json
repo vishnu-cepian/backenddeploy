@@ -8,7 +8,9 @@
     "dev": "nodemon server.mjs",
     "migration:generate": "typeorm migration:generate -d ./config/data-source.mjs --outputJs",
     "migration:run": "typeorm migration:run -d ./config/data-source.mjs",
-    "migration:revert": "typeorm migration:revert -d ./config/data-source.mjs"
+    "migration:revert": "typeorm migration:revert -d ./config/data-source.mjs",
+    "seed:settings": "node ./scripts/seeders/seedSettings.mjs",
+    "db:setup": "typeorm migration:run -d ./config/data-source.mjs && node ./scripts/seeders/seedSettings.mjs"
   },
   "keywords": [],
   "author": "",
