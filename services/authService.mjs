@@ -53,11 +53,11 @@ const verifyOtpSchema = z.object({
 });
 
 const phoneSchema = z.object({
-    phone: z.string().min(10, { message: "Phone number must be at least 10 digits" }).max(15, { message: "Phone number must be less than 15 digits" }),
+    phoneNumber: z.string().min(10, { message: "Phone number must be at least 10 digits" }).max(15, { message: "Phone number must be less than 15 digits" }),
 });
 
 const verifyPhoneOtpSchema = z.object({
-    phone: z.string().min(10, { message: "Phone number must be at least 10 digits" }).max(15, { message: "Phone number must be less than 15 digits" }),
+    phoneNumber: z.string().min(10, { message: "Phone number must be at least 10 digits" }).max(15, { message: "Phone number must be less than 15 digits" }),
     otp: z.string().length(6, { message: "OTP must be 6 digits" }).regex(/^\d+$/, { message: "OTP must only contain digits" }),
 });
 
@@ -607,14 +607,14 @@ export const verifyEmailOtp = async (data) => {
  * If the OTP is send mutliple times then the last send otp will remain in database
  * 
  * @param {Object} data 
- * @param {string} data.phone - The recipient's phone number.
+ * @param {string} data.phoneNumber - The recipient's phone number.
  * @returns {Promise<Object>} { message: "OTP sent successfully", status: true } or { message: "Failed to send phone", statusCode: 500 }
  */
 export const sendPhoneOtp = async (data) => {
     try {
-        const { phone } = phoneSchema.parse(data);
+        const { phoneNumber } = phoneSchema.parse(data);
         
-        const rateLimitKey = `otp-limit:${phone}`;
+        const rateLimitKey = `otp-limit:${phoneNumber}`;
         const currentRequests = await redis.incr(rateLimitKey);
 
         if (currentRequests === 1) {
@@ -622,7 +622,7 @@ export const sendPhoneOtp = async (data) => {
         }
 
         if (currentRequests > RATE_LIMIT_MAX_REQUESTS) {
-            logger.warn(`Rate limit exceeded for phone: ${phone}`);
+            logger.warn(`Rate limit exceeded for phone: ${phoneNumber}`);
             throw sendError('Too many requests. Please wait a minute before trying again.', 429);
         }
 
@@ -636,21 +636,21 @@ export const sendPhoneOtp = async (data) => {
          *  So using findOne and update method to update the otp and expiresAt
          */
 
-        let otpRecord = await otpPhoneRepository.findOne({ where: { phone } });
+        let otpRecord = await otpPhoneRepository.findOne({ where: { phoneNumber } });
         if (otpRecord) {
             otpRecord.otp = otp;
             otpRecord.expiresAt = expiresAt;
             await otpPhoneRepository.save(otpRecord);
         } else {
             await otpPhoneRepository.save({
-            phone,
+            phoneNumber,
             otp,
             expiresAt
             });
         }
 
         phoneQueue.add('sendPhoneOtp', {
-            phone,
+            phoneNumber,
             otp
         });
 
@@ -672,35 +672,35 @@ export const sendPhoneOtp = async (data) => {
  * Verifies a phone OTP
  * 
  * @param {Object} data 
- * @param {string} data.phone 
+ * @param {string} data.phoneNumber 
  * @param {string} data.otp 
  * @returns {Promise<Object>} { message: "OTP verified successfully", status: true } or { message: "OTP expired", statusCode: 400 }
  */
 export const verifyPhoneOtp = async (data) => {
     try {
-        const { phone, otp } = verifyPhoneOtpSchema.parse(data);
+        const { phoneNumber, otp } = verifyPhoneOtpSchema.parse(data);
 
         //Check for an existing lockout
-        const lockoutKey = `otp-lockout:${phone}`;
+        const lockoutKey = `otp-lockout:${phoneNumber}`;
         const isLockedOut = await redis.get(lockoutKey);
         if (isLockedOut) throw sendError(`Too many incorrect attempts. Please try again in ${LOCKOUT_DURATION_SECONDS / 60} minutes.`, 429);
 
 
         const otpPhoneRepository = AppDataSource.getRepository(OtpPhone);
-        const otpRecord = await otpPhoneRepository.findOne({ where: { phone } });
+        const otpRecord = await otpPhoneRepository.findOne({ where: { phoneNumber } });
 
         if (!otpRecord) throw sendError('Invalid or expired OTP. Please request a new one.', 400);
 
 
         if (new Date() > otpRecord.expiresAt) {
             // Clean up the expired record
-            await otpPhoneRepository.delete({ phone });
+            await otpPhoneRepository.delete({ phoneNumber });
             throw sendError('This OTP has expired. Please request a new one.', 400);
         }
 
         if (otpRecord.otp !== otp) {
             // Handle incorrect OTP attempt
-            const attemptKey = `otp-attempt:${phone}`;
+            const attemptKey = `otp-attempt:${phoneNumber}`;
             const attempts = await redis.incr(attemptKey);
 
             if (attempts === 1) {
@@ -710,9 +710,9 @@ export const verifyPhoneOtp = async (data) => {
             if (attempts >= MAX_OTP_ATTEMPTS) {
                 // If max attempts reached, lock the user out and delete the OTP record
                 await redis.set(lockoutKey, 'locked', 'EX', LOCKOUT_DURATION_SECONDS);
-                await otpPhoneRepository.delete({ phone }); // Invalidate the current OTP
+                await otpPhoneRepository.delete({ phoneNumber }); // Invalidate the current OTP
                 await redis.del(attemptKey); // Clean up the attempt counter
-                logger.warn(`OTP verification locked for phone: ${phone}`);
+                logger.warn(`OTP verification locked for phone: ${phoneNumber}`);
                 throw sendError(`Too many incorrect attempts. Please try again in ${LOCKOUT_DURATION_SECONDS / 60} minutes.`, 429);
             }
         
@@ -721,11 +721,11 @@ export const verifyPhoneOtp = async (data) => {
 
         // Success! OTP is valid.
         // Clean up the OTP record and any attempt counters from Redis.
-        await otpPhoneRepository.delete({ phone });
-        const attemptKey = `otp-attempt:${phone}`;
+        await otpPhoneRepository.delete({ phoneNumber });
+        const attemptKey = `otp-attempt:${phoneNumber}`;
         await redis.del(attemptKey);
 
-        const verificationToken = jwt.sign({ phone }, OTP_TOKEN_SECRET, { expiresIn: '5m' });
+        const verificationToken = jwt.sign({ phoneNumber }, OTP_TOKEN_SECRET, { expiresIn: '5m' });
 
         return {
         message: "OTP verified successfully",
