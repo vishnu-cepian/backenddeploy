@@ -180,12 +180,12 @@ export const completeProfile = async (data, deviceInfo) => {
     }
 
     const otpPhoneRepo = AppDataSource.getRepository(OtpPhone);
-    const otpRecord = await otpPhoneRepo.findOne({ where: { phone: phoneNumber } });
+    const otpRecord = await otpPhoneRepo.findOne({ where: { phoneNumber: phoneNumber } });
     if (!otpRecord) {
       throw sendError('Invalid or expired OTP. Please request a new one.', 400);
     }
     if (new Date() > otpRecord.expiresAt) {
-      await otpPhoneRepo.delete({ phone: phoneNumber });
+      await otpPhoneRepo.delete({ phoneNumber: phoneNumber });
       throw sendError('This OTP has expired. Please request a new one.', 400);
     }
     if (otpRecord.otp !== otp) {
@@ -197,7 +197,7 @@ export const completeProfile = async (data, deviceInfo) => {
 
       if (attempts >= MAX_OTP_ATTEMPTS) {
         await redis.set(lockoutKey, 'locked', 'EX', LOCKOUT_DURATION_SECONDS);
-        await otpPhoneRepo.delete({ phone: phoneNumber });
+        await otpPhoneRepo.delete({ phoneNumber: phoneNumber });
         await redis.del(attemptKey);
         logger.warn(`OTP verification locked for phone: ${phoneNumber}`);
         throw sendError(`Too many incorrect attempts. Please try again in ${LOCKOUT_DURATION_SECONDS / 60} minutes.`, 429);
@@ -205,7 +205,7 @@ export const completeProfile = async (data, deviceInfo) => {
       throw sendError('Invalid OTP.', 400);
     }
 
-    await otpPhoneRepo.delete({ phone: phoneNumber });
+    await otpPhoneRepo.delete({ phoneNumber: phoneNumber });
     await redis.del(attemptKey);
 
     const newVendor = queryRunner.manager.create(Vendors, {
