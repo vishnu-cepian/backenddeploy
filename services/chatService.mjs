@@ -11,6 +11,7 @@ import { ChatReadState } from '../entities/ChatReadState.mjs';
 import { getPresignedViewUrl } from "./s3service.mjs";
 import { Not } from "typeorm";
 import { pubClient } from '../config/redis-config.mjs';
+
 //=================== ZOD VALIDATION SCHEMAS ====================
 
 const getOrCreateChatRoomSchema = z.object({
@@ -29,10 +30,22 @@ const getMessagesSchema = z.object({
 //=================== CHAT SERVICES ====================
 
 /**
- * Gets an existing chat room or creates a new one between a customer and a vendor.
+ * @api {post} /api/chat/getOrCreateChatRoom/:receiverId Get or Create Chat Room
+ * @apiName GetOrCreateChatRoom
+ * @apiGroup Chat
+ * @apiDescription Gets an existing chat room or creates a new one between two users. This function is transactional, ensuring data integrity.
  *
- * @param {Object} data - The input data containing user and receiver IDs.
- * @returns {Promise<ChatRoom>} The found or newly created chat room entity.
+ * @apiParam {object} data - The input data for creating or finding a chat room.
+ * @param {string} data.currentUserId - The UUID of the user initiating the request.
+ * @param {string} data.currentUserRole - The role of the initiating user ('customer' or 'vendor').
+ * @param {string} data.receiverId - The UUID of the other participant.
+ *
+ * @apiSuccess {Object} ChatRoom The found or newly created chat room entity.
+ *
+ * @apiError {Error} 400 - If the user tries to create a chat room with themselves.
+ * @apiError {Error} 400 - If the input data fails Zod validation.
+ * @apiError {Error} 404 - If either the customer or vendor is not found.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const getOrCreateChatRoom = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -43,34 +56,40 @@ export const getOrCreateChatRoom = async (data) => {
         const { currentUserId, currentUserRole, receiverId } = getOrCreateChatRoomSchema.parse(data);
 
         if (currentUserId === receiverId) {
-            throw sendError("Cannot create a chat room with yourself.", 400);
+            throw sendError("Cannot create a chat room with yourself", 400);
         }
+
+        // Helper to find a user by their user ID to handle different inputs.
+        const findUser = async (repo, id, selectOptions) => {
+            return await repo.findOne({ where: [{ id }, { userId: id }], select: selectOptions });
+        };
         
-        let customerId, vendorId, customerUserId, vendorUserId;
+        let customer, vendor;
 
-        // Determine who is the customer and who is the vendor based on the role
+
         if (currentUserRole === ROLE.CUSTOMER) {
-            const customer = await queryRunner.manager.findOne(Customers, { where: { userId: currentUserId }, select: ['id', 'userId'] });
-            const vendor = await queryRunner.manager.findOne(Vendors, { where: { id: receiverId }, select: ['id', 'userId'] });
-            if (!customer || !vendor) throw sendError("Invalid customer or vendor.", 404);
-            customerId = customer.id;
-            vendorId = vendor.id;
-            customerUserId = customer.userId;
-            vendorUserId = vendor.userId;
+            customer = await findUser(queryRunner.manager.getRepository(Customers), currentUserId, ['id', 'userId']);
+            vendor = await findUser(queryRunner.manager.getRepository(Vendors), receiverId, ['id', 'userId']);
         } else { // currentUserRole is VENDOR
-            const vendor = await queryRunner.manager.findOne(Vendors, { where: { userId: currentUserId }, select: ['id', 'userId'] });
-            const customer = await queryRunner.manager.findOne(Customers, { where: { id: receiverId }, select: ['id', 'userId'] });
-            if (!customer || !vendor) throw sendError("Invalid customer or vendor.", 404);
-            vendorId = vendor.id;
-            customerId = customer.id;
-            customerUserId = customer.userId;
-            vendorUserId = vendor.userId;
+            vendor = await findUser(queryRunner.manager.getRepository(Vendors), currentUserId, ['id', 'userId']);
+            customer = await findUser(queryRunner.manager.getRepository(Customers), receiverId, ['id', 'userId']);
         }
 
-        let room = await queryRunner.manager.findOne(ChatRoom, { where: { customerId, vendorId } });
+        if (!customer || !vendor) {
+            throw sendError("Invalid customer or vendor.", 404);
+        }
+
+        let room = await queryRunner.manager.findOne(ChatRoom, { 
+            where: { customerId: customer.id, vendorId: vendor.id } 
+        });
 
         if (!room) {
-            room = queryRunner.manager.create(ChatRoom, { customerId, vendorId, customerUserId, vendorUserId });
+            room = queryRunner.manager.create(ChatRoom, { 
+                customerId: customer.id, 
+                vendorId: vendor.id, 
+                customerUserId: customer.userId, 
+                vendorUserId: vendor.userId 
+            });
             await queryRunner.manager.save(ChatRoom, room);
         }
 
@@ -93,10 +112,24 @@ export const getOrCreateChatRoom = async (data) => {
 };
 
 /**
- * Fetches all chat rooms for a user, optimized to avoid N+1 queries.
+ * @api {get} /api/chat/getChatRoomsForUser Get Chat Rooms
+ * @apiName GetChatRoomsForUser
+ * @apiGroup Chat
+ * @apiDescription Fetches all chat rooms for a user, optimized with a single, powerful query to avoid the N+1 problem. It retrieves the last message, unread count, and receiver details for each room.
  *
- * @param {string} userId - The ID of the user.
- * @returns {Promise<Array>} A list of the user's chat rooms with metadata.
+ * @apiParam {string} userId - The UUID of the user whose chat rooms are to be fetched.
+ *
+ * @apiSuccess {Object[]} rooms - A list of the user's chat rooms with enhanced metadata.
+ * @apiSuccess {string} rooms.id - The chat room's UUID.
+ * @apiSuccess {string} rooms.receiverName - The name of the other participant.
+ * @apiSuccess {string} rooms.receiverImage - A presigned URL for the other participant's profile image.
+ * @apiSuccess {string} rooms.receiverUserId - The UUID of the other participant.
+ * @apiSuccess {string} rooms.status - The online status ('online' or 'offline').
+ * @apiSuccess {string} rooms.updatedAt - The timestamp of the last activity.
+ * @apiSuccess {string} rooms.lastMessage - The content of the last message sent.
+ * @apiSuccess {number} rooms.unreadCount - The number of unread messages for the user.
+ *
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const getChatRoomsForUser = async (userId) => {
     try {
