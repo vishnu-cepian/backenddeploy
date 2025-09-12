@@ -6,14 +6,12 @@ import { Vendors } from "../entities/Vendors.mjs";
 import { Orders } from "../entities/Orders.mjs";
 import { Rating } from "../entities/Rating.mjs";
 import { Customers } from "../entities/Customers.mjs";
-import { ORDER_STATUS, SERVICE_TYPE, VENDOR_STATUS } from "../types/enums/index.mjs";
-import { LeaderboardHistory } from "../entities/LeaderboardHistory.mjs";
+import { ORDER_STATUS, VENDOR_STATUS } from "../types/enums/index.mjs";
 import { Not } from "typeorm";
 import { cacheOrFetch } from "../utils/cache.mjs";
 import { getPresignedViewUrl } from "./s3service.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
-const leaderBoardHistoryRepo = AppDataSource.getRepository(LeaderboardHistory);
 
 //========================= ZOD VALIDATION SCHEMAS =========================
 
@@ -25,14 +23,34 @@ const updateRatingSchema = z.object({
     review: z.string().min(2).max(200).optional().refine(val => val === undefined || val.length >= 2 && val.length <= 200, { message: "Review must be between 2 and 200 characters" }),
   });
 
-const getMonthlyLeaderboardSchema = z.object({
-    serviceType: z.enum([SERVICE_TYPE.TAILORS, SERVICE_TYPE.LAUNDRY]),
-    monthYear: z.string().regex(/^\d{4}-\d{2}$/, { message: "Month/Year must be in YYYY-MM format" }),
-    limit: z.number().int().positive().default(25),
-});
-
 //========================= RATING SERVICES =========================
 
+/**
+ * @api {post} /api/rating/updateVendorRating Update Vendor Rating
+ * @apiName UpdateVendorRating
+ * @apiGroup Rating
+ * @apiDescription Allows a customer to submit a rating and an optional review for a completed order. This operation is transactional and performs an atomic update on the vendor's aggregate rating scores.
+ *
+ * @apiBody {string} vendorId - The UUID of the vendor being rated.
+ * @apiBody {string} orderId - The UUID of the completed order.
+ * @apiBody {number} rating - An integer rating from 1 to 5.
+ * @apiBody {string} [review] - An optional review text (2-200 characters).
+ *
+ * @param {string} data - The rating submission data.
+ * @param {string} data.userId - The UUID of the customer submitting the rating.
+ * @param {string} data.vendorId - The UUID of the vendor being rated.
+ * @param {string} data.orderId - The UUID of the completed order.
+ * @param {number} data.rating - An integer rating from 1 to 5.
+ * @param {string} [data.review] - An optional review text (2-200 characters).
+ *
+ * @apiSuccess {string} message - A success confirmation message.
+ *
+ * @apiError {Error} 400 - If the input data fails validation.
+ * @apiError {Error} 403 - If the order is not completed or does not belong to the user/vendor pair.
+ * @apiError {Error} 404 - If the customer profile is not found.
+ * @apiError {Error} 409 - If the user has already rated this specific order.
+ * @apiError {Error} 500 - Internal Server Error.
+ */
 export const updateVendorRating = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
@@ -70,7 +88,8 @@ export const updateVendorRating = async (data) => {
         });
 
         // ATOMIC UPDATE: Prevent race condition
-
+        // This raw SQL calculation prevents race conditions by performing the recalculation directly in the database.
+        // Formula: new_average = ((old_average * old_count) + new_value) / (old_count + 1)
         await queryRunner.manager.update(Vendors, vendorId, {
             allTimeRating: () => `(("allTimeRating" * "allTimeReviewCount") + ${rating}) / ("allTimeReviewCount" + 1)`,
             allTimeReviewCount: () => `"allTimeReviewCount" + 1`,
@@ -95,7 +114,22 @@ export const updateVendorRating = async (data) => {
         await queryRunner.release();
     }
 }
-
+/**
+ * @api {get} /api/rating/getDailyLeadershipBoard Get Daily Leaderboard
+ * @apiName GetDailyLeadershipBoard
+ * @apiGroup Rating
+ * @apiDescription Fetches the top 10 verified vendors for the daily leaderboard based on their current month's Bayesian score. Results are cached for 1 hour.
+ *
+ * @apiSuccess {Object[]} standings - An array of top vendor objects.
+ * @apiSuccess {string} standings.id - The UUID of the vendor.
+ * @apiSuccess {string} standings.shopName - The name of the vendor's shop.
+ *
+ * @apiSuccess {number} standings.currentMonthBayesianScore - The current month's Bayesian score of the vendor.
+ * @apiSuccess {string} standings.serviceType - The type of service the vendor offers.
+ * @apiSuccess {string} standings.vendorAvatarUrl - The URL of the vendor's avatar.
+ *
+ * @apiError {Error} 500 - Internal Server Error.
+ */
 export const getDailyLeadershipBoard = async () => {
     try {
         const limit = 10;
@@ -133,23 +167,6 @@ export const getDailyLeadershipBoard = async () => {
         }, 3600); // 1 hr // this cache will be cleared by the resetDailyLeadershipWorker
     } catch (error) {
         logger.error("Error in getDailyLeadershipBoard", error);
-        throw error;
-    }
-}
-
-export const getMonthlyLeadershipBoard = async (data) => {
-    try {
-        const { serviceType, monthYear, limit = 25 } = getMonthlyLeaderboardSchema.parse(data);
-
-        return cacheOrFetch(`getMonthlyLeadershipBoard:${serviceType}:${monthYear}`, async () => {
-            const history = await leaderBoardHistoryRepo.find({ where: { serviceType, monthYear }, order: { rank: "ASC" }, take: limit });
-            return history;
-        }, 3600); // 1 hr
-    } catch (error) {
-        logger.error("Error in getMonthlyLeadershipBoard", error);
-        if (error instanceof z.ZodError) {
-            throw sendError("Invalid parameters.", 400, error.flatten().fieldErrors);
-        }
         throw error;
     }
 }
