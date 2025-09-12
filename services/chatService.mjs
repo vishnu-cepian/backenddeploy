@@ -203,10 +203,38 @@ export const getChatRoomsForUser = async (userId) => {
 };
 
 /**
- * Fetches a paginated list of messages for a specific chat room.
+ * @api {get} /api/chat/getMessages/:chatRoomId/:page/:limit Get Messages
+ * @apiName GetMessages
+ * @apiGroup Chat
+ * @apiDescription Fetches a paginated list of messages for a specific chat room after authorizing the user.
  *
- * @param {Object} data - The input data.
- * @returns {Promise<Array>} A paginated list of messages.
+ * @apiParam {string} userId - The UUID of the user requesting messages.
+ * @apiParam {string} chatRoomId - The UUID of the chat room.
+ * @apiParam {number} [page=1] - The page number for pagination.
+ * @apiParam {number} [limit=20] - The number of messages per page.
+ *
+ * @param {Object} data - The input data for getting messages.
+ * @param {string} data.userId - The UUID of the user requesting messages.
+ * @param {string} data.chatRoomId - The UUID of the chat room.
+ * @param {number} data.page - The page number for pagination.
+ * @param {number} data.limit - The number of messages per page.
+ *
+ * @apiSuccess {Object} response - The response object.
+ * @apiSuccess {Object[]} response.messages - An array of message objects.
+ * @apiSuccess {string} response.messages.id - The UUID of the message.
+ * @apiSuccess {string} response.messages.chatRoomId - The UUID of the chat room.
+ * @apiSuccess {string} response.messages.content - The content of the message.
+ * @apiSuccess {string} response.messages.createdAt - The timestamp of the message.
+ * @apiSuccess {string} response.messages.senderId - The UUID of the sender (not the sender id, but the user id of the sender).
+ * @apiSuccess {boolean} response.messages.isRead - Whether the message has been read.
+ * @apiSuccess {Object} response.pagination - Pagination details.
+ * @apiSuccess {boolean} response.pagination.hasMore - Whether there are more messages to fetch.
+ * @apiSuccess {number} response.pagination.page - The current page number.
+ * @apiSuccess {number} response.pagination.limit - The number of messages per page.
+ *
+ * @apiError {Error} 400 - If the input data fails Zod validation.
+ * @apiError {Error} 403 - If the user is not a member of the requested chat room.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const getMessages = async (data) => {
     try {
@@ -220,7 +248,7 @@ export const getMessages = async (data) => {
             .getExists();
 
         if (!isMember) {
-            throw sendError("You are not authorized to view these messages.", 403);
+            throw sendError("You are not authorized to view these messages", 403);
         }
 
         const [messages, totalCount] = await Promise.all ([
