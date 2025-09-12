@@ -293,11 +293,11 @@ export const getMessages = async (data) => {
 };
 
 /**
- * Marks messages in a room as read for a specific user.
- *
- * @param {string} chatRoomId - The ID of the chat room.
- * @param {string} userId - The ID of the user whose messages should be marked as read.
- * @param {string} lastReadMessageId - The ID of the last message that was read.
+ * An internal service function to mark messages in a room as read for a user.
+ * @param {string} chatRoomId - The UUID of the chat room.
+ * @param {string} userId - The UUID of the user.
+ * @param {string} lastReadMessageId - The UUID of the last message that was read.
+ * @returns {Promise<void>}
  */
 export const markAsRead = async (chatRoomId, userId, lastReadMessageId) => {
     try {
@@ -320,6 +320,17 @@ export const markAsRead = async (chatRoomId, userId, lastReadMessageId) => {
     }
 };
 
+/**
+ * An internal service function to save a new message to the database.
+ * Also updates the chat room's `updatedAt` timestamp to ensure it appears at the top of the user's chat list.
+ * @param {object} data - The message data.
+ * @param {string} data.chatRoomId - The UUID of the chat room.
+ * @param {string} data.senderId - The UUID of the sender.
+ * @param {string} data.content - The message content.
+ * @returns {Promise<ChatMessage>} The saved message entity.
+ * @throws {Error} 400 - If the message content is empty or whitespace.
+ * @throws {Error} 404 - If the chat room is not found.
+ */
 export const sendMessage = async (data) => {
     try {
         const { chatRoomId, senderId, content } = data;
@@ -350,16 +361,16 @@ export const sendMessage = async (data) => {
     }
 }
 
+/**
+ * An internal service function to retrieve essential details of a chat room.
+ * @param {string} chatRoomId - The UUID of the chat room.
+ * @returns {Promise<ChatRoom|null>} The chat room entity with participant IDs, or null if not found.
+ */
 export const getChatRoom = async (chatRoomId) => {
     try {
         const chatRoom = await AppDataSource.getRepository(ChatRoom).findOne({
-            where: {
-                id: chatRoomId
-            },
-            select: {
-                customerUserId: true,
-                vendorUserId: true
-            }
+            where: { id: chatRoomId },
+            select: { customerUserId: true, vendorUserId: true }
         })
         return chatRoom;
     } catch(err) {
