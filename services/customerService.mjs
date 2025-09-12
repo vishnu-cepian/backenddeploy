@@ -730,6 +730,9 @@ export const getOrderById = async (data) => {
  * @apiSuccess {number} response.pagination.hasMore - Whether there are more orders to fetch.
  * @apiSuccess {number} response.pagination.nextPage - The next page number.
  * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the customer or orders are not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const getOrdersWithOrderRequests = async (data) => {
     try {
