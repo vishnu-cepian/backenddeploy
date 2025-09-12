@@ -83,22 +83,22 @@ export const sendEmail = async (req, res, next) => {
     }
 }
 
-export const broadcastEmail = async (req, res, next) => {
-    try {
-        const {role, template_id, variables} = req.body;
-        if (!role || !template_id || !variables) {
-            throw new Error(formatError("Role, template_id, and variables are required"));
-        }
-        const response = await notificationService.broadcastEmail(role, template_id, variables);
-        if (!response) {
-            throw new Error(formatError("Error in response", response));
-        }
-        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
-    } catch (error) {
-        logger.error(error);
-        next(error);
-    }
-}
+// export const broadcastEmail = async (req, res, next) => {
+//     try {
+//         const {role, template_id, variables} = req.body;
+//         if (!role || !template_id || !variables) {
+//             throw new Error(formatError("Role, template_id, and variables are required"));
+//         }
+//         const response = await notificationService.broadcastEmail(role, template_id, variables);
+//         if (!response) {
+//             throw new Error(formatError("Error in response", response));
+//         }
+//         res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+//     } catch (error) {
+//         logger.error(error);
+//         next(error);
+//     }
+// }
 
 export const getNotificationHistory = async (req, res, next) => {
     try {

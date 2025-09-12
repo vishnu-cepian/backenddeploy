@@ -16,7 +16,7 @@ router.post("/broadcast-push-notification", verifyAdminAccessToken, controllerWr
 // NOT IMPLEMENTED
 router.post("/send-email", verifyAdminAccessToken, controllerWrapper(notificationController.sendEmail, { logRequest: true, logResponse: true }));
 // NOT IMPLEMENTED
-router.post("/broadcast-email", verifyAdminAccessToken, controllerWrapper(notificationController.broadcastEmail, { logRequest: true, logResponse: true }));
+// router.post("/broadcast-email", verifyAdminAccessToken, controllerWrapper(notificationController.broadcastEmail, { logRequest: true, logResponse: true }));
 
 // User related routes
 router.get("/getNotificationHistory/:page/:limit", verifyAccessToken, controllerWrapper(notificationController.getNotificationHistory, { logRequest: true, logResponse: true }));
