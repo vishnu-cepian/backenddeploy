@@ -35,7 +35,7 @@ const getMessagesSchema = z.object({
  * @apiGroup Chat
  * @apiDescription Gets an existing chat room or creates a new one between two users. This function is transactional, ensuring data integrity.
  *
- * @apiParam {object} data - The input data for creating or finding a chat room.
+ * @apiParam {string} receiverId - The UUID of the other participant.
  * @param {string} data.currentUserId - The UUID of the user initiating the request.
  * @param {string} data.currentUserRole - The role of the initiating user ('customer' or 'vendor').
  * @param {string} data.receiverId - The UUID of the other participant.
@@ -117,7 +117,7 @@ export const getOrCreateChatRoom = async (data) => {
  * @apiGroup Chat
  * @apiDescription Fetches all chat rooms for a user, optimized with a single, powerful query to avoid the N+1 problem. It retrieves the last message, unread count, and receiver details for each room.
  *
- * @apiParam {string} userId - The UUID of the user whose chat rooms are to be fetched.
+ * @param {string} userId - The UUID of the user whose chat rooms are to be fetched.
  *
  * @apiSuccess {Object[]} rooms - A list of the user's chat rooms with enhanced metadata.
  * @apiSuccess {string} rooms.id - The chat room's UUID.
@@ -208,7 +208,6 @@ export const getChatRoomsForUser = async (userId) => {
  * @apiGroup Chat
  * @apiDescription Fetches a paginated list of messages for a specific chat room after authorizing the user.
  *
- * @apiParam {string} userId - The UUID of the user requesting messages.
  * @apiParam {string} chatRoomId - The UUID of the chat room.
  * @apiParam {number} [page=1] - The page number for pagination.
  * @apiParam {number} [limit=20] - The number of messages per page.
