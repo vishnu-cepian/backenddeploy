@@ -14,6 +14,7 @@ router.get("/getVendorDetailsByVendorId/:vendorId", verifyAccessToken, controlle
 router.get("/getVendorWorkImagesByVendorId/:vendorId", verifyAccessToken, controllerWrapper(customerController.getVendorWorkImagesByVendorId, { logRequest: true, logResponse: true }));
 router.get("/getOrders/:page/:limit", verifyAccessToken, controllerWrapper(customerController.getOrders, { logRequest: true, logResponse: true }));
 router.get("/getOrderById/:orderId", verifyAccessToken, controllerWrapper(customerController.getOrderById, { logRequest: true, logResponse: true }));
+router.get("/getOrdersWithOrderRequests/:page/:limit", verifyAccessToken, controllerWrapper(customerController.getOrdersWithOrderRequests, { logRequest: true, logResponse: true }));
 router.get("/getOrderRequests/:orderId", verifyAccessToken, controllerWrapper(customerController.getOrderRequests, { logRequest: true, logResponse: true }));
 router.get("/getAcceptedQuoteById/:orderVendorId", verifyAccessToken, controllerWrapper(customerController.getAcceptedQuoteById, { logRequest: true, logResponse: true }));
 router.post("/addComplaint/:orderId", verifyAccessToken, controllerWrapper(customerController.addComplaint, { logRequest: true, logResponse: true }));

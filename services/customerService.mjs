@@ -68,6 +68,12 @@ const getCustomerPaymentsSchema = z.object({
     status: z.string().optional(),
 })
 
+const getOrdersWithOrderRequestsSchema = z.object({
+    userId: z.string().uuid(),
+    page: z.number().int().min(1).default(1),
+    limit: z.number().int().min(1).max(50).default(10),
+})
+
 //============================ CUSTOMER ADDRESS SERVICES ==============================================
 
 /**
@@ -693,6 +699,84 @@ export const getOrderById = async (data) => {
     } catch (err) {
         logger.error("Error getting order by id", err);
         throw err;
+    }
+}
+
+/**
+ * @api {get} /api/customer/getOrdersWithOrderRequests/:page/:limit Get Orders With Order Requests
+ * @apiName GetOrdersWithOrderRequests
+ * @apiGroup Customer
+ * @apiDescription Fetches all orders with order status PENDING & orderVendor status PENDING, ACCEPTED, REJECTED.
+ * 
+ * @apiParam {number} page - The page number.
+ * @apiParam {number} limit - The limit of the orders.
+ * 
+ * @param {object} data - The order request data.
+ * @param {string} data.userId - The UUID of the user.
+ * @param {number} data.page - The page number.
+ * @param {number} data.limit - The limit of the orders.
+ * 
+ * @apiSuccess {string} response.message - The message indicating the success of the operation.
+ * @apiSuccess {boolean} response.success - Whether the operation was successful.
+ * 
+ * @apiSuccess {Object[]} response.orders - The orders of the customer.
+ * @apiSuccess {string} response.orders.id - The UUID of the order.
+ * @apiSuccess {string} response.orders.orderName - The name of the order.
+ * @apiSuccess {string} response.orders.serviceType - The type of service.
+ * @apiSuccess {string} response.orders.createdAt - The timestamp of the order creation.
+ * 
+ * @apiSuccess {Object} response.pagination - The pagination of the orders.
+ * @apiSuccess {number} response.pagination.currentPage - The current page number.
+ * @apiSuccess {number} response.pagination.hasMore - Whether there are more orders to fetch.
+ * @apiSuccess {number} response.pagination.nextPage - The next page number.
+ * 
+ */
+export const getOrdersWithOrderRequests = async (data) => {
+    try {
+        const { userId, page, limit } = getOrdersWithOrderRequestsSchema.parse(data);
+        const offset = (page - 1) * limit;
+
+        const customer = await customerRepo.findOne({ where: { userId: userId }, select: { id: true } });
+        if (!customer) throw sendError("Customer not found", 404);
+
+        const orders = await orderRepo.createQueryBuilder("orders")
+        .leftJoinAndSelect("orders.orderVendors", "orderVendors")
+        .select([
+            "orders.id",
+            "orders.orderName",
+            "orders.serviceType",
+            "orders.createdAt",
+        ])
+        .where("orders.customerId = :customerId", { customerId: customer.id })
+        .andWhere("orders.orderStatus = :orderStatus", { orderStatus: ORDER_STATUS.PENDING })
+        .andWhere("orderVendors.status IN (:...status)", { status: [ORDER_VENDOR_STATUS.PENDING, ORDER_VENDOR_STATUS.ACCEPTED, ORDER_VENDOR_STATUS.REJECTED] })
+        .orderBy("orders.createdAt", "DESC")
+        .skip(offset)
+        .take(limit)
+        .getMany();
+
+        if (!orders) throw sendError("Orders not found", 404);
+
+        return {
+            orders: orders.map(order => ({
+                id: order.id,
+                orderName: order.orderName,
+                serviceType: order.serviceType,
+                createdAt: order.createdAt,
+            })),
+            pagination: {
+                currentPage: page,
+                hasMore: orders.length === limit,
+                nextPage: orders.length === limit ? page + 1 : null,
+            },
+        }
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            logger.warn("getOrdersWithOrderRequests validation failed", { errors: error.flatten().fieldErrors });
+            throw sendError("Invalid parameters provided.", 400, error.flatten().fieldErrors);
+        }
+        logger.error("Error getting orders with order requests", error);
+        throw error;
     }
 }
 

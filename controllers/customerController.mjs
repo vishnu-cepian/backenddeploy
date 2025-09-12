@@ -159,6 +159,20 @@ export const getOrderById = async (req, res, next) => {
     }
 };
 
+export const getOrdersWithOrderRequests = async (req, res, next) => {
+  try {
+      const data = { userId: req.user.id, page: parseInt(req.params.page), limit: parseInt(req.params.limit) };
+      const response = await customerService.getOrdersWithOrderRequests(data);
+      if (!response) {
+          throw new Error(formatError("Order requests not found", response));
+      }
+      res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (error) {
+      logger.error(error);
+      next(error);
+  }
+};
+
 export const getOrderRequests = async (req, res, next) => {
   try {
       const data = { userId: req.user.id, orderId: req.params.orderId };
