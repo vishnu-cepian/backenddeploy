@@ -19,6 +19,7 @@ import { VendorStats } from "../entities/VendorStats.mjs";
 import { Complaints } from "../entities/Complaints.mjs";
 import { Payouts } from "../entities/Payouts.mjs";
 import { In } from "typeorm";
+import { Rating } from "../entities/Rating.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const vendorImagesRepo = AppDataSource.getRepository(VendorImages);
@@ -79,6 +80,12 @@ const addComplaintSchema = z.object({
   userId: z.string().uuid(),
   orderId: z.string().uuid().optional(),
   complaint: z.string().min(1, { message: "Complaint is required" }),
+})
+
+const getVendorReviewsSchema = z.object({
+  userId: z.string().uuid(),
+  page: z.number().int().min(1).default(1),
+  limit: z.number().int().min(1).max(50).default(10),
 })
 
 //============================ CONSTANTS ==============================================
@@ -915,3 +922,82 @@ export const getVendorPayouts = async (data) => {
     throw error;
   }
 } 
+
+/**
+ * @api {get} /api/vendor/getReviews/:page/:limit Get Reviews
+ * @apiName GetReviews
+ * @apiGroup Vendor
+ * @apiDescription Retrieves a paginated list of reviews of current logged in vendor.
+ * 
+ * @apiParam {string} page - The page number.
+ * @apiParam {string} limit - The limit of reviews per page.
+ * 
+ * @param {object} data - The review data.
+ * @param {string} data.userId - The UUID of the user.
+ * @param {string} data.page - The page number.
+ * @param {string} data.limit - The limit of reviews per page.
+ * 
+ * @apiSuccess {Object[]} response.reviews - The reviews.
+ * @apiSuccess {Object} response.pagination - The pagination object.
+ * 
+ * @apiSuccess {string} response.reviews.id - The UUID of the review.
+ * @apiSuccess {string} response.reviews.rating - The rating of the review.
+ * @apiSuccess {string} response.reviews.review - The review.
+ * @apiSuccess {string} response.reviews.createdAt - The timestamp of the review creation.
+ * @apiSuccess {string} response.reviews.customerName - The name of the customer.
+ * 
+ * @apiSuccess {string} response.pagination.currentPage - The current page number.
+ * @apiSuccess {string} response.pagination.hasMore - Whether there are more pages.
+ * @apiSuccess {string} response.pagination.nextPage - The next page number.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor or reviews are not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
+ */
+
+export const getReviews = async (data) => {
+  try {
+      const { userId, page, limit } = getVendorReviewsSchema.parse(data);
+      const offset = (page - 1) * limit;
+
+      const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: { id: true } });
+      if (!vendor) throw sendError("Vendor not found", 404);
+
+      return cacheOrFetch(`vendorReviews:${vendor.id}`, async () => {
+          const reviews = await AppDataSource.getRepository(Rating).find({
+              where: { vendorId: vendor.id }, 
+              select: { id: true, rating: true, review: true, createdAt: true }, 
+              relations: { customer: { user: true } },
+              skip: offset, 
+              take: limit,
+              order: { createdAt: "DESC" }
+          });
+
+          if (!reviews) throw sendError("Reviews not found", 404);
+
+          const processedReviews = await Promise.all(reviews.map(async (review) => ({
+              id: review.id,
+              rating: review.rating,
+              review: review.review,
+              createdAt: review.createdAt,
+              customerName: review.customer.user.name,
+          })));
+
+          return {
+              reviews: processedReviews,
+              pagination: {
+                  currentPage: page,
+                  hasMore: reviews.length === limit,
+                  nextPage: reviews.length === limit ? page + 1 : null,
+              },
+          };
+      }, 300);
+  } catch (error) {
+      if (error instanceof z.ZodError) {
+          logger.warn("getReviews validation failed", { errors: error.flatten().fieldErrors });
+          throw sendError("Invalid parameters provided.", 400, error.flatten().fieldErrors);
+      }
+      logger.error("getReviews error", error);
+      throw error;
+  }
+}
