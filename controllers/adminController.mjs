@@ -610,3 +610,17 @@ export const refundRazorpayPaymentByAdmin = async (req, res, next) => {
         next(error);
     }
 };
+
+export const getMonthlyLeadershipBoard = async (req, res, next) => {
+    try {
+      const data = req.body;
+      const response = await adminService.getMonthlyLeadershipBoard(data);
+      if (!response) {
+        throw new Error(formatError("Monthly leadership board not found", response));
+      }
+      res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (err) {
+      logger.error(err);
+      next(err);
+    }
+  };

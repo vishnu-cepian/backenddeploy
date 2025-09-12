@@ -34,6 +34,8 @@ import { createRazorpayContact, createFundAccount, createPayout, refundRazorpayP
 
 import { Payouts } from "../entities/Payouts.mjs";
 
+import { LeaderboardHistory } from "../entities/LeaderboardHistory.mjs";
+
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
 const orderQuoteRepo = AppDataSource.getRepository(OrderQuotes);
@@ -43,7 +45,14 @@ const userRepo = AppDataSource.getRepository(User);
 const paymentRepo = AppDataSource.getRepository(Payments);
 const vendorStatsRepo = AppDataSource.getRepository(VendorStats);
 const adminActionsRepo = AppDataSource.getRepository(AdminActions);
+const leaderBoardHistoryRepo = AppDataSource.getRepository(LeaderboardHistory);
 //===================JWT UTILS====================
+
+const getMonthlyLeaderboardSchema = z.object({
+  serviceType: z.enum([SERVICE_TYPE.TAILORS, SERVICE_TYPE.LAUNDRY]),
+  monthYear: z.string().regex(/^\d{4}-\d{2}$/, { message: "Month/Year must be in YYYY-MM format" }),
+  limit: z.number().int().positive().default(25),
+});
 
 export const generateAccessToken = (payload) => {
     return jwt.sign(payload, ADMIN_ACCESS_TOKEN_SECRET, { expiresIn: '1d' }); 
@@ -1934,5 +1943,36 @@ export const refundRazorpayPaymentByAdmin = async (data, adminUserId) => {
   } catch (err) {
     logger.error(err);
     throw err;
+  }
+}
+
+/**
+ * @api {post} /api/rating/getMonthlyLeadershipBoard Get Monthly Leaderboard
+ * @apiName GetMonthlyLeadershipBoard
+ * @apiGroup Rating
+ * @apiDescription Fetches the historical monthly leaderboard for a given service type and month.
+ *
+ * @apiParam {object} data - The leaderboard query data.
+ * @apiParam {string} data.serviceType - The service type ('tailors' or 'laundry').
+ * @apiParam {string} data.monthYear - The month and year in YYYY-MM format.
+ * @apiParam {number} [data.limit=25] - The number of top vendors to return.
+ *
+ * @apiSuccess {Object[]} history - An array of historical leaderboard entry objects, sorted by rank.
+ *
+ * @apiError {Error} 400 - If the input data fails validation.
+ * @apiError {Error} 500 - Internal Server Error.
+ */
+export const getMonthlyLeadershipBoard = async (data) => {
+  try {
+      const { serviceType, monthYear, limit = 25 } = getMonthlyLeaderboardSchema.parse(data);
+
+      const history = await leaderBoardHistoryRepo.find({ where: { serviceType, monthYear }, order: { rank: "ASC" }, take: limit });
+      return history;
+  } catch (error) {
+      logger.error("Error in getMonthlyLeadershipBoard", error);
+      if (error instanceof z.ZodError) {
+          throw sendError("Invalid parameters.", 400, error.flatten().fieldErrors);
+      }
+      throw error;
   }
 }
