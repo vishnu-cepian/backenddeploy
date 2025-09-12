@@ -228,3 +228,17 @@ export const getCustomerPayments = async (req, res, next) => {
       next(error);
   }
 };
+
+export const getVendorReviews = async (req, res, next) => {
+  try {
+      const data = { userId: req.user.id, vendorId: req.params.vendorId, page: parseInt(req.params.page), limit: parseInt(req.params.limit) };
+      const response = await customerService.getVendorReviews(data);
+      if (!response) {
+          throw new Error(formatError("Vendor reviews not found", response));
+      }
+      res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+  } catch (error) {
+      logger.error(error);
+      next(error);
+  }
+};
