@@ -78,3 +78,8 @@ export const MISC = {
   PAYMENT_GATEWAY: "PAYMENT_GATEWAY",
   LOGISTICS: "LOGISTICS"
 }
+
+export const PAYMENT_STATUS = {
+  CAPTURED: "captured",
+  FAILED: "failed"
+}
