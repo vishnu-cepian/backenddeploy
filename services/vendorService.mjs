@@ -97,54 +97,46 @@ const ATTEMPT_WINDOW_SECONDS = 300; // 5 minutes
 //============================ VENDOR SERVICE FUNCTIONS ==============================================
 
 /**
- * Check if the vendor profile exists and is complete.
+ * @api {get} /api/vendor/checkProfile Check Vendor Profile Status
+ * @apiName CheckProfile
+ * @apiGroup Vendor
+ * @apiDescription Checks if a vendor profile exists for the user and returns its current status.
+ *
  * @param {Object} data - The data containing the user ID.
+ * @param {string} data.userId - The user's UUID.
  * @returns {Promise<Object>} - The result of the check.
+ * 
+ * @apiSuccess {boolean} exists - Whether a vendor profile exists.
+ * @apiSuccess {string} [status] - The current status of the profile ('PENDING', 'VERIFIED', 'REJECTED', 'BLOCKED').
+ * @apiSuccess {string} message - A descriptive message about the profile status.
+ *
+ * @apiError {Error} 400 - If the user ID is invalid.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const checkProfile = async (data) => {
   try {
     const { userId } = checkProfileSchema.parse(data);
 
-    const vendor = await vendorRepo.createQueryBuilder("vendors")
-    .select("vendors.status", "status")
-    .where("vendors.userId = :userId", { userId })
-    .getRawOne();
+    const vendor = await vendorRepo.findOne({ 
+      where: { userId }, 
+      select: { status: true } 
+    });
 
     if (!vendor) {
-      return {
-        exists: false,
-        message: "Vendor profile not complete => redirect to vendor profile",
-      };
+      return { exists: false, message: "Vendor profile not found. Please complete your profile." };
     }
 
-    if (vendor.status === VENDOR_STATUS.PENDING) {
-      return {
-        exists: true,
-        status: "PENDING",
-        message: "Vendor profile not verified => redirect to vendor verification pending status page",
-      };
-    }
-
-    if (vendor.status === VENDOR_STATUS.REJECTED) {
-      return {
-        exists: true,
-        status: "REJECTED",
-        message: "Vendor profile rejected => redirect to vendor verification rejected status page",
-      };
-    }
-
-    if (vendor.status === VENDOR_STATUS.BLOCKED) {
-      return {
-        exists: true,
-        status: "BLOCKED",
-        message: "Vendor profile blocked => redirect to vendor verification blocked status page",
-      };
-    }
+    const statusMessages = {
+      [VENDOR_STATUS.PENDING]: "Your profile is under review. Please wait for admin approval.",
+      [VENDOR_STATUS.REJECTED]: "Your profile has been rejected. Please check for communications from the admin.",
+      [VENDOR_STATUS.BLOCKED]: "Your account has been blocked. Please contact support.",
+      [VENDOR_STATUS.VERIFIED]: "Vendor profile is verified and active."
+    };
 
     return {
-      exists: true,
-      status: VENDOR_STATUS.VERIFIED,
-      message: "Vendor profile complete => redirect to vendor dashboard",
+        exists: true,
+        status: vendor.status,
+        message: statusMessages[vendor.status] || "Unknown profile status."
     };
 
   } catch (error) {
@@ -158,10 +150,80 @@ export const checkProfile = async (data) => {
 };
 
 /**
- * Complete the vendor profile.
+ * @api {post} /api/vendor/completeProfile Complete Vendor Profile
+ * @apiName CompleteProfile
+ * @apiGroup Vendor
+ * @apiDescription Handles the full vendor onboarding process by verifying the OTP and saving the profile data within a single transaction. Sends notifications to admin and user.
+ *
+ * @apiParam {string} userId - The user's UUID.
+ * @apiParam {string} phoneNumber - The phone number of the user.
+ * @apiParam {string} otp - The OTP received by the user.
+ * @apiParam {string} latitude - The latitude of the user.
+ * @apiParam {string} longitude - The longitude of the user.
+ * @apiParam {string} aadhaarNumber - The Aadhaar number of the user.
+ * @apiParam {string} aadhaarUrlPath - The Aadhaar URL path of the user.
+ * @apiParam {string} shopType - The type of shop the user has.
+ * @apiParam {string} serviceType - The type of service the user provides.
+ * @apiParam {string} shopName - The name of the shop.
+ * @apiParam {string} addressLine1 - The first line of the address.
+ * @apiParam {string} addressLine2 - The second line of the address(optional).
+ * @apiParam {string} street - The street of the address.
+ * @apiParam {string} district - The district of the address.
+ * @apiParam {string} landmark - The landmark of the address(optional).
+ * @apiParam {string} city - The city of the address.
+ * @apiParam {string} state - The state of the address.
+ * @apiParam {string} pincode - The pincode of the address.
+ * @apiParam {string} shopDescription - The description of the shop.
+ * @apiParam {string} accountHolderName - The name of the account holder.
+ * @apiParam {string} accountNumber - The account number.
+ * @apiParam {string} ifscCode - The IFSC code.
+ * @apiParam {string} bankPassbookUrlPath - The bank passbook URL path.
+ * @apiParam {string} ownershipType - The ownership type of the user(optional).
+ * @apiParam {string} vendorServices - The services the user provides(optional).
+ * @apiParam {string} shopDocumentUrlPath - The shop document URL path(optional).
+ 
  * @param {Object} data - The data containing the user ID, phone number, OTP, latitude, longitude, and profile data.
+ * @param {string} data.userId - The user's UUID.
+ * @param {string} data.phoneNumber - The phone number of the user.
+ * @param {string} data.otp - The OTP received by the user.
+ * @param {string} data.latitude - The latitude of the user.
+ * @param {string} data.longitude - The longitude of the user.
+ * @param {string} data.aadhaarNumber - The Aadhaar number of the user.
+ * @param {string} data.aadhaarUrlPath - The Aadhaar URL path of the user.
+ * @param {string} data.shopType - The type of shop the user has.
+ * @param {string} data.serviceType - The type of service the user provides.
+ * @param {string} data.shopName - The name of the shop.
+ * @param {string} data.addressLine1 - The first line of the address.
+ * @param {string} data.addressLine2 - The second line of the address(optional).
+ * @param {string} data.street - The street of the address.
+ * @param {string} data.district - The district of the address.
+ * @param {string} data.landmark - The landmark of the address(optional).
+ * @param {string} data.city - The city of the address.
+ * @param {string} data.state - The state of the address.
+ * @param {string} data.pincode - The pincode of the address.
+ * @param {string} data.shopDescription - The description of the shop.
+ * @param {string} data.accountHolderName - The name of the account holder.
+ * @param {string} data.accountNumber - The account number.
+ * @param {string} data.ifscCode - The IFSC code.
+ * @param {string} data.bankPassbookUrlPath - The bank passbook URL path.
+ * @param {string} data.ownershipType - The ownership type of the user(optional).
+ * @param {string} data.vendorServices - The services the user provides(optional).
+ * @param {string} data.shopDocumentUrlPath - The shop document URL path(optional).
  * @param {Object} deviceInfo - The device information.
+ * @param {string} deviceInfo.ip - The IP address of the device.
+ * @param {string} deviceInfo.device - The type of device.
+ * @param {string} deviceInfo.browser - The name of the browser.
+ * @param {string} deviceInfo.version - The version of the browser.
+ * @param {string} deviceInfo.platform - The platform of the device.
  * @returns {Promise<Object>} - The result of the completion.
+ * 
+ * @apiSuccess {boolean} isProfileCompleted - Whether the profile is completed.
+ * @apiSuccess {string} message - A descriptive message about the profile completion.
+ * 
+ * @apiError {Error} 400 - If the user ID is invalid or invalid data provided.
+ * @apiError {Error} 409 - If a vendor profile already exists for the user.
+ * @apiError {Error} 429 - If the user has been locked out due to too many incorrect attempts.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const completeProfile = async (data, deviceInfo) => {
   const queryRunner = AppDataSource.createQueryRunner();
@@ -291,6 +353,37 @@ export const completeProfile = async (data, deviceInfo) => {
   }
 };
 
+/**
+ * @api {get} /api/vendor/getVendorDetails Get Vendor Details
+ * @apiName GetVendorDetails
+ * @apiGroup Vendor
+ * @apiDescription Gets the vendor details by user id.
+ *
+ * @param {Object} data - The data containing the user id.
+ * @param {string} data.userId - The user's UUID.
+ * @returns {Promise<Object>} - The result of the get.
+ * 
+ * @apiSuccess {Object} vendor - The vendor details.
+ * @apiSuccess {string} vendor.id - The vendor's id.
+ * @apiSuccess {string} vendor.name - The vendor's name.
+ * @apiSuccess {string} vendor.shopName - The vendor's shop name.
+ * @apiSuccess {string} vendor.serviceType - The vendor's service type.
+ * @apiSuccess {string} vendor.vendorServices - The vendor's services.
+ * @apiSuccess {string} vendor.city - The vendor's city.
+ * @apiSuccess {string} vendor.state - The vendor's state.
+ * @apiSuccess {string} vendor.shopDescription - The vendor's shop description.
+ * @apiSuccess {string} vendor.allTimeRating - The vendor's all time rating.
+ * @apiSuccess {string} vendor.allTimeReviewCount - The vendor's all time review count.
+ * @apiSuccess {string} vendor.currentMonthRating - The vendor's current month rating.
+ * @apiSuccess {string} vendor.currentMonthReviewCount - The vendor's current month review count.
+ * @apiSuccess {string} vendor.currentMonthBayesianScore - The vendor's current month bayesian score.
+ * @apiSuccess {string} vendor.vendorAvatarUrlPath - The vendor's avatar url.
+ * @apiSuccess {string} vendor.shopImageUrlPath - The vendor's shop image url.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
+ */
 export const getVendorDetails = async (data) => {
   try {
     const { userId } = data;
@@ -351,9 +444,23 @@ export const getVendorDetails = async (data) => {
 }
 
 /**
- * Save the vendor avatar url.
+ * @api {post} /api/vendor/saveVendorAvatarUrl Save Vendor Avatar URL
+ * @apiName SaveVendorAvatarUrl
+ * @apiGroup Vendor
+ * @apiDescription Saves the vendor avatar url by user id.
+ *
+ * @apiBody {string} s3Key - The s3 key of the vendor avatar url.
+ * 
  * @param {Object} data - The data containing the s3 key and user id.
+ * @param {string} data.s3Key - The s3 key of the vendor avatar url.
+ * @param {string} data.userId - The user's UUID.
  * @returns {Promise<Object>} - The result of the save.
+ * 
+ * @apiSuccess {string} message - A descriptive message about the vendor avatar url save.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const saveVendorAvatarUrl = async (data) => {
   try {
@@ -383,9 +490,21 @@ export const saveVendorAvatarUrl = async (data) => {
 }
 
 /**
- * Get the vendor avatar url.
+ * @api {get} /api/vendor/getVendorAvatarUrl Get Vendor Avatar URL
+ * @apiName GetVendorAvatarUrl
+ * @apiGroup Vendor
+ * @apiDescription Gets the vendor avatar url by user id.
+ *
  * @param {Object} data - The data containing the user id.
+ * @param {string} data.userId - The user's UUID.
  * @returns {Promise<Object>} - The result of the get.
+ * 
+ * @apiSuccess {string} message - A descriptive message about the vendor avatar url get.
+ * @apiSuccess {string} presignedUrl - The presigned url of the vendor avatar url.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const getVendorAvatarUrl = async (data) => {
   try {
@@ -416,9 +535,20 @@ export const getVendorAvatarUrl = async (data) => {
 }
 
 /**
- * Delete the vendor avatar url.
+ * @api {delete} /api/vendor/deleteVendorAvatarUrl Delete Vendor Avatar URL
+ * @apiName DeleteVendorAvatarUrl
+ * @apiGroup Vendor
+ * @apiDescription Deletes the vendor avatar url by user id.
+ *
  * @param {Object} data - The data containing the user id.
+ * @param {string} data.userId - The user's UUID.
  * @returns {Promise<Object>} - The result of the delete.
+ * 
+ * @apiSuccess {string} message - A descriptive message about the vendor avatar url delete.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const deleteVendorAvatarUrl = async (data) => {
   try {
@@ -449,9 +579,23 @@ export const deleteVendorAvatarUrl = async (data) => {
 }
 
 /**
- * Save the shop image url.
+ * @api {post} /api/vendor/saveShopImageUrl Save Shop Image URL
+ * @apiName SaveShopImageUrl
+ * @apiGroup Vendor
+ * @apiDescription Saves the shop image url by user id.
+ *
+ * @apiBody {string} s3Key - The s3 key of the shop image url.
+ * 
  * @param {Object} data - The data containing the s3 key and user id.
+ * @param {string} data.s3Key - The s3 key of the shop image url.
+ * @param {string} data.userId - The user's UUID.
  * @returns {Promise<Object>} - The result of the save.
+ * 
+ * @apiSuccess {string} message - A descriptive message about the shop image url save.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const saveShopImageUrl = async (data) => {
   try {
@@ -481,9 +625,21 @@ export const saveShopImageUrl = async (data) => {
 }
 
 /**
- * Get the shop image url.
+ * @api {get} /api/vendor/getShopImageUrl Get Shop Image URL
+ * @apiName GetShopImageUrl
+ * @apiGroup Vendor
+ * @apiDescription Gets the shop image url by user id.
+ *
  * @param {Object} data - The data containing the user id.
+ * @param {string} data.userId - The user's UUID.
  * @returns {Promise<Object>} - The result of the get.
+ * 
+ * @apiSuccess {string} message - A descriptive message about the shop image url get.
+ * @apiSuccess {string} presignedUrl - The presigned url of the shop image url.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const getShopImageUrl = async (data) => {
   try {
@@ -514,9 +670,20 @@ export const getShopImageUrl = async (data) => {
 }
 
 /**
- * Delete the shop image url.
+ * @api {delete} /api/vendor/deleteShopImageUrl Delete Shop Image URL
+ * @apiName DeleteShopImageUrl
+ * @apiGroup Vendor
+ * @apiDescription Deletes the shop image url by user id.
+ *
  * @param {Object} data - The data containing the user id.
+ * @param {string} data.userId - The user's UUID.
  * @returns {Promise<Object>} - The result of the delete.
+ * 
+ * @apiSuccess {string} message - A descriptive message about the shop image url delete.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const deleteShopImageUrl = async (data) => {
   try {
@@ -548,9 +715,23 @@ export const deleteShopImageUrl = async (data) => {
 }
 
 /**
- * Save the work image url.
+ * @api {post} /api/vendor/saveWorkImageUrl Save Work Image URL
+ * @apiName SaveWorkImageUrl
+ * @apiGroup Vendor
+ * @apiDescription Saves the work image url by user id.
+ *
+ * @apiBody {string} s3Key - The s3 key of the work image url.
+ * 
  * @param {Object} data - The data containing the s3 key and user id.
+ * @param {string} data.s3Key - The s3 key of the work image url.
+ * @param {string} data.userId - The user's UUID.
  * @returns {Promise<Object>} - The result of the save.
+ * 
+ * @apiSuccess {string} message - A descriptive message about the work image url save.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const saveWorkImageUrl = async (data) => {
   try {
@@ -587,9 +768,27 @@ export const saveWorkImageUrl = async (data) => {
 }
 
 /**
- * Get the vendor work images.
+ * Get Vendor Work Images
+ * @apiName GetVendorWorkImages
+ * @apiGroup Vendor
+ * @apiDescription Gets the vendor work images by user id.
+ *
  * @param {Object} data - The data containing the user id.
+ * @param {string} data.userId - The user's UUID.
  * @returns {Promise<Object>} - The result of the get.
+ * 
+ * @apiSuccess {string} message - A descriptive message about the vendor work images get.
+ * @apiSuccess {Object[]} workImages - The vendor work images.
+ * 
+ * @apiSuccess {string} workImages.id - The UUID of the work image.
+ * @apiSuccess {string} workImages.vendorId - The UUID of the vendor.
+ * @apiSuccess {string} workImages.s3Key - The S3 key of the work image.
+ * @apiSuccess {string} workImages.uploadedAt - The timestamp of the work image.
+ * @apiSuccess {string} workImages.presignedUrl - The presigned URL of the work image.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const getVendorWorkImages = async (data) => {
   try {
@@ -633,9 +832,23 @@ export const getVendorWorkImages = async (data) => {
 }
 
 /**
- * Delete the vendor work image.
+ * Delete Vendor Work Image
+ * @apiName DeleteVendorWorkImage
+ * @apiGroup Vendor
+ * @apiDescription Deletes the vendor work image by user id.
+ *
+ * @apiBody {string} s3Key - The s3 key of the work image url.
+ * 
  * @param {Object} data - The data containing the s3 key and user id.
+ * @param {string} data.s3Key - The s3 key of the work image url.
+ * @param {string} data.userId - The user's UUID.
  * @returns {Promise<Object>} - The result of the delete.
+ * 
+ * @apiSuccess {string} message - A descriptive message about the vendor work image delete.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const deleteVendorWorkImage = async (data) => {
   try {
