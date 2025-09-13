@@ -81,20 +81,92 @@ const ATTEMPT_WINDOW_SECONDS = 300; // 5 mins window for counting attempts
 
 //========================================JWT HELPERS=====================================================
 
+/**
+ * Generates a short-lived access token for a user.
+ * @param {object} payload - The user data to include in the token.
+ * @returns {string} The generated JWT access token.
+ */
 export const generateAccessToken = (payload) => {
   return jwt.sign(payload, ACCESS_TOKEN_SECRET, { expiresIn: '7d' });
 };
 
+/**
+ * Generates a long-lived refresh token for a user.
+ * @param {object} payload - The user data to include in the token.
+ * @returns {string} The generated JWT refresh token.
+ */
 export const generateRefreshToken = (payload) => {
   return jwt.sign(payload, REFRESH_TOKEN_SECRET, { expiresIn: '30d' });
+};
+
+//================================= INTERNAL HELPERS =====================================================
+
+/**
+ * Checks if a given identifier (email/phone) has exceeded the rate limit for OTP requests.
+ * @param {string} identifier - The email or phone number to check.
+ * @throws {Error} 429 - If the rate limit is exceeded.
+ */
+const _checkRateLimit = async (identifier) => {
+    const rateLimitKey = `otp-limit:${identifier}`;
+    const currentRequests = await redis.incr(rateLimitKey);
+    if (currentRequests === 1) {
+        await redis.expire(rateLimitKey, RATE_LIMIT_WINDOW_SECONDS);
+    }
+    if (currentRequests > RATE_LIMIT_MAX_REQUESTS) {
+        logger.warn(`Rate limit exceeded for identifier: ${identifier}`);
+        throw sendError('Too many requests. Please wait a minute before trying again.', 429);
+    }
+};
+
+/**
+ * Handles an incorrect OTP attempt, tracking attempts and enforcing lockouts.
+ * @param {string} identifier - The email or phone number.
+ * @param {import('typeorm').Repository} otpRepo - The repository for the OTP entity.
+ * @throws {Error} 429 - If max attempts are reached and the user is locked out.
+ * @throws {Error} 400 - For an invalid OTP attempt.
+ */
+const _handleIncorrectOtpAttempt = async (identifier, otpRepo) => {
+    const attemptKey = `otp-attempt:${identifier}`;
+    const attempts = await redis.incr(attemptKey);
+
+    if (attempts === 1) {
+        await redis.expire(attemptKey, ATTEMPT_WINDOW_SECONDS);
+    }
+
+    if (attempts >= MAX_OTP_ATTEMPTS) {
+        const lockoutKey = `otp-lockout:${identifier}`;
+        await redis.set(lockoutKey, 'locked', 'EX', LOCKOUT_DURATION_SECONDS);
+        await otpRepo.delete({ [otpRepo.metadata.columns[1].propertyName]: identifier }); // Invalidate current OTP
+        await redis.del(attemptKey);
+        logger.warn(`OTP verification locked for identifier: ${identifier}`);
+        throw sendError(`Too many incorrect attempts. Please try again in 5 minutes.`, 429);
+    }
+
+    throw sendError('Invalid OTP.', 400);
 };
 
 //=================================REFRESH TOKEN SERVICES=====================================================
 
 /**
+ * @api {post} /api/auth/refreshAccessToken Refresh Access Token
+ * @apiName RefreshAccessToken
+ * @apiGroup Authentication
+ * @apiDescription Refreshes a user's access token, if the refresh token is expired, it will be used to get new access token.
+ *
+ * @apiBody {string} refreshToken - The user's refresh token.
+ *
+ * @param {Object} data 
+ * @param {string} data.refreshToken - The user's refresh token.
+ * @returns {Promise<Object>} { newAccessToken: string, newRefreshToken: string, message: string }
  * 
- * @param {string} refreshToken 
- * @returns {Promise<Object>} An object containing the new access token, refresh token, and a message
+ * @apiSuccess {string} newAccessToken - The user's new access token.
+ * @apiSuccess {string} newRefreshToken - The user's new refresh token.
+ * @apiSuccess {string} message - A success confirmation message.
+ *
+ * @apiError {Error} 400 - For invalid data format.
+ * @apiError {Error} 401 - For invalid refresh token.
+ * @apiError {Error} 403 - If the user is blocked.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const refreshAccessToken = async (refreshToken) => { 
     try {
@@ -140,7 +212,7 @@ export const refreshAccessToken = async (refreshToken) => {
             }
         });
 
-        if (user.isBlocked) throw sendError('This account has been blocked', 403);
+        if (user.isBlocked) throw sendError('This account has been blocked. Please contact support.', 403);
 
         // Generate new tokens
         const newAccessToken = generateAccessToken({ id: user.id, email: user.email, role: user.role, isBlocked: user.isBlocked });
@@ -176,15 +248,33 @@ export const refreshAccessToken = async (refreshToken) => {
 //=======================================AUTHENTICATION SERVICES=====================================================
 
 /**
- * Creates a new user and, if the role is 'customer', a corresponding customer profile.
- * 
+ * @api {post} /api/auth/signup Signup
+ * @apiName Signup
+ * @apiGroup Authentication
+ * @apiDescription Creates a new user and, if the role is 'customer', a corresponding customer profile auto generated, if the role is 'vendor', a corresponding vendor profile has to be completed.
+ *
+ * @apiBody {string} email - The user's email.
+ * @apiBody {string} name - The user's name.
+ * @apiBody {string} password - The user's password.
+ * @apiBody {string} role - The user's role.
+ * @apiBody {string} phoneNumber - The user's phone number.
+ *
  * @param {Object} data 
- * @param {string} data.email 
- * @param {string} data.name 
- * @param {string} data.password 
- * @param {string} data.role 
- * @param {string} data.phoneNumber 
- * @returns {Promise<Object>}
+ * @param {string} data.email - The user's email.
+ * @param {string} data.name - The user's name.
+ * @param {string} data.password - The user's password.
+ * @param {string} data.role - The user's role.
+ * @param {string} data.phoneNumber - The user's phone number.
+ * @returns {Promise<Object>} { message: "User created successfully", status: true }
+ *
+ * @apiSuccess {string} message - A success confirmation message.
+ * @apiSuccess {boolean} status - True indicating success.
+ *
+ * @apiError {Error} 400 - If the user already exists.
+ * @apiError {Error} 401 - If the password is not hashed.
+ * @apiError {Error} 403 - If the role is not valid.
+ * @apiError {Error} 404 - If the phone number is not valid.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const signup = async (data) => { 
 
@@ -263,11 +353,36 @@ export const signup = async (data) => {
 };
 
 /**
- * 
+ * @api {post} /api/auth/loginWithEmail Login With Email
+ * @apiName LoginWithEmail
+ * @apiGroup Authentication
+ * @apiDescription Logs in a user with their email and password.
+ *
+ * @apiBody {string} email - The user's email.
+ * @apiBody {string} password - The user's password.
+ *
  * @param {Object} data 
- * @param {string} data.email 
- * @param {string} data.password 
- * @returns {Promise<Object>} User details, accessToken, refreshToken, message
+ * @param {string} data.email - The user's email.
+ * @param {string} data.password - The user's password.
+ * @returns {Promise<Object>} { user: { id: string, email: string, role: string, name: string, phoneNumber: string, createdAt: string, lastLogin: string }, accessToken: string, refreshToken: string, message: string }
+ * 
+ * @apiSuccess {Object} user - The user's details.
+ * @apiSuccess {string} user.id - The user's ID.
+ * @apiSuccess {string} user.email - The user's email.
+ * @apiSuccess {string} user.role - The user's role.
+ * @apiSuccess {string} user.name - The user's name.
+ * @apiSuccess {string} user.phoneNumber - The user's phone number.
+ * @apiSuccess {string} user.createdAt - The user's creation date.
+ * @apiSuccess {string} user.lastLogin - The user's last login date.
+ * @apiSuccess {string} accessToken - The user's access token.
+ * @apiSuccess {string} refreshToken - The user's refresh token.
+ * @apiSuccess {string} message - A success confirmation message.
+ *
+ * @apiError {Error} 400 - For invalid data format.
+ * @apiError {Error} 401 - For invalid password.
+ * @apiError {Error} 403 - If the user is blocked.
+ * @apiError {Error} 404 - If the user is not found.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const loginWithEmail = async (data) => {
     /*
@@ -337,14 +452,22 @@ export const loginWithEmail = async (data) => {
 };
 
 /**
- * Checks if a user exists in the database
- * 
+ * @api {post} /api/auth/checkEmail Check Email
+ * @apiName CheckEmail
+ * @apiGroup Authentication
+ * @apiDescription Checks if a user exists in the database.
+ *
+ * @apiBody {string} email - The user's email.
+ *
  * @param {Object} data 
- * @param {string} data.email 
- * @returns {Promise<Object>} An object with a boolean 'exists' property
+ * @param {string} data.email - The user's email.
+ * @returns {Promise<Object>} { exist: boolean }
  * 
+ * @apiSuccess {boolean} exist - True if the user exists, false if they don't.
+ *
+ * @apiError {Error} 400 - For invalid data format.
+ * @apiError {Error} 500 - Internal Server Error.
  */
-
 export const checkEmail = async (data) => {
     try {
         const validatedData = checkEmailSchema.parse(data);
@@ -369,11 +492,38 @@ export const checkEmail = async (data) => {
 }
 
 /**
- * If the user exists, it returns their details and JWTs.
+ * @api {post} /api/auth/loginWithGoogle Login With Google
+ * @apiName LoginWithGoogle
+ * @apiGroup Authentication
+ * @apiDescription Logs in a user with a Google ID token, if the user exists, it returns their details and JWTs.
  * If the user does not exist, it returns the verified Google email to initiate a signup flow.
+ *
+ * @apiBody {string} idToken - The user's Google ID token.
+ *
+ * @param {Object} data 
+ * @param {string} data.idToken - The user's Google ID token.
+ * @returns {Promise<Object>} { message: "Login successful", status: true, exist: true, user: { id: string, email: string, role: string, name: string, phoneNumber: string, createdAt: string, lastLogin: string }, accessToken: string, refreshToken: string } or { message: "User not found", status: false, exist: false, email: string, exist: false }
  * 
- * @param {Object} idToken 
- * @returns {Promise<Object>} { message: "Login successful", status: true, exist: true } or { message: "User not found", status: false, exist: false }
+ * @apiSuccess {string} message - A success confirmation message.
+ * @apiSuccess {boolean} status - True indicating success.
+ * @apiSuccess {boolean} exist - True if the user exists, false if they don't.
+ * @apiSuccess {Object} user - The user's details.
+ * @apiSuccess {string} user.id - The user's ID.
+ * @apiSuccess {string} user.email - The user's email.
+ * @apiSuccess {string} user.role - The user's role.
+ * @apiSuccess {string} user.name - The user's name.
+ * @apiSuccess {string} user.phoneNumber - The user's phone number.
+ * @apiSuccess {string} user.createdAt - The user's creation date.
+ * @apiSuccess {string} user.lastLogin - The user's last login date.
+ * @apiSuccess {string} accessToken - The user's access token.
+ * @apiSuccess {string} refreshToken - The user's refresh token.
+ * @apiSuccess {string} email - The user's email.
+ * @apiSuccess {boolean} exist - True if the user exists, false if they don't.
+ *
+ * @apiError {Error} 400 - For invalid data format.
+ * @apiError {Error} 401 - For invalid Google token.
+ * @apiError {Error} 403 - If the user is blocked.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const loginWithGoogle = async (idToken) => { 
     try {
@@ -459,28 +609,29 @@ export const loginWithGoogle = async (idToken) => {
 };
 
 /**
- * A 6 digit OTP will be generated and sent to the user's email and also the OTP will be saved in OtpEmail table with an expiration time of 10 minutes
- * If the OTP is send mutliple times then the last send otp will remain in database
- * 
+ * @api {post} /api/auth/sendEmailOtp Send Email OTP
+ * @apiName SendEmailOtp
+ * @apiGroup Authentication
+ * @apiDescription Generates and sends a 6-digit OTP to the user's email. Enforces rate limiting.
+ *
+ * @apiBody {string} email - The recipient's email address.
+ *
  * @param {Object} data 
  * @param {string} data.email - The recipient's email address.
- * @returns {Promise<Object>} { message: "OTP sent successfully", status: true } or { message: "Failed to send email", statusCode: 500 }
+ * @returns {Promise<Object>} { message: "An OTP has been sent to your email address.", status: true } or { message: "Failed to send email", statusCode: 500 }
+ * 
+ * @apiSuccess {string} message - A success confirmation message.
+ * @apiSuccess {boolean} status - True indicating success.
+ *
+ * @apiError {Error} 400 - If the email format is invalid.
+ * @apiError {Error} 429 - If too many requests are made in a short period.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const sendEmailOtp = async (data) => {
     try {
         const { email } = emailSchema.parse(data);
         
-        const rateLimitKey = `otp-limit:${email}`;
-        const currentRequests = await redis.incr(rateLimitKey);
-
-        if (currentRequests === 1) {
-            await redis.expire(rateLimitKey, RATE_LIMIT_WINDOW_SECONDS);
-        }
-
-        if (currentRequests > RATE_LIMIT_MAX_REQUESTS) {
-            logger.warn(`Rate limit exceeded for email: ${email}`);
-            throw sendError('Too many requests. Please wait a minute before trying again.', 429);
-        }
+        await _checkRateLimit(email);
 
         const otp = crypto.randomInt(100000, 999999).toString(); // Generate a 6-digit OTP
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
@@ -528,12 +679,26 @@ export const sendEmailOtp = async (data) => {
 
 
 /**
- * Verifies an email OTP
- * 
+ * @api {post} /api/auth/verifyEmailOtp Verify Email OTP
+ * @apiName VerifyEmailOtp
+ * @apiGroup Authentication
+ * @apiDescription Verifies an email OTP and provides a short-lived verification token upon success. Enforces brute-force protection.
+ *
+ * @apiBody {string} email - The user's email.
+ * @apiBody {string} otp - The 6-digit OTP.
+ *
  * @param {Object} data 
- * @param {string} data.email 
- * @param {string} data.otp 
- * @returns {Promise<Object>} { message: "OTP verified successfully", status: true } or { message: "OTP expired", statusCode: 400 }
+ * @param {string} data.email - The user's email.
+ * @param {string} data.otp - The 6-digit OTP.
+ * @returns {Promise<Object>} { message: "OTP verified successfully", verificationToken: string, status: true } or { message: "OTP expired", statusCode: 400 }
+ * 
+ * @apiSuccess {string} message - A success confirmation message.
+ * @apiSuccess {string} verificationToken - A short-lived JWT for subsequent actions (like signup/password reset).
+ * @apiSuccess {boolean} status - True indicating success.
+ *
+ * @apiError {Error} 400 - For invalid OTP format, expired OTP, or incorrect OTP.
+ * @apiError {Error} 429 - If the user is locked out due to too many incorrect attempts.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const verifyEmailOtp = async (data) => {
     try {
@@ -558,28 +723,10 @@ export const verifyEmailOtp = async (data) => {
         }
 
         if (otpRecord.otp !== otp) {
-            // Handle incorrect OTP attempt
-            const attemptKey = `otp-attempt:${email}`;
-            const attempts = await redis.incr(attemptKey);
-
-            if (attempts === 1) {
-                await redis.expire(attemptKey, ATTEMPT_WINDOW_SECONDS);
-            }
-
-            if (attempts >= MAX_OTP_ATTEMPTS) {
-                // If max attempts reached, lock the user out and delete the OTP record
-                await redis.set(lockoutKey, 'locked', 'EX', LOCKOUT_DURATION_SECONDS);
-                await otpEmailRepository.delete({ email }); // Invalidate the current OTP
-                await redis.del(attemptKey); // Clean up the attempt counter
-                logger.warn(`OTP verification locked for email: ${email}`);
-                throw sendError(`Too many incorrect attempts. Please try again in ${LOCKOUT_DURATION_SECONDS / 60} minutes.`, 429);
-            }
-        
-            throw sendError('Invalid OTP.', 400);
+            await _handleIncorrectOtpAttempt(email, otpEmailRepository);
         }
 
-        // Success! OTP is valid.
-        // Clean up the OTP record and any attempt counters from Redis.
+        // Success! OTP is valid. Clean up the OTP record and any attempt counters from Redis.
         await otpEmailRepository.delete({ email });
         const attemptKey = `otp-attempt:${email}`;
         await redis.del(attemptKey);
@@ -603,28 +750,29 @@ export const verifyEmailOtp = async (data) => {
 }
 
 /**
- * A 6 digit OTP will be generated and sent to the user's phone and also the OTP will be saved in OtpPhone table with an expiration time of 10 minutes
- * If the OTP is send mutliple times then the last send otp will remain in database
- * 
+ * @api {post} /api/auth/sendPhoneOtp Send Phone OTP
+ * @apiName SendPhoneOtp
+ * @apiGroup Authentication
+ * @apiDescription Generates and sends a 6-digit OTP to the user's phone number. Enforces rate limiting.
+ *
+ * @apiBody {string} phoneNumber - The recipient's phone number.
+ *
  * @param {Object} data 
  * @param {string} data.phoneNumber - The recipient's phone number.
- * @returns {Promise<Object>} { message: "OTP sent successfully", status: true } or { message: "Failed to send phone", statusCode: 500 }
+ * @returns {Promise<Object>} { message: "An OTP has been sent to your phone number.", status: true } or { message: "Failed to send phone", statusCode: 500 }
+ * 
+ * @apiSuccess {string} message - A success confirmation message.
+ * @apiSuccess {boolean} status - True indicating success.
+ *
+ * @apiError {Error} 400 - If the phone number format is invalid.
+ * @apiError {Error} 429 - If too many requests are made in a short period.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const sendPhoneOtp = async (data) => {
     try {
         const { phoneNumber } = phoneSchema.parse(data);
         
-        const rateLimitKey = `otp-limit:${phoneNumber}`;
-        const currentRequests = await redis.incr(rateLimitKey);
-
-        if (currentRequests === 1) {
-            await redis.expire(rateLimitKey, RATE_LIMIT_WINDOW_SECONDS);
-        }
-
-        if (currentRequests > RATE_LIMIT_MAX_REQUESTS) {
-            logger.warn(`Rate limit exceeded for phone: ${phoneNumber}`);
-            throw sendError('Too many requests. Please wait a minute before trying again.', 429);
-        }
+        await _checkRateLimit(phoneNumber);
 
         const otp = crypto.randomInt(100000, 999999).toString(); // Generate a 6-digit OTP
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
@@ -669,12 +817,26 @@ export const sendPhoneOtp = async (data) => {
 }
 
 /**
- * Verifies a phone OTP
- * 
+ * @api {post} /api/auth/verifyPhoneOtp Verify Phone OTP
+ * @apiName VerifyPhoneOtp
+ * @apiGroup Authentication
+ * @apiDescription Verifies an phone OTP and provides a short-lived verification token upon success. Enforces brute-force protection.
+ *
+ * @apiBody {string} phoneNumber - The user's phone number.
+ * @apiBody {string} otp - The 6-digit OTP.
+ *
  * @param {Object} data 
- * @param {string} data.phoneNumber 
- * @param {string} data.otp 
- * @returns {Promise<Object>} { message: "OTP verified successfully", status: true } or { message: "OTP expired", statusCode: 400 }
+ * @param {string} data.phoneNumber - The user's phone number.
+ * @param {string} data.otp - The 6-digit OTP.
+ * @returns {Promise<Object>} { message: "OTP verified successfully", verificationToken: string, status: true } or { message: "OTP expired", statusCode: 400 }
+ * 
+ * @apiSuccess {string} message - A success confirmation message.
+ * @apiSuccess {string} verificationToken - A short-lived JWT for subsequent actions (like signup/password reset).
+ * @apiSuccess {boolean} status - True indicating success.
+ *
+ * @apiError {Error} 400 - For invalid OTP format, expired OTP, or incorrect OTP.
+ * @apiError {Error} 429 - If the user is locked out due to too many incorrect attempts.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const verifyPhoneOtp = async (data) => {
     try {
@@ -699,24 +861,7 @@ export const verifyPhoneOtp = async (data) => {
         }
 
         if (otpRecord.otp !== otp) {
-            // Handle incorrect OTP attempt
-            const attemptKey = `otp-attempt:${phoneNumber}`;
-            const attempts = await redis.incr(attemptKey);
-
-            if (attempts === 1) {
-                await redis.expire(attemptKey, ATTEMPT_WINDOW_SECONDS);
-            }
-
-            if (attempts >= MAX_OTP_ATTEMPTS) {
-                // If max attempts reached, lock the user out and delete the OTP record
-                await redis.set(lockoutKey, 'locked', 'EX', LOCKOUT_DURATION_SECONDS);
-                await otpPhoneRepository.delete({ phoneNumber }); // Invalidate the current OTP
-                await redis.del(attemptKey); // Clean up the attempt counter
-                logger.warn(`OTP verification locked for phone: ${phoneNumber}`);
-                throw sendError(`Too many incorrect attempts. Please try again in ${LOCKOUT_DURATION_SECONDS / 60} minutes.`, 429);
-            }
-        
-            throw sendError('Invalid OTP.', 400);
+            await _handleIncorrectOtpAttempt(phoneNumber, otpPhoneRepository);
         }
 
         // Success! OTP is valid.
@@ -744,12 +889,24 @@ export const verifyPhoneOtp = async (data) => {
 }
 
 /**
- * Securely resets a user's password after they have verified an OTP.
- * This function MUST be protected by the `verifyOtpToken` middleware.
+ * @api {post} /api/auth/resetPassword Reset Password
+ * @apiName ResetPassword
+ * @apiGroup Authentication
+ * @apiDescription Resets a user's password after they have verified an OTP.
+ *
+ * @apiBody {string} newPassword - The new password.
+ *
  * @param {Object} data 
- * @param {string} data.email - The email from the decoded, verified OTP token.
- * @param {string} data.newPassword 
- * @returns {Promise<Object>} 
+ * @param {string} data.email - The user's email.
+ * @param {string} data.newPassword - The new password.
+ * @returns {Promise<Object>} { message: "Password has been reset successfully. Please log in again.", status: true } or { message: "User not found", statusCode: 404 }
+ * 
+ * @apiSuccess {string} message - A success confirmation message.
+ * @apiSuccess {boolean} status - True indicating success.
+ *
+ * @apiError {Error} 400 - For invalid data format.
+ * @apiError {Error} 404 - If the user is not found.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const resetPassword = async (data) => {
     try {
@@ -793,11 +950,21 @@ export const resetPassword = async (data) => {
 }
 
 /**
- * This function MUST be called after the `verifyAccessToken` middleware.
- * 
+ * @api {post} /api/auth/logout Logout
+ * @apiName Logout
+ * @apiGroup Authentication
+ * @apiDescription Logs out a user by invalidating their refresh token.
+ *
  * @param {Object} data 
- * @param {string} data.userId 
+ * @param {string} data.userId - The user's ID.
  * @returns {Promise<Object>} { message: "Logout successful", status: true } or { message: "User not found", statusCode: 404 }
+ * 
+ * @apiSuccess {string} message - A success confirmation message.
+ * @apiSuccess {boolean} status - True indicating success.
+ *
+ * @apiError {Error} 400 - For invalid data format.
+ * @apiError {Error} 404 - If the user is not found.
+ * @apiError {Error} 500 - Internal Server Error.
  */
 export const logout = async (data) => {
     try {
