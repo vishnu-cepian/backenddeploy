@@ -26,17 +26,18 @@ const refundRepo = AppDataSource.getRepository(Refunds);
 //=================== HELPER FUNCTIONS ====================
 
 /**
- * A reusable helper to create an entry in the OrderStatusTimeline table.
- * Must be called within an active transaction.
- * @param {QueryRunner} queryRunner - The active TypeORM query runner.
- * @param {string} orderId - The ID of the order.
- * @param {string|null} previousStatus - The previous status of the order.
+ * @description A crucial helper to create an audit trail entry in the OrderStatusTimeline table.
+ * It records the transition of an order from one state to another, who changed it, and when.
+ * THIS MUST ALWAYS BE CALLED WITHIN AN ACTIVE DATABASE TRANSACTION to ensure data consistency.
+ * @param {import('typeorm').QueryRunner} queryRunner - The active TypeORM query runner.
+ * @param {string} orderId - The UUID of the order being updated.
+ * @param {string|null} previousStatus - The status the order is transitioning from (null for creation).
  * @param {string} newStatus - The new status of the order.
- * @param {string} changedById - The ID of the user/system making the change.
- * @param {string} changedByRole - The role of the user/system.
- * @param {string|null} notes - Optional notes about the status change.
+ * @param {string} changedById - The UUID of the user or system responsible for the change.
+ * @param {string} changedByRole - The role of the entity making the change (e.g., 'CUSTOMER', 'SYSTEM').
+ * @param {string|null} [notes=null] - Optional notes providing context for the status change.
+ * @returns {Promise<void>}
  */
-
 export const createTimelineEntry = async (queryRunner, orderId, previousStatus, newStatus, changedById, changedByRole, notes = null) => {
     const timelineEntry = queryRunner.manager.create(OrderStatusTimeline, {
         orderId,
@@ -52,12 +53,32 @@ export const createTimelineEntry = async (queryRunner, orderId, previousStatus, 
 
 //=================== WEBHOOK HANDLER ====================
 
+
 /**
- * Handles incoming webhooks from Razorpay to process payment events.
- * This function is secure, idempotent, and transactional.
+ * @api {post} /api/webhook/handleRazorpayPaymentWebhook Razorpay Payment Webhook
+ * @apiName HandleRazorpayPaymentWebhook
+ * @apiGroup Webhook
+ * @apiDescription
+ * This is the primary endpoint for receiving and processing payment-related events from Razorpay.
+ * It is designed to be secure, idempotent, and transactional.
  *
- * @param {Object} req 
- * @param {Object} res 
+ * ### Event Flow:
+ *
+ * 1.  **Signature Verification**: The first step is to cryptographically verify the webhook signature to ensure the request is genuinely from Razorpay.
+ *
+ * 2.  **`payment.failed` Event**: If a payment fails, this webhook captures the failure details and logs them in the `PaymentFailures` table for auditing and analysis, without affecting any existing order data.
+ *
+ * 3.  **`payment.captured` Event**: This is the most critical flow. When a payment is successful, this block executes a large database transaction to:
+ * -   **Validate**: It locks the order row to prevent race conditions and verifies that the order is still `PENDING` and the payment amount matches the final quote.
+ * -   **Update Entities**: It creates a `Payments` record, marks the `OrderQuote` as processed, and updates the main `Order` entity with the selected vendor, payment details, and transitions its status to `IN_PROGRESS`.
+ * -   **Update Related Entities**: It finalizes the order for the chosen vendor (`FINALIZED`), freezes the order for all other vendors who quoted (`FROZEN`), and increments the vendor's `in-progress` order stats.
+ * -   **Trigger Logistics**: If the order requires the customer to provide cloth, it creates `DeliveryTracking` and `Outbox` records to initiate the pickup process via a separate worker.
+ * -   **Queue Notifications**: After a successful transaction, it queues a series of push notifications and emails to both the customer and the vendor.
+ *
+ * @apiWarning **Fail-Safe Refund Mechanism**: If any step within the `payment.captured` database transaction fails, the entire transaction is rolled back. The `catch` block then immediately triggers an API call to Razorpay to refund the entire payment to the customer. This ensures the customer is never charged if the system fails to process their order correctly. This is a critical safety feature.
+ *
+ * @apiError {Error} 400 - If the webhook signature is invalid.
+ * @apiError {Error} 500 - If processing fails and a refund is attempted.
  */
 export const handleRazorpayPaymentWebhook = async(req, res) => {
     
@@ -310,6 +331,13 @@ export const handleRazorpayPaymentWebhook = async(req, res) => {
 }
 
 //=================== HELPER FUNCTION ====================
+/**
+ * @description Creates a standardized update payload for the Payouts entity based on the webhook data.
+ * @param {object} payout - The existing payout entity from the database.
+ * @param {object} payoutEntity - The `entity` object from the Razorpay webhook payload.
+ * @param {string} statusKey - The internal key representing the current status.
+ * @returns {object} The object to be used for updating the payout record.
+ */
 const createUpdatePayload = (payout, payoutEntity, statusKey) => {
     const dateObject = new Date(payoutEntity.created_at * 1000);
     const isoString = dateObject.toISOString();
@@ -329,11 +357,33 @@ const createUpdatePayload = (payout, payoutEntity, statusKey) => {
 
 
 /**
- * Handles incoming webhooks from Razorpay to process payout events.
- * This function is secure, idempotent, and transactional.
+ * @api {post} /api/webhook/handleRazorpayPayoutWebhook Razorpay Payout Webhook
+ * @apiName HandleRazorpayPayoutWebhook
+ * @apiGroup Webhook
+ * @apiDescription
+ * This endpoint processes status updates for vendor payouts from RazorpayX. It tracks the entire lifecycle of a payout from creation to completion or failure.
+ * The logic is designed to be secure, idempotent, and transactional.
  *
- * @param {Object} req 
- * @param {Object} res 
+ * ### Payout Lifecycle Events Handled:
+ * - `payout.pending`: Payout is created but pending approval.
+ * - `payout.rejected`: Payout was rejected by an admin.
+ * - `payout.queued`: Payout is approved and in the queue for processing by the bank.
+ * - `payout.initiated`: Bank processing has started.
+ * - `payout.processed`: Payout was successful. The UTR is recorded.
+ * - `payout.reversed`: Payout was reversed by the bank after being marked successful.
+ * - `payout.failed`: Payout failed. The failure reason is recorded.
+ * - `payout.updated`: A generic event that can signify a change to any of the above states.
+ *
+ * ### Event Flow:
+ *
+ * 1.  **Signature Verification**: Cryptographically verifies the webhook signature to ensure authenticity.
+ * 2.  **Find Payout**: Locates the corresponding payout record in the database using the `payout_id` from the webhook.
+ * 3.  **Event Mapping**: Uses an `eventHandlers` map to translate the incoming Razorpay event into a consistent internal key (e.g., `payout.rejected` maps to `payout_rejected`). A separate map (`statusToDbKeyMap`) is used for the generic `payout.updated` event to ensure the correct key is used.
+ * 4.  **Idempotency Check**: Before processing, it checks the `payout_status_history` JSONB field. If a timestamp already exists for the current event (e.g., `payout_rejected_at` is not null), the webhook is considered a duplicate and is ignored.
+ * 5.  **Transactional Update**: All database changes occur within a transaction. It updates the payout's `status`, and adds a new timestamp and description to the `payout_status_history` and `payout_status_description` JSONB columns.
+ *
+ * @apiError {Error} 400 - If the webhook signature is invalid or the payload is missing required fields.
+ * @apiError {Error} 500 - If any part of the database transaction fails.
  */
 export const handleRazorpayPayoutWebhook = async(req, res) => {
 
