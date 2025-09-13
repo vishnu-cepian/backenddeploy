@@ -8,7 +8,7 @@ import { OtpPhone } from "../entities/OtpPhone.mjs";
 import { VendorImages } from "../entities/VendorImages.mjs";
 import { getPresignedViewUrl, deleteFile } from "./s3service.mjs";
 import { cacheOrFetch, delCache } from "../utils/cache.mjs";
-import { VENDOR_STATUS, SHOP_TYPE, OWNERSHIP_TYPE, SERVICE_TYPE, ORDER_VENDOR_STATUS } from "../types/enums/index.mjs";
+import { VENDOR_STATUS, SHOP_TYPE, SERVICE_TYPE, ORDER_VENDOR_STATUS } from "../types/enums/index.mjs";
 import { redis } from "../config/redis-config.mjs";
 import { emailQueue } from "../queues/notification/email/emailQueue.mjs";
 import { OrderVendors } from "../entities/OrderVendors.mjs";
@@ -380,7 +380,6 @@ export const completeProfile = async (data, deviceInfo) => {
  * @apiSuccess {string} vendor.vendorAvatarUrlPath - The vendor's avatar url.
  * @apiSuccess {string} vendor.shopImageUrlPath - The vendor's shop image url.
  * 
- * @apiError {Error} 400 - If the validation fails.
  * @apiError {Error} 404 - If the vendor is not found.
  * @apiError {Error} 500 - If an internal server error occurs.
  */
@@ -444,7 +443,7 @@ export const getVendorDetails = async (data) => {
 }
 
 /**
- * @api {post} /api/vendor/saveVendorAvatarUrl Save Vendor Avatar URL
+ * @api {patch} /api/vendor/saveVendorAvatarUrl Save Vendor Avatar URL
  * @apiName SaveVendorAvatarUrl
  * @apiGroup Vendor
  * @apiDescription Saves the vendor avatar url by user id.
@@ -458,7 +457,6 @@ export const getVendorDetails = async (data) => {
  * 
  * @apiSuccess {string} message - A descriptive message about the vendor avatar url save.
  * 
- * @apiError {Error} 400 - If the validation fails.
  * @apiError {Error} 404 - If the vendor is not found.
  * @apiError {Error} 500 - If an internal server error occurs.
  */
@@ -474,7 +472,7 @@ export const saveVendorAvatarUrl = async (data) => {
     });
 
     if (!vendor) {
-      throw sendError('Vendor not found',400);
+      throw sendError('Vendor not found',404);
     }
 
     await vendorRepo.update(vendor.id, { vendorAvatarUrlPath: s3Key });
@@ -502,7 +500,6 @@ export const saveVendorAvatarUrl = async (data) => {
  * @apiSuccess {string} message - A descriptive message about the vendor avatar url get.
  * @apiSuccess {string} presignedUrl - The presigned url of the vendor avatar url.
  * 
- * @apiError {Error} 400 - If the validation fails.
  * @apiError {Error} 404 - If the vendor is not found.
  * @apiError {Error} 500 - If an internal server error occurs.
  */
@@ -519,7 +516,7 @@ export const getVendorAvatarUrl = async (data) => {
     });
 
     if (!vendor) {
-      throw sendError('Vendor not found',400);
+      throw sendError('Vendor not found',404);
     }
 
     const presignedUrl = await getPresignedViewUrl(vendor.vendorAvatarUrlPath);
@@ -535,7 +532,7 @@ export const getVendorAvatarUrl = async (data) => {
 }
 
 /**
- * @api {delete} /api/vendor/deleteVendorAvatarUrl Delete Vendor Avatar URL
+ * @api {patch} /api/vendor/deleteVendorAvatarUrl Delete Vendor Avatar URL
  * @apiName DeleteVendorAvatarUrl
  * @apiGroup Vendor
  * @apiDescription Deletes the vendor avatar url by user id.
@@ -546,7 +543,6 @@ export const getVendorAvatarUrl = async (data) => {
  * 
  * @apiSuccess {string} message - A descriptive message about the vendor avatar url delete.
  * 
- * @apiError {Error} 400 - If the validation fails.
  * @apiError {Error} 404 - If the vendor is not found.
  * @apiError {Error} 500 - If an internal server error occurs.
  */
@@ -563,7 +559,7 @@ export const deleteVendorAvatarUrl = async (data) => {
     });
 
     if (!vendor) {
-      throw sendError('Vendor not found',400);
+      throw sendError('Vendor not found',404);
     }
     await deleteFile(vendor.vendorAvatarUrlPath);
     await vendorRepo.update(vendor.id, { vendorAvatarUrlPath: null });
@@ -579,7 +575,7 @@ export const deleteVendorAvatarUrl = async (data) => {
 }
 
 /**
- * @api {post} /api/vendor/saveShopImageUrl Save Shop Image URL
+ * @api {patch} /api/vendor/saveShopImageUrl Save Shop Image URL
  * @apiName SaveShopImageUrl
  * @apiGroup Vendor
  * @apiDescription Saves the shop image url by user id.
@@ -593,7 +589,6 @@ export const deleteVendorAvatarUrl = async (data) => {
  * 
  * @apiSuccess {string} message - A descriptive message about the shop image url save.
  * 
- * @apiError {Error} 400 - If the validation fails.
  * @apiError {Error} 404 - If the vendor is not found.
  * @apiError {Error} 500 - If an internal server error occurs.
  */
@@ -609,7 +604,7 @@ export const saveShopImageUrl = async (data) => {
     });
 
     if (!vendor) {
-      throw sendError('Vendor not found',400);
+      throw sendError('Vendor not found',404);
     }
 
     await vendorRepo.update(vendor.id, { shopImageUrlPath: s3Key });
@@ -637,7 +632,6 @@ export const saveShopImageUrl = async (data) => {
  * @apiSuccess {string} message - A descriptive message about the shop image url get.
  * @apiSuccess {string} presignedUrl - The presigned url of the shop image url.
  * 
- * @apiError {Error} 400 - If the validation fails.
  * @apiError {Error} 404 - If the vendor is not found.
  * @apiError {Error} 500 - If an internal server error occurs.
  */
@@ -654,7 +648,7 @@ export const getShopImageUrl = async (data) => {
     });
 
     if (!vendor) {
-      throw sendError('Vendor not found',400);
+      throw sendError('Vendor not found',404);
     }
 
     const presignedUrl = await getPresignedViewUrl(vendor.shopImageUrlPath);
@@ -670,7 +664,7 @@ export const getShopImageUrl = async (data) => {
 }
 
 /**
- * @api {delete} /api/vendor/deleteShopImageUrl Delete Shop Image URL
+ * @api {patch} /api/vendor/deleteShopImageUrl Delete Shop Image URL
  * @apiName DeleteShopImageUrl
  * @apiGroup Vendor
  * @apiDescription Deletes the shop image url by user id.
@@ -681,7 +675,6 @@ export const getShopImageUrl = async (data) => {
  * 
  * @apiSuccess {string} message - A descriptive message about the shop image url delete.
  * 
- * @apiError {Error} 400 - If the validation fails.
  * @apiError {Error} 404 - If the vendor is not found.
  * @apiError {Error} 500 - If an internal server error occurs.
  */
@@ -698,7 +691,7 @@ export const deleteShopImageUrl = async (data) => {
     });
 
     if (!vendor) {
-      throw sendError('Vendor not found',400);
+      throw sendError('Vendor not found',404);
     }
 
     await deleteFile(vendor.shopImageUrlPath);
@@ -729,7 +722,6 @@ export const deleteShopImageUrl = async (data) => {
  * 
  * @apiSuccess {string} message - A descriptive message about the work image url save.
  * 
- * @apiError {Error} 400 - If the validation fails.
  * @apiError {Error} 404 - If the vendor is not found.
  * @apiError {Error} 500 - If an internal server error occurs.
  */
@@ -745,7 +737,7 @@ export const saveWorkImageUrl = async (data) => {
     });
 
     if (!vendor) {
-      throw sendError('Vendor not found',400);
+      throw sendError('Vendor not found',404);
     }
 
     const vendorImage = vendorImagesRepo.create({
@@ -768,7 +760,7 @@ export const saveWorkImageUrl = async (data) => {
 }
 
 /**
- * Get Vendor Work Images
+ * @api {get} /api/vendor/getVendorWorkImages Get Vendor Work Images
  * @apiName GetVendorWorkImages
  * @apiGroup Vendor
  * @apiDescription Gets the vendor work images by user id.
@@ -786,7 +778,6 @@ export const saveWorkImageUrl = async (data) => {
  * @apiSuccess {string} workImages.uploadedAt - The timestamp of the work image.
  * @apiSuccess {string} workImages.presignedUrl - The presigned URL of the work image.
  * 
- * @apiError {Error} 400 - If the validation fails.
  * @apiError {Error} 404 - If the vendor is not found.
  * @apiError {Error} 500 - If an internal server error occurs.
  */
@@ -802,7 +793,7 @@ export const getVendorWorkImages = async (data) => {
       });
 
       if (!vendor) {
-        throw sendError('Vendor not found',400);
+        throw sendError('Vendor not found',404);
       }
 
       const vendorImages = await vendorImagesRepo.find({
@@ -832,7 +823,7 @@ export const getVendorWorkImages = async (data) => {
 }
 
 /**
- * Delete Vendor Work Image
+ * @api {delete} /api/vendor/deleteVendorWorkImage/:s3Key Delete Vendor Work Image
  * @apiName DeleteVendorWorkImage
  * @apiGroup Vendor
  * @apiDescription Deletes the vendor work image by user id.
@@ -846,8 +837,7 @@ export const getVendorWorkImages = async (data) => {
  * 
  * @apiSuccess {string} message - A descriptive message about the vendor work image delete.
  * 
- * @apiError {Error} 400 - If the validation fails.
- * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 404 - If the vendor or vendor work image is not found.
  * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const deleteVendorWorkImage = async (data) => {
@@ -862,7 +852,7 @@ export const deleteVendorWorkImage = async (data) => {
       });
 
     if (!vendor) {
-      throw sendError('Vendor not found',400);
+      throw sendError('Vendor not found',404);
     }
 
     const vendorImage = await vendorImagesRepo.findOne({
@@ -870,7 +860,7 @@ export const deleteVendorWorkImage = async (data) => {
     });
 
     if (!vendorImage) {
-      throw sendError('Vendor work image not found',400);
+      throw sendError('Vendor work image not found',404);
     }
 
     await deleteFile(vendorImage.s3Key);
@@ -890,10 +880,40 @@ export const deleteVendorWorkImage = async (data) => {
 //=================== VENDOR ORDER MANAGEMENT ====================
 
 /**
- * Get the vendor orders.
+ * @api {get} /api/vendor/getVendorOrders/:page/:limit Get Vendor Orders
+ * @apiName GetVendorOrders
+ * @apiGroup Vendor
+ * @apiDescription Gets the vendor orders by user id.
+ *
+ * @apiQuery {string} status - The status of the orders.
+ * @apiParam {number} page - The page number.
+ * @apiParam {number} limit - The limit of the orders.
+ * 
  * @param {Object} data - The data containing the user id, page, and limit.
- * @param {string} data.status - (query) The status of the orders to get.
- * @returns {Promise<Object>} - A paginated list of the vendor's orders.
+ * @param {string} data.userId - The user's UUID.
+ * @param {number} data.page - The page number.
+ * @param {number} data.limit - The limit of the orders.
+ * @param {string} data.status - The status of the orders.
+ * @returns {Promise<Object>} - The result of the get.
+ * 
+ * @apiSuccess {Object[]} orders - The vendor orders.
+ * @apiSuccess {string} orders.id - The UUID of the order.
+ * @apiSuccess {string} orders.status - The status of the order.
+ * @apiSuccess {string} orders.createdAt - The timestamp of the order.
+ * @apiSuccess {string} orders.orderId - The UUID of the order.
+ * @apiSuccess {string} orders.orderName - The name of the order.
+ * @apiSuccess {string} orders.serviceType - The type of the order.
+ * @apiSuccess {string} orders.finishByDate - The finish by date of the order.
+ * @apiSuccess {string} orders.completedAt - The timestamp of the order.
+ * 
+ * @apiSuccess {Object} pagination - The pagination of the orders.
+ * @apiSuccess {number} pagination.currentPage - The current page number.
+ * @apiSuccess {boolean} pagination.hasMore - Whether there are more orders.
+ * @apiSuccess {number} pagination.nextPage - The next page number.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor or orders are not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const getVendorOrders = async (data) => {
   try {
@@ -902,7 +922,7 @@ export const getVendorOrders = async (data) => {
 
     const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: {id: true}});
 
-    if (!vendor) throw sendError('Vendor Profile not found', 400);
+    if (!vendor) throw sendError('Vendor Profile not found', 404);
 
     const orders = await orderVendorRepo.createQueryBuilder("orderVendors")
     .leftJoinAndSelect("orderVendors.order", "orders")
@@ -923,7 +943,7 @@ export const getVendorOrders = async (data) => {
     .take(limit)
     .getMany();
 
-    if (!orders) throw sendError('Orders not found', 400);
+    if (!orders) throw sendError('Orders not found', 404);
 
     return {
       orders: orders.map(order => ({
@@ -953,24 +973,56 @@ export const getVendorOrders = async (data) => {
 }
 
 /**
- * Get the vendor order by id.
+ * @api {get} /api/vendor/getVendorOrderById/:orderVendorId Get Vendor Order By Id
+ * @apiName GetVendorOrderById
+ * @apiGroup Vendor
+ * @apiDescription Gets the vendor order by id.
+ *
+ * @apiParam {string} orderVendorId - The UUID of the order vendor.
+ * 
  * @param {Object} data - The data containing the user id and order vendor id.
+ * @param {string} data.userId - The user's UUID.
+ * @param {string} data.orderVendorId - The UUID of the order vendor.
  * @returns {Promise<Object>} - The result of the get.
+ * 
+ * @apiSuccess {Object} order - The vendor order.
+ * @apiSuccess {string} order.id - The UUID of the order.
+ * @apiSuccess {string} order.customerId - The UUID of the customer.
+ * @apiSuccess {string} order.orderName - The name of the order.
+ * @apiSuccess {string} order.orderType - The type of the order.
+ * @apiSuccess {string} order.serviceType - The type of the order.
+ * @apiSuccess {string} order.orderPreference - The preference of the order.
+ * @apiSuccess {string} order.clothProvided - Whether the cloth is provided.
+ * @apiSuccess {string} order.orderStatus - The status of the order.
+ * @apiSuccess {string} order.orderStatusTimestamp - The timestamp of the order status.
+ * @apiSuccess {string} order.requiredByDate - The date by which the order must be required.
+ * @apiSuccess {string} order.createdAt - The timestamp of the order.
+ * 
+ * @apiSuccess {Object[]} orderItems - The order items.
+ * @apiSuccess {string} orderItems.id - The UUID of the order item.
+ * @apiSuccess {string} orderItems.orderId - The UUID of the order.
+ * @apiSuccess {string} orderItems.designImage1 - The S3 key of the design image 1.
+ * @apiSuccess {string} orderItems.designImage2 - The S3 key of the design image 2.
+ * @apiSuccess {string} orderItems.designImage1Url - The presigned URL of the design image 1.
+ * @apiSuccess {string} orderItems.designImage2Url - The presigned URL of the design image 2.
+ * 
+ * @apiError {Error} 404 - If the vendor, order or order vendor or order items are not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
  */
 export const getVendorOrderById = async (data) => {
   try {
     const { userId, orderVendorId } = data;
 
     const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: {id: true}});
-    if (!vendor) throw sendError('Vendor Profile not found', 400);
+    if (!vendor) throw sendError('Vendor Profile not found', 404);
 
     const orderVendor = await orderVendorRepo.findOne({ where: { id: orderVendorId, vendorId: vendor.id }});
-    if (!orderVendor) throw sendError('Order not found', 400);
+    if (!orderVendor) throw sendError('Order vendor not found', 404);
 
     const order = await orderRepo.findOne({ where: { id: orderVendor.orderId }, 
       select: {id: true, customerId: true, orderName: true, orderType: true, serviceType: true, orderPreference: true, clothProvided: true, orderStatus: true, orderStatusTimestamp: true, requiredByDate: true, createdAt: true}
     });
-    if (!order) throw sendError('Order not found', 400);
+    if (!order) throw sendError('Order not found', 404);
 
     const orderItems = await orderItemsRepo.find({ where: { orderId: order.id } });
     if (!orderItems) throw sendError("Order items not found", 404);
@@ -996,15 +1048,40 @@ export const getVendorOrderById = async (data) => {
   }
 }
 
+/**
+ * @api {get} /api/vendor/getVendorQuote/:orderVendorId Get Vendor Quote
+ * @apiName GetVendorQuote
+ * @apiGroup Vendor
+ * @apiDescription Gets the vendor quote by order vendor id.
+ *
+ * @apiParam {string} orderVendorId - The UUID of the order vendor.
+ * 
+ * @param {Object} data - The data containing the user id and order vendor id.
+ * @param {string} data.userId - The user's UUID.
+ * @param {string} data.orderVendorId - The UUID of the order vendor.
+ * @returns {Promise<Object>} - The result of the get.
+ * 
+ * @apiSuccess {Object} quote - The vendor quote.
+ * @apiSuccess {string} quote.id - The UUID of the quote.
+ * @apiSuccess {string} quote.quotedDays - The quoted days of the quote.
+ * @apiSuccess {string} quote.quotedPrice - The quoted price of the quote.
+ * @apiSuccess {string} quote.vendorPayoutAfterCommission - The vendor payout after commission of the quote.
+ * @apiSuccess {string} quote.deliveryCharge - The delivery charge of the quote.
+ * @apiSuccess {string} quote.finalPrice - The final price of the quote.
+ * @apiSuccess {string} quote.createdAt - The timestamp of the quote.
+ * 
+ * @apiError {Error} 404 - If the vendor, order vendor or quote is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
+ */
 export const getVendorQuote = async (data) => {
   try {
     const { userId, orderVendorId } = data;
 
     const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: {id: true}});
-    if (!vendor) throw sendError('Vendor Profile not found', 400);
+    if (!vendor) throw sendError('Vendor Profile not found', 404);
 
     const orderVendor = await orderVendorRepo.findOne({ where: { id: orderVendorId, vendorId: vendor.id, }, select: {id: true , status: true}});
-    if (!orderVendor) throw sendError('Order not found', 400);
+    if (!orderVendor) throw sendError('Order not found', 404);
 
     if(orderVendor.status === ORDER_VENDOR_STATUS.PENDING) throw sendError('You have not accepted or rejected the order yet', 400);
     if(orderVendor.status === ORDER_VENDOR_STATUS.REJECTED) throw sendError('You have rejected the order', 400);
@@ -1012,7 +1089,7 @@ export const getVendorQuote = async (data) => {
     if(orderVendor.status === ORDER_VENDOR_STATUS.FROZEN) throw sendError('The order has been frozen', 400);
 
     const quote = await quoteRepo.findOne({ where: { orderVendorId: orderVendorId }, select: {id: true, quotedDays: true, quotedPrice: true, vendorPayoutAfterCommission: true, deliveryCharge: true, finalPrice: true, createdAt: true}});
-    if (!quote) throw sendError('Quote not found', 400);
+    if (!quote) throw sendError('Quote not found', 404);
 
     return {
       quote,
@@ -1023,12 +1100,33 @@ export const getVendorQuote = async (data) => {
   }
 }
 
+/**
+ * @api {get} /api/vendor/getVendorStats Get Vendor Stats
+ * @apiName GetVendorStats
+ * @apiGroup Vendor
+ * @apiDescription Gets the vendor stats by user id.
+ *
+ * @param {Object} data - The data containing the user id.
+ * @param {string} data.userId - The user's UUID.
+ * @returns {Promise<Object>} - The result of the get.
+ * 
+ * @apiSuccess {Object} stats - The vendor stats.
+ * @apiSuccess {string} stats.id - The UUID of the stats.
+ * @apiSuccess {string} stats.totalInProgressOrders - The total in progress orders of the vendor.
+ * @apiSuccess {string} stats.totalCompletedOrders - The total completed orders of the vendor.
+ * @apiSuccess {string} stats.totalEarnings - The total earnings of the vendor.
+ * @apiSuccess {string} stats.totalDeductions - The total deductions of the vendor.
+ * @apiSuccess {string} stats.totalPendingRequests - The total pending requests of the vendor.
+ * 
+ * @apiError {Error} 404 - If the vendor is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
+ */
 export const getVendorStats = async (data) => {
   try {
     const { userId } = data;
 
     const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: {id: true}});
-    if (!vendor) throw sendError('Vendor Profile not found', 400);
+    if (!vendor) throw sendError('Vendor Profile not found', 404);
 
     const stats = await vendorStatsRepo.findOne({ where: { vendorId: vendor.id }, 
       select: {id: true, totalInProgressOrders: true, totalCompletedOrders: true, totalEarnings: true, totalDeductions: true}});
@@ -1045,6 +1143,31 @@ export const getVendorStats = async (data) => {
   }
 }
 
+//======================================= COMPLAINT SERVICE ========================================
+
+/**
+ * @api {post} /api/vendor/addComplaint/:orderId Add Complaint
+ * @apiName AddComplaint
+ * @apiGroup Vendor
+ * @apiDescription Adds a complaint by user id.
+ *
+ * @apiParam {string} orderId - The UUID of the order.
+ * @apiBody {string} complaint - The complaint.
+ * 
+ * @param {Object} data - The data containing the user id, order id and complaint.
+ * @param {string} data.userId - The user's UUID.
+ * @param {string} data.orderId - The UUID of the order.
+ * @param {string} data.complaint - The complaint.
+ * @returns {Promise<Object>} - The result of the post.
+ * 
+ * @apiSuccess {string} response.message - The message indicating the success of the operation.
+ * @apiSuccess {boolean} response.success - Whether the operation was successful.
+ * 
+ * @apiError {Error} 400 - If the validation fails.
+ * @apiError {Error} 404 - If the vendor or order are not found.
+ * @apiError {Error} 403 - If the vendor is not authorized to add complaint for this order.
+ * @apiError {Error} 500 - If an internal server error occurs.
+ */
 export const addComplaint = async (data) => {
   try {
       const { userId, orderId, complaint } = addComplaintSchema.parse(data);
@@ -1073,6 +1196,43 @@ export const addComplaint = async (data) => {
   }
 }
 
+//======================================= PAYOUT SERVICE ========================================
+
+/**
+ * @api {get} /api/vendor/getVendorPayouts/:page/:limit Get Vendor Payouts
+ * @apiName GetVendorPayouts
+ * @apiGroup Vendor
+ * @apiDescription Gets the vendor payouts by user id.
+ *
+ * @apiParam {string} page - The page number.
+ * @apiParam {string} limit - The limit of the payouts.
+ * @apiQuery {string} status - The status of the payouts(pending, cancelled, '').
+ * 
+ * @param {Object} data - The data containing the user id, page and limit.
+ * @param {string} data.userId - The user's UUID.
+ * @param {number} data.page - The page number.
+ * @param {number} data.limit - The limit of the payouts.
+ * @param {string} data.status - The status of the payouts.
+ * @returns {Promise<Object>} - The result of the get.
+ * 
+ * @apiSuccess {Object[]} payouts - The vendor payouts.
+ * @apiSuccess {string} payouts.id - The UUID of the payout.
+ * @apiSuccess {string} payouts.orderId - The UUID of the order.
+ * @apiSuccess {string} payouts.expected_amount - The expected amount of the payout.
+ * @apiSuccess {string} payouts.actual_paid_amount - The actual paid amount of the payout.
+ * @apiSuccess {string} payouts.status - The status of the payout.
+ * @apiSuccess {string} payouts.payout_id - The payout ID of the payout.
+ * @apiSuccess {string} payouts.utr - The UTR of the payout.
+ * @apiSuccess {string} payouts.payout_status_history - The payout status history of the payout.
+ * 
+ * @apiSuccess {Object} pagination - The pagination of the payouts.
+ * @apiSuccess {number} pagination.currentPage - The current page number.
+ * @apiSuccess {boolean} pagination.hasMore - Whether there are more payouts.
+ * @apiSuccess {number} pagination.nextPage - The next page number.
+ * 
+ * @apiError {Error} 404 - If the vendor or payouts are not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
+ */
 export const getVendorPayouts = async (data) => {
   try {
     const { userId, page, limit, status } = data;
@@ -1082,31 +1242,22 @@ export const getVendorPayouts = async (data) => {
     const vendor = await vendorRepo.findOne({ where: { userId: userId }, select: {id: true}});
     if (!vendor) throw sendError("Vendor not found", 404);
 
+    const statusFilters = {
+      pending: ["queued", "pending", "rejected"],
+      cancelled: ["rejected", "cancelled"],
+      all: ["action_required", "queued", "pending", "rejected","processing", "processed", "cancelled"],
+    }
+
+    const whereStatus = status
+    ? In(statusFilters[status] || [status])
+    : In(statusFilters.all);
+
     const payouts = await payoutRepo.find(
       {
-        where: {
-          vendorId: vendor.id,
-          status: status ? 
-                         status === "pending" ? 
-                            In(["queued", "pending", "rejected"]) 
-                                              : status === "cancelled" ? 
-                                                  In(["rejected", "cancelled"]) 
-                                                                       : In([status]) 
-                        : In(["action_required", "queued", "pending", "rejected","processing", "processed", "cancelled"]),
-        },
-        select: {
-          id: true,
-          orderId: true,
-          expected_amount: true,
-          actual_paid_amount: true,
-          status: true,
-          payout_id: true,
-          utr: true,
-          payout_status_history: true,
-        },
-        order: {
-          entry_created_at: "DESC",
-        },
+        where: { vendorId: vendor.id, status: whereStatus },
+        select: { id: true, orderId: true, expected_amount: true, actual_paid_amount: true,
+          status: true, payout_id: true, utr: true, payout_status_history: true },
+        order: { entry_created_at: "DESC" },
         skip: offset,
         take: limit,
       }
@@ -1135,6 +1286,8 @@ export const getVendorPayouts = async (data) => {
     throw error;
   }
 } 
+
+//======================================= REVIEW SERVICE ========================================
 
 /**
  * @api {get} /api/vendor/getReviews/:page/:limit Get Reviews
