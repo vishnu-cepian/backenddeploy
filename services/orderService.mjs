@@ -1,7 +1,6 @@
 import { z } from "zod";
 import Razorpay from "razorpay";
 import { In } from "typeorm";
-import QueryRunner from "typeorm";
 
 // Local imports
 import { logger } from "../utils/logger-utils.mjs";
@@ -13,7 +12,7 @@ import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs";
-import { ORDER_VENDOR_STATUS, ORDER_STATUS, SERVICE_TYPE, ROLE, MISC } from "../types/enums/index.mjs";
+import { ORDER_VENDOR_STATUS, ORDER_STATUS, SERVICE_TYPE, ROLE } from "../types/enums/index.mjs";
 import { calculateVendorPayoutAmount, calculateOrderAmount } from "../utils/pricing_utils.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
@@ -24,6 +23,15 @@ const orderRepo = AppDataSource.getRepository(Orders);
 const orderStatusTimelineRepo = AppDataSource.getRepository(OrderStatusTimeline);
 //========================= ZOD VALIDATION SCHEMAS =========================
 
+/**
+ * @description Zod schema for validating a single item within an order.
+ * It contains a `refine` block with conditional logic for measurements:
+ * - If it's not a laundry service:
+ * - If measurementType is 'refCloth', no further measurement validation is needed.
+ * - Both standard and custom measurements cannot be provided simultaneously.
+ * - For 5 or fewer items, either custom or standard measurements are required.
+ * - For more than 5 items, standard measurements are required.
+ */
 const orderItemSchema = z.object({
     itemName: z.string().min(1, { message: "Item name is required" }),
     itemType: z.string().min(1, { message: "Item type is required" }),
@@ -94,7 +102,7 @@ const vendorOrderResponseSchema = z.object({
     action: z.enum([ORDER_VENDOR_STATUS.ACCEPTED, ORDER_VENDOR_STATUS.REJECTED]),
     quotedPrice: z.number().positive().optional(),
     quotedDays: z.number().int().positive().optional(),
-    notes: z.string().max(500).optional(),
+    notes: z.string().max(500).optional().nullable(),
 }).refine(data => {
     if (data.action === ORDER_VENDOR_STATUS.ACCEPTED) {
         return data.quotedPrice !== undefined && data.quotedDays !== undefined;
@@ -113,17 +121,18 @@ const createRazorpayOrderSchema = z.object({
 //=================== HELPER FUNCTIONS ====================
 
 /**
- * A reusable helper to create an entry in the OrderStatusTimeline table.
- * Must be called within an active transaction.
- * @param {QueryRunner} queryRunner - The active TypeORM query runner.
- * @param {string} orderId - The ID of the order.
- * @param {string|null} previousStatus - The previous status of the order.
+ * @description A crucial helper to create an audit trail entry in the OrderStatusTimeline table.
+ * It records the transition of an order from one state to another, who changed it, and when.
+ * THIS MUST ALWAYS BE CALLED WITHIN AN ACTIVE DATABASE TRANSACTION to ensure data consistency.
+ * @param {import('typeorm').QueryRunner} queryRunner - The active TypeORM query runner.
+ * @param {string} orderId - The UUID of the order being updated.
+ * @param {string|null} previousStatus - The status the order is transitioning from (null for creation).
  * @param {string} newStatus - The new status of the order.
- * @param {string} changedById - The ID of the user/system making the change.
- * @param {string} changedByRole - The role of the user/system.
- * @param {string|null} notes - Optional notes about the status change.
+ * @param {string} changedById - The UUID of the user or system responsible for the change.
+ * @param {string} changedByRole - The role of the entity making the change (e.g., 'CUSTOMER', 'SYSTEM').
+ * @param {string|null} [notes=null] - Optional notes providing context for the status change.
+ * @returns {Promise<void>}
  */
-
 export const createTimelineEntry = async (queryRunner, orderId, previousStatus, newStatus, changedById, changedByRole, notes = null) => {
     const timelineEntry = queryRunner.manager.create(OrderStatusTimeline, {
         orderId,
@@ -140,10 +149,94 @@ export const createTimelineEntry = async (queryRunner, orderId, previousStatus, 
 //========================= ORDER CREATION AND MANAGEMENT =========================
 
 /**
- * Creates a new order
+ * @api {post} /api/order/createOrder Create a New Order (customer route)
+ * @apiName CreateOrder
+ * @apiGroup Order
+ * @apiDescription The first step in the order lifecycle. A customer submits their order details and items. The order is created in a 'PENDING' state. This entire operation is performed within a database transaction.
+ * - The created orders will be saved in the orders table and can be viewed by the customer from saved designs (in app). 
+ * - For tailoring services, upto 5 items per order can be added with standard measurements or custom measurements. But for more than 5 items, standard measurements are required.
+ * - If the service type is laundry, then no measurements are required.
+ * - If measurementType is 'refCloth', then no measurements are required. if the reference cloth is provided then it is an 2-way order. (The frontend will mark clothProvided as true on this action).
+ * - If clothProvied is true, then its a 2-way order else its a 1-way order which means the vendor will start the work when the order is confirmed and ships the finished cloth to the customer.
+ * - If any one of the orderItems has clothProvided as true, then clothProvided is true for the order. (handled by frontend)
+ * 
+ * @apiBody {string} orderName - The name of the order.
+ * @apiBody {string} orderType - The type of the order.
+ * @apiBody {string} serviceType - The type of the service (tailors, laundry).
+ * @apiBody {string} orderPreference - The preference of the order.
+ * @apiBody {string} requiredByDate - The date by which the order is required (must be in the future).
+ * @apiBody {boolean} clothProvided - Whether the cloth is provided. (handled by frontend)
+ * @apiBody {string} fullName - The full name of the customer.
+ * @apiBody {string} phoneNumber - The phone number of the customer.
+ * @apiBody {string} addressLine1 - The first line of the address.
+ * @apiBody {string} addressLine2 - The second line of the address.(optional)
+ * @apiBody {string} district - The district of the address.
+ * @apiBody {string} state - The state of the address.
+ * @apiBody {string} street - The street of the address.
+ * @apiBody {string} city - The city of the address.
+ * @apiBody {string} pincode - The pincode of the address.
+ * @apiBody {string} landmark - The landmark of the address.(optional)
+ * @apiBody {string} addressType - The type of the address.(optional)
+ * 
+ * @apiBody {array} orderItems - The items of the order.
+ * @apiBody {string} orderItems.itemName - The name of the item.
+ * @apiBody {string} orderItems.itemType - The type of the item.
+ * @apiBody {number} orderItems.itemCount - The count of the item.
+ * @apiBody {string} orderItems.fabricType - The fabric type of the item.
+ * @apiBody {string} orderItems.instructions - The instructions of the item.(optional) (default is null)
+ * @apiBody {string} orderItems.dressCustomisations - The dress customisations of the item.(optional) (default is null)
+ * @apiBody {string} orderItems.measurementType - The measurement type of the item.
+ * @apiBody {string} orderItems.tailorService - The tailor service of the item.(optional) (default is null) (Stitching, Alteration)
+ * @apiBody {string} orderItems.laundryService - The laundry service of the item.(optional) (default is null) ( Dry Cleaning, Wash and Fold, Wash and Iron, ironing)
+ * @apiBody {string} orderItems.stdMeasurements - The standard measurements of the item.(optional) (default is null)
+ * @apiBody {string} orderItems.customMeasurements - The custom measurements of the item.(optional) (default is null)
+ * @apiBody {string} orderItems.designImage1 - The first design image of the item.(optional) (default is null)
+ * @apiBody {string} orderItems.designImage2 - The second design image of the item.(optional) (default is null)
+ * @apiBody {boolean} orderItems.clothProvided - Whether the cloth is provided for the item.(optional) (default is false)
  *
- * @param {Object} data - The raw order data from the request.
- * @returns {Promise<Object>} An object containing the new order's ID.
+ * @param {Object} data - The order data.
+ * @param {string} data.userId - The UUID of the user.
+ * @param {string} data.orderName - The name of the order.
+ * @param {string} data.orderType - The type of the order.
+ * @param {string} data.serviceType - The type of the service.
+ * @param {string} data.orderPreference - The preference of the order.
+ * @param {string} data.requiredByDate - The date by which the order is required.
+ * @param {boolean} data.clothProvided - Whether the cloth is provided.
+ * @param {string} data.fullName - The full name of the customer.
+ * @param {string} data.phoneNumber - The phone number of the customer.
+ * @param {string} data.addressLine1 - The first line of the address.
+ * @param {string} data.addressLine2 - The second line of the address.
+ * @param {string} data.district - The district of the address.
+ * @param {string} data.state - The state of the address.
+ * @param {string} data.street - The street of the address.
+ * @param {string} data.city - The city of the address.
+ * @param {string} data.pincode - The pincode of the address.
+ * @param {string} data.landmark - The landmark of the address.
+ * @param {string} data.addressType - The type of the address.
+ * @param {array} data.orderItems - The items of the order.
+ * @param {string} data.orderItems.itemName - The name of the item.
+ * @param {string} data.orderItems.itemType - The type of the item.
+ * @param {number} data.orderItems.itemCount - The count of the item.
+ * @param {string} data.orderItems.fabricType - The fabric type of the item.
+ * @param {string} data.orderItems.instructions - The instructions of the item.
+ * @param {string} data.orderItems.dressCustomisations - The dress customisations of the item.
+ * @param {string} data.orderItems.measurementType - The measurement type of the item.
+ * @param {string} data.orderItems.tailorService - The tailor service of the item. (Stitching, Alteration)
+ * @param {string} data.orderItems.laundryService - The laundry service of the item. ( Dry Cleaning, Wash and Fold, Wash and Iron, ironing)
+ * @param {string} data.orderItems.stdMeasurements - The standard measurements of the item.
+ * @param {string} data.orderItems.customMeasurements - The custom measurements of the item.
+ * @param {string} data.orderItems.designImage1 - The first design image of the item.
+ * @param {string} data.orderItems.designImage2 - The second design image of the item.
+ * @param {boolean} data.orderItems.clothProvided - Whether the cloth is provided for the item.
+ *
+ * @returns {Promise<Object>} { message: "Order created successfully", orderId: string }
+ * 
+ * @apiSuccess {string} message - A success confirmation message.
+ * @apiSuccess {string} orderId - The UUID of the newly created order.
+ *
+ * @apiError {Error} 400 - If the input data fails Zod validation.
+ * @apiError {Error} 404 - If the customer profile is not found for the user.
+ * @apiError {Error} 500 - If the order fails to be created for any reason.
  */
 export const createOrder = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -231,15 +324,29 @@ export const createOrder = async (data) => {
     }
 }
 
-//========================= VENDOR INTERACTIONS =========================
 
 /**
- * Sends a pending order to a list of specified vendors for quoting.
- * A customer has a pool of 10 "active" vendor slots per order.
- * A slot is freed if a vendor rejects or their request expires.
+ * @api {post} /api/order/sendOrderToVendor Send Order to Vendors (customer route)
+ * @apiName SendOrderToVendor
+ * @apiGroup Order
+ * @apiDescription Allows a customer to send a 'PENDING' order to a list of vendors to request quotes. sends push notification to the vendors.
+ * @apiDescription **Business Rule:** A customer has a pool of 10 "active" vendor slots per order. An active slot is one that is 'PENDING' or 'ACCEPTED'. A slot is freed if a vendor 'REJECTS' the request or if the request 'EXPIRES' (after 24 hours) having no response from the vendor or if the vendor has ACCEPTED but the customer fails to make payment within 24 hours. This prevents spamming vendors.
+ * - If an order is send to vendor once, it cannot be sent to the same vendor again (even if the request is expired or rejected).
+ * 
+ * @apiBody {string} orderId - The UUID of the 'PENDING' order.
+ * @apiBody {string[]} vendorIds - An array of vendor UUIDs to send the request to (max 10).
+ * 
+ * @param {Object} data - The data.
+ * @param {string} data.userId - The UUID of the user.
+ * @param {string[]} vendorIds - An array of vendor UUIDs to send the request to (max 10).
  *
- * @param {Object} data - The raw data from the request.
- * @returns {Promise<Object>} A success message with a list of vendors the order was sent to.
+ * @apiSuccess {string} message - A success message indicating how many new vendors received the request.
+ * @apiSuccess {string[]} sentTo - An array of vendor UUIDs the request was successfully sent to.
+ *
+ * @apiError {Error} 400 - If order is not 'PENDING', or if one or more vendor IDs are invalid.
+ * @apiError {Error} 403 - If the user is not the owner of the order.
+ * @apiError {Error} 404 - If the customer profile or order is not found.
+ * @apiError {Error} 409 - If the request has already been sent to all specified vendors, or if sending to the new vendors would exceed the 10-slot limit.
  */
 export const sendOrderToVendor = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -348,11 +455,34 @@ export const sendOrderToVendor = async (data) => {
 }
 
 /**
- * Allows a vendor to accept or reject an order request.
- * Creates a quote if the order is accepted.
+ * @api {post} /api/order/vendorOrderResponse Vendor Responds to Order (vendor route)
+ * @apiName VendorOrderResponse
+ * @apiGroup Order
+ * @apiDescription Allows a vendor to 'ACCEPT' (and provide a quote) or 'REJECT' an order request from a customer. sends push notification to the customer.
+ * @apiDescription **Business Rule:** A vendor must respond within 24 hours of receiving the request. After 24 hours, the request is considered 'EXPIRED' and cannot be acted upon. If accepted, the service calculates all pricing and fees and creates a formal quote.
  *
- * @param {Object} data - The raw data from the request.
- * @returns {Promise<Object>} A success message.
+ * @apiBody {string} orderVendorId - The unique UUID for the order-vendor relationship.
+ * @apiBody {string} action - The vendor's response: 'ACCEPTED' or 'REJECTED'.
+ * @apiBody {number} [quotedPrice] - The price quoted by the vendor (Required if action is 'ACCEPTED').
+ * @apiBody {number} [quotedDays] - The number of days the vendor estimates for completion (Required if action is 'ACCEPTED').
+ * @apiBody {string} [notes] - Optional notes from the vendor.
+ *
+ * @param {Object} data - The data containing the user ID, order vendor ID, action, quoted price, quoted days, and notes.
+ * @param {string} data.userId - The UUID of the user.
+ * @param {string} data.orderVendorId - The unique UUID for the order-vendor relationship.
+ * @param {string} data.action - The vendor's response: 'ACCEPTED' or 'REJECTED'.
+ * @param {number} [data.quotedPrice] - The price quoted by the vendor (Required if action is 'ACCEPTED').
+ * @param {number} [data.quotedDays] - The number of days the vendor estimates for completion (Required if action is 'ACCEPTED').
+ * @param {string} [data.notes] - Optional notes from the vendor.
+ * 
+ * @returns {Promise<Object>} - The result of the response.
+ * 
+ * @apiSuccess {string} message - A success confirmation message.
+ *
+ * @apiError {Error} 400 - If the order is no longer 'PENDING', or for invalid input.
+ * @apiError {Error} 403 - If the vendor is not authorized for this request or if the 24-hour response window has expired.
+ * @apiError {Error} 404 - If the vendor profile or order request is not found.
+ * @apiError {Error} 409 - If the vendor has already responded to this request.
  */
 export const vendorOrderResponse = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -477,10 +607,30 @@ export const vendorOrderResponse = async (data) => {
 }
 
 /**
- * Creates a Razorpay order for a customer to pay for a selected quote.
+ * @api {post} /api/order/createRazorpayOrder Create Razorpay Order (customer route)
+ * @apiName CreateRazorpayOrder
+ * @apiGroup Order
+ * @apiDescription After a customer chooses an accepted quote, this function creates a server-side order with Razorpay. The returned `razorpayOrderId` is then used by the client-side Razorpay checkout SDK to initiate payment.
  *
- * @param {Object} data - The raw data from the request.
- * @returns {Promise<Object>} The details required for the client to initiate Razorpay checkout.
+ * @apiBody {string} orderId - The UUID of the main order.
+ * @apiBody {string} quoteId - The UUID of the accepted quote the customer wants to pay for.
+ *
+ * @param {Object} data - The data containing the user ID, order ID, and quote ID.
+ * @param {string} data.userId - The UUID of the user.
+ * @param {string} data.orderId - The UUID of the main order.
+ * @param {string} data.quoteId - The UUID of the accepted quote the customer wants to pay for.
+ * 
+ * @returns {Promise<Object>} - The result of the creation.
+ * 
+ * @apiSuccess {string} message - A success confirmation message.
+ * @apiSuccess {string} razorpayOrderId - The ID of the order created on Razorpay's servers.
+ * @apiSuccess {number} amount - The final amount in the smallest currency unit (e.g., paise).
+ * @apiSuccess {string} currency - The currency code (e.g., 'INR').
+ * @apiSuccess {string} key_id - The public Razorpay key ID for the client SDK.
+ *
+ * @apiError {Error} 400 - If the selected quote is no longer valid for payment.
+ * @apiError {Error} 404 - If the customer profile is not found.
+ * @apiError {Error} 500 - If the Razorpay API call fails.
  */
 export const createRazorpayOrder = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
@@ -532,7 +682,7 @@ export const createRazorpayOrder = async (data) => {
             razorpayOrderId: razorpayOrder.id,
             amount: razorpayOrder.amount,
             currency: "INR",
-            key_id: process.env.RAZORPAY_KEY_ID, // FOR TESTING
+            key_id: process.env.RAZORPAY_KEY_ID,
         }
     } catch(err) {
         if (queryRunner.isTransactionActive) {
@@ -549,28 +699,85 @@ export const createRazorpayOrder = async (data) => {
     }
 }
 
-export const cancelOrder = async (data) => {
-    try {
-        const { orderId } = data;
+// export const cancelOrder = async (data) => {
+//     try {
+//         const { orderId } = data;
 
-        const order = await orderRepo.findOne({ where: { id: orderId } });
-        if (!order) throw sendError("Order not found");
+//         const order = await orderRepo.findOne({ where: { id: orderId } });
+//         if (!order) throw sendError("Order not found");
 
-        if (order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is not in PENDING status");
+//         if (order.orderStatus !== ORDER_STATUS.PENDING) throw sendError("Order is not in PENDING status");
 
-        order.orderStatus = ORDER_STATUS.CANCELLED;
-        await orderRepo.save(order);
+//         order.orderStatus = ORDER_STATUS.CANCELLED;
+//         await orderRepo.save(order);
 
-        return {
-            message: "Order cancelled successfully",
-        }
+//         return {
+//             message: "Order cancelled successfully",
+//         }
 
-    } catch(err) {
-        logger.error(err);
-        throw err;
-    }
-}
+//     } catch(err) {
+//         logger.error(err);
+//         throw err;
+//     }
+// }
 
+/**
+ * @api {post} /api/order/updateOrderStatus Update Order Status (vendor route)
+ * @apiName UpdateOrderStatus
+ * @apiGroup Order
+ * @apiDescription
+ * This is a critical, vendor-only endpoint that functions as a state machine for an active order.
+ * It allows a vendor to advance the order through specific stages of the fulfillment process.
+ * The entire operation is transactional to ensure data integrity.
+ *
+ * ---
+ *
+ * ### Order Flow and State Transitions:
+ *
+ * This function handles two primary state transitions initiated by the vendor:
+ *
+ * 1.  **`ITEM_RECEIVED`**:
+ * - **Context**: This status is used **only** for orders where the customer provides the cloth (`clothProvided` is true).
+ * - **Trigger**: The vendor calls this endpoint after the delivery partner has dropped off the customer's item(s) at their shop. It serves as the vendor's digital acknowledgment of receipt.
+ * - **Pre-conditions**:
+ * - The order must have a timeline entry for `ITEM_DELIVERED_TO_VENDOR`. The system will reject the update if the delivery isn't officially complete.
+ * - **Idempotency**: The system checks if an `ITEM_RECEIVED` entry already exists for this order to prevent duplicate acknowledgments.
+ * - **Actions**:
+ * 1.  Creates a timeline entry for `ITEM_RECEIVED`.
+ * 2.  Immediately creates a subsequent timeline entry for `WORK_STARTED`, as receiving the item signifies the start of the vendor's work.
+ *
+ * 2.  **`ITEM_READY_FOR_PICKUP`**:
+ * - **Context**: This status is used when the vendor has completed all tailoring/laundry work on the items.
+ * - **Trigger**: The vendor marks the order as ready, which initiates the return delivery process.
+ * - **Pre-conditions**:
+ * - The order's primary status must be `IN_PROGRESS`.
+ * - A `WORK_STARTED` timeline entry must exist, ensuring the vendor can't mark an order as ready before they've even started.
+ * - **Idempotency**: The system checks if an `ITEM_READY_FOR_PICKUP` entry already exists.
+ * - **Actions**:
+ * 1.  Creates a timeline entry for `ITEM_READY_FOR_PICKUP`.
+ * 2.  **Initiates Return Logistics**: It creates a new `DeliveryTracking` entity for the return trip ("TO_CUSTOMER").
+ * 3.  **Outbox Pattern**: It creates an `Outbox` event (`SEND_ITEM_DELIVERY`). This decouples the main order transaction from the external call to the delivery service. A separate worker process will handle the outbox event, ensuring that even if the delivery API call fails, the order transaction remains successful.
+ *
+ * ---
+ *
+ * @apiBody {string} orderId The UUID of the order to update.
+ * @apiBody {string} status The new status to set (must be one of the handled statuses like 'ITEM_RECEIVED' or 'ITEM_READY_FOR_PICKUP').
+ *
+ * @param {Object} data - The data containing the user ID, order ID, and status.
+ * @param {string} data.userId - The UUID of the user.
+ * @param {string} data.orderId - The UUID of the order to update.
+ * @param {string} data.status - The new status to set (must be one of the handled statuses like 'ITEM_RECEIVED' or 'ITEM_READY_FOR_PICKUP').
+ * 
+ * @returns {Promise<Object>} - The result of the update.
+ * 
+ * @apiSuccess {string} message A success confirmation message.
+ *
+ * @apiError {Error} 400 - **Invalid Status or Pre-condition Failed**: Thrown if the requested status is not valid, if a required pre-condition is not met (e.g., trying to mark an item as received before it's delivered), or if the action has already been performed (idempotency failure).
+ * @apiError {Error} 403 - **Forbidden**: Thrown if the order is not assigned to the vendor making the request.
+ * @apiError {Error} 404 - **Not Found**: Thrown if the vendor or order cannot be found in the database.
+ * @apiError {Error} 409 - **Idempotency Failed**: Thrown if the vendor attempts to update the status multiple times.
+ * @apiError {Error} 500 - **Internal Server Error**: For any unexpected database or logic errors during the transaction.
+ */
 export const updateOrderStatus = async (data) => {
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
@@ -579,147 +786,100 @@ export const updateOrderStatus = async (data) => {
 
         const { userId, orderId, status } = data;
 
-        if (!userId || !orderId || !status) {
-            throw sendError("Missing required fields: userId, orderId, or status");
-        }
+        if (!userId || !orderId || !status) throw sendError("Missing required fields: userId, orderId, or status", 400);
 
         const { id: vendorId, addressLine1: vendorAddress } = await queryRunner.manager.findOne(Vendors, { 
             where: { userId: userId },
             select: { id: true, addressLine1: true } 
         });
-        if (!vendorId) throw sendError("Vendor not found");
+        if (!vendorId) throw sendError("Vendor not found", 404);
 
         const order = await queryRunner.manager.findOne(Orders, { 
             where: { id: orderId }, 
             select: { id: true, clothProvided: true, orderStatus: true, customerId: true, selectedVendorId: true }
         });
   
-        if (!order) throw sendError("Order not found");
-        
-        if (order.selectedVendorId !== vendorId) throw sendError("Order is not assigned to this vendor");
+        if (!order) throw sendError("Order not found", 404);
+        if (order.selectedVendorId !== vendorId) throw sendError("Order is not assigned to this vendor", 403);
+
 
         switch (status) {
             case ORDER_STATUS.ITEM_RECEIVED:
-                        // 2 way and if the itemDeliveredToVendorAt is null, it means that the item is yet to be delivered to the vendor (hence the first phase of delivery is not yet finished)
-                        if (!order.clothProvided) {
-                            throw sendError("no Item is provided by the customer");
-                        }
+                // PRE-CONDITION: This flow is only for orders where the customer provides the materials.
+                if (!order.clothProvided) throw sendError("This order does not involve item pickup from the customer", 400);
 
-                        const alreadyReceived = await queryRunner.manager.findOne(OrderStatusTimeline, {
-                            where: { orderId: orderId, newStatus: ORDER_STATUS.ITEM_RECEIVED },
-                            select: { id: true }
-                        });
-                        
-                        if (alreadyReceived) {
-                            throw sendError("Item is already delivered to the vendor and vendor has acknowledged it", 400);
-                        }
+                // IDEMPOTENCY CHECK: Prevent the vendor from acknowledging receipt multiple times.
+                const alreadyReceived = await queryRunner.manager.exists(OrderStatusTimeline, {
+                    where: { orderId: orderId, newStatus: ORDER_STATUS.ITEM_RECEIVED }
+                });
 
-                        const itemDeliveredEvent = await queryRunner.manager.findOne(OrderStatusTimeline, { 
-                            where: { orderId: orderId, newStatus: ORDER_STATUS.ITEM_DELIVERED_TO_VENDOR },
-                            select: { id: true }
-                        });
+                if (alreadyReceived)  throw sendError("Item has already been marked as received by the vendor", 409);
 
-                        if (!itemDeliveredEvent) {
-                            throw sendError("Item is not yet delivered to the vendor or please wait for the delivery partner to update the status", 400);
-                        }
+                // PRE-CONDITION: Ensure the logistics partner has marked the item as delivered to the vendor.
+                const itemDeliveredEvent = await queryRunner.manager.exists(OrderStatusTimeline, { 
+                    where: { orderId: orderId, newStatus: ORDER_STATUS.ITEM_DELIVERED_TO_VENDOR }
+                });
+                if (!itemDeliveredEvent) throw sendError("Item has not yet been marked as delivered by the logistics partner", 400);
 
-                        await createTimelineEntry(
-                            queryRunner,
-                            orderId,
-                            ORDER_STATUS.ITEM_DELIVERED_TO_VENDOR,
-                            ORDER_STATUS.ITEM_RECEIVED,
-                            vendorId,
-                            ROLE.VENDOR,
-                            "Item received by the vendor"
-                        )            
-                        
-                        await createTimelineEntry(
-                            queryRunner,
-                            orderId,
-                            ORDER_STATUS.ITEM_RECEIVED,
-                            ORDER_STATUS.WORK_STARTED,
-                            vendorId,
-                            ROLE.VENDOR,
-                            "Vendor ack received"
-                        )  
-                        
-                        break;
+                // ACTIONS: Create timeline entries for both receiving the item and starting the work.
+                await createTimelineEntry(queryRunner, orderId, ORDER_STATUS.ITEM_DELIVERED_TO_VENDOR, ORDER_STATUS.ITEM_RECEIVED, vendorId, ROLE.VENDOR, "Vendor acknowledged receipt of the item.");            
+                await createTimelineEntry(queryRunner, orderId, ORDER_STATUS.ITEM_RECEIVED, ORDER_STATUS.WORK_STARTED, vendorId, ROLE.VENDOR, "Work started after item receipt acknowledgment.");  
+                
+                break;
 
             case ORDER_STATUS.ITEM_READY_FOR_PICKUP:
-
-                        if (order.orderStatus !== ORDER_STATUS.IN_PROGRESS) {
-                            throw sendError("Order is not in IN_PROGRESS status");
-                        }
+                // PRE-CONDITION: The order must be in the 'IN_PROGRESS' state.
+                if (order.orderStatus !== ORDER_STATUS.IN_PROGRESS) throw sendError("Order is not currently in progress", 400);
+                
+                // IDEMPOTENCY CHECK: Prevent triggering return delivery multiple times.
+                const alreadyReadyForPickup = await queryRunner.manager.exists(OrderStatusTimeline, {
+                    where: { orderId: orderId, newStatus: ORDER_STATUS.ITEM_READY_FOR_PICKUP }
+                });
+                if (alreadyReadyForPickup) throw sendError("Order has already been marked as ready for pickup", 400);
                         
-                        const alreadyReadyForPickup = await queryRunner.manager.findOne(OrderStatusTimeline, {
-                            where: { orderId: orderId, newStatus: ORDER_STATUS.ITEM_READY_FOR_PICKUP },
-                            select: { id: true }
-                        });
+                // PRE-CONDITION: Ensure work has actually started before it can be finished.
+                const workStartedEvent = await queryRunner.manager.exists(OrderStatusTimeline, {
+                where: { orderId: orderId, newStatus: ORDER_STATUS.WORK_STARTED }
+                });
+                if (!workStartedEvent) throw sendError("Cannot mark as ready for pickup before work has started", 400);
 
-                        if (alreadyReadyForPickup) {
-                            throw sendError("Item is already in the ready for pickup state", 400);
-                        }
-                        
+                // ACTION: Create the timeline entry for this new status.
+                await createTimelineEntry(queryRunner, orderId, ORDER_STATUS.WORK_STARTED, ORDER_STATUS.ITEM_READY_FOR_PICKUP, vendorId, ROLE.VENDOR, "Vendor marked item as ready for pickup.");
 
-                        if (order.clothProvided ) {
-                            const itemReceivedEvent = await queryRunner.manager.findOne(OrderStatusTimeline, {
-                                where: { orderId: orderId, newStatus: ORDER_STATUS.WORK_STARTED },
-                                select: { id: true }
-                            });
+                // GENERATE DELIVERY TRACKING ID 
+                // IF THE DELIVERY SERVICE NEED TO AVOID CHARACTERS, THEN ADD AN RANDOM/SEQUENTIAL NUMBER BY SETTING THE FIELD AS UNIQUE
+                const deliveryTracking = await queryRunner.manager.save(DeliveryTracking, {
+                    orderId: orderId, deliveryType: "TO_CUSTOMER", from: "VENDOR", to: "CUSTOMER", status: "PENDING",
+                    statusUpdateTimeStamp: {
+                        initiated_at: new Date(),
+                        pickup_assigned_at: null,
+                        pickup_in_transit_at: null,
+                        pickup_completed_at: null,
+                        delivery_in_transit_at: null,
+                        delivery_completed_at: null,
+                        delivery_failed_at: null,
+                        delivery_cancelled_at: null,
+                    },
+                })
 
-                            if (!itemReceivedEvent) {
-                                throw sendError("Item is not yet received by the vendor", 400);
-                            }
-                        } 
+                // INITIATE CLOTH PICKUP FROM VENDOR, OUTBOX PATTERN: Create an event to be processed by a separate worker.
+                // This ensures the external API call to the delivery service does not block or fail this transaction.
+                await queryRunner.manager.save(Outbox, {
+                eventType: "SEND_ITEM_DELIVERY",
+                payload: {
+                    deliveryTrackingId: deliveryTracking.id, //deliveryTrackingId or order_id depends on delivery service
+                    orderId,
+                    vendorId,
+                    customerId: order.customerId,
+                    pickupAddress: vendorAddress,
+                    deliveryAddress: "test address 1",
+                },
+                status: "PENDING",
+                createdAt: new Date()
+                })
 
-                        await createTimelineEntry(
-                            queryRunner,
-                            orderId,
-                            ORDER_STATUS.WORK_STARTED,
-                            ORDER_STATUS.ITEM_READY_FOR_PICKUP,
-                            vendorId,
-                            ROLE.VENDOR,
-                            "Item ready for pickup from vendor"
-                        )
-
-                        // GENERATE DELIVERY TRACKING ID 
-                        // IF THE DELIVERY SERVICE NEED TO AVOID CHARACTERS, THEN ADD AN RANDOM/SEQUENTIAL NUMBER BY SETTING THE FIELD AS UNIQUE
-                        const deliveryTracking = await queryRunner.manager.save(DeliveryTracking, {
-                            orderId: orderId,
-                            deliveryType: "TO_CUSTOMER",
-                            from: "VENDOR",
-                            to: "CUSTOMER",
-                            status: "PENDING",
-                            statusUpdateTimeStamp: {
-                                initiated_at: new Date(),
-                                pickup_assigned_at: null,
-                                pickup_in_transit_at: null,
-                                pickup_completed_at: null,
-                                delivery_in_transit_at: null,
-                                delivery_completed_at: null,
-                                delivery_failed_at: null,
-                                delivery_cancelled_at: null,
-                            },
-                        })
-
-                        // INITIATE CLOTH PICKUP FROM VENDOR, use OUTBOX pattern as this block is in a transaction
-
-                        await queryRunner.manager.save(Outbox, {
-                        eventType: "SEND_ITEM_DELIVERY",
-                        payload: {
-                            deliveryTrackingId: deliveryTracking.id, //deliveryTrackingId or order_id depends on delivery service
-                            orderId,
-                            vendorId,
-                            customerId: order.customerId,
-                            pickupAddress: vendorAddress,
-                            deliveryAddress: "test address 1",
-                        },
-                        status: "PENDING",
-                        createdAt: new Date()
-                        })
-
-                        break;
-            default: throw sendError("Invalid status");
+                break;
+            default: throw sendError(`Invalid or unsupported status update: ${status}`, 400);
         }
 
         await queryRunner.commitTransaction();
@@ -727,16 +887,38 @@ export const updateOrderStatus = async (data) => {
             message: "Order status updated successfully",
         }
     } catch (err) {
-        logger.error(err);
         if (queryRunner.isTransactionActive) {
             await queryRunner.rollbackTransaction();
         }
+        logger.error("Error in updateOrderStatus:", err);
         throw err;
     } finally {
         await queryRunner.release();
     }
 }
 
+/**
+ * @api {get} /api/order/getOrderTimeline Get Order Timeline (customer and vendor route)
+ * @apiName GetOrderTimeline
+ * @apiGroup Order
+ * @apiDescription Gets the timeline of the order status changes.
+ * 
+ * @apiParam {string} orderId - The UUID of the order.
+ * 
+ * @param {Object} data - The data containing the order ID.
+ * @param {string} data.userId - The UUID of the user.
+ * @param {string} data.orderId - The UUID of the order.
+ * 
+ * @returns {Promise<Object>} - The timeline of the order status changes.
+ * 
+ * @apiSuccess {Object[]} response.orderTimeline - The timeline of the order status changes.
+ * @apiSuccess {string} response.orderTimeline.id - The UUID of the order timeline.
+ * @apiSuccess {string} response.orderTimeline.newStatus - The new status of the order.
+ * @apiSuccess {string} response.orderTimeline.changedAt - The timestamp of the order status change.
+ * 
+ * @apiError {Error} 404 - If the order or order timeline is not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
+ */
 export const getOrderTimeline = async (data) => {
     try {
         const { orderId } = data;
