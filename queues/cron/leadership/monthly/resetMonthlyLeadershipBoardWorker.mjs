@@ -13,6 +13,25 @@ const vendorRepo = AppDataSource.getRepository(Vendors);
 
 let resetMonthlyLeadershipBoardWorker;
 
+/**
+ * @file resetMonthlyLeadershipBoardWorker.mjs
+ * @description This cron job worker runs on the first day of every month to perform two critical tasks:
+ * 1.  Archive the previous month's top performers to a permanent history table.
+ * 2.  Reset the monthly performance counters for all vendors to zero for the new month.
+ *
+ * ### Business Logic Flow:
+ * 1.  **Execution Time**: The worker is scheduled to run at midnight (00:00) on the 1st day of each month.
+ * 2.  **Determine Previous Month**: It calculates the correct `YYYY-MM` string for the month that just ended. For example, when it runs on February 1st, it will process data for January.
+ * 3.  **Process Each Service Type**: It iterates through all defined service types (e.g., 'tailors', 'laundry').
+ * 4.  **Identify Top Vendors**: For each service type, it finds the top 25 vendors based on their `currentMonthBayesianScore` from the previous month.
+ * 5.  **Archive Leaderboard**: It takes a snapshot of these top vendors' performance (ratings, review counts, scores, and rank) and performs a bulk insert into the `LeaderboardHistory` table. This preserves the historical data for future queries.
+ * 6.  **Reset Monthly Scores**: After archiving, it performs a bulk `UPDATE` on the `Vendors` table to reset `currentMonthRating`, `currentMonthReviewCount`, and `currentMonthBayesianScore` to zero for all vendors who had activity. This ensures a clean slate for the new month's rankings.
+ * 7.  **Cache Invalidation**: Finally, it clears the Redis cache for the `getMonthlyLeadershipBoard` API endpoint to ensure that any API calls for the previous month will now correctly fetch the newly archived data.
+ *
+ * This entire process is wrapped in a database transaction to ensure atomicity. If any step fails, the entire operation is rolled back to maintain data integrity.
+ *
+ * @returns {Worker} The initialized BullMQ worker instance.
+ */
 export function initResetMonthlyLeadershipBoardWorker() {
     resetMonthlyLeadershipBoardWorker = new Worker("resetMonthlyLeadershipBoardQueue", async (job) => {
         if (job.name !== "processResetMonthlyLeadershipBoard") return;
@@ -91,6 +110,7 @@ export function initResetMonthlyLeadershipBoardWorker() {
                 error,
                 jobId: job.id
             })
+            throw error;
         } finally {
             await queryRunner.release();
         }
