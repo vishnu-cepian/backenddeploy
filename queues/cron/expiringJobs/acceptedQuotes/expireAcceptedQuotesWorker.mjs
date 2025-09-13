@@ -8,11 +8,24 @@ import { OrderQuotes } from "../../../../entities/OrderQuote.mjs";
 import { ORDER_VENDOR_STATUS } from "../../../../types/enums/index.mjs";
 
 let expireAcceptedQuotesWorker;
+
 /**
- * This worker is used to expire accepted quotes after 24 hours (ie, when a vendor accepts a quote and if the customer hadn't responded within 24 hours, then the status of the orderVendor will be marked as FROZEN)
- * It will freeze the vendors and mark the quotes as processed
- * 
- * @returns {Worker}
+ * @file expireAcceptedQuotesWorker.mjs
+ * @description This cron job worker is responsible for enforcing a critical business rule:
+ * when a vendor accepts an order request and provides a quote, the customer has a 24-hour window to
+ * act on it (i.e., make a payment).
+ *
+ * ### Business Logic Flow:
+ * 1.  The worker runs periodically (e.g., every 30 minutes).
+ * 2.  It queries the database for all `OrderQuotes` that are older than 24 hours and still marked as unprocessed (`isProcessed = false`).
+ * 3.  Crucially, it only considers quotes where the associated `OrderVendors` status is still `ACCEPTED`.
+ * 4.  If such quotes are found, it performs two bulk updates in a single operation:
+ * a. It changes the status of the corresponding `OrderVendors` from `ACCEPTED` to `EXPIRED`. A expired request cannot be paid for by the customer, effectively freeing up the vendor from that commitment.
+ * b. It marks the `OrderQuotes` as processed (`isProcessed = true`) to prevent them from being picked up by this worker in future runs.
+ *
+ * This automated process ensures the system remains clean and vendors are not indefinitely held responsible for quotes that customers do not act upon.
+ *
+ * @returns {Worker} The initialized BullMQ worker instance.
  */
 export function initExpireAcceptedQuotesWorker() {
     expireAcceptedQuotesWorker = new Worker("expireAcceptedQuotesQueue", async (job) => {
@@ -30,16 +43,17 @@ export function initExpireAcceptedQuotesWorker() {
                 .getMany();
 
             if (orderQuotes.length > 0) {
-                // Freeze vendors in bulk
                 const orderVendorIds = orderQuotes.map(q => q.orderVendorId);
+
+                // First, expire the OrderVendor status to prevent further action from the customer (bulk operation).
                 await orderVendorRepo.createQueryBuilder()
                     .update()
-                    .set({ status: ORDER_VENDOR_STATUS.FROZEN })
+                    .set({ status: ORDER_VENDOR_STATUS.EXPIRED })
                     .whereInIds(orderVendorIds)
                     .andWhere("status = :status", { status: ORDER_VENDOR_STATUS.ACCEPTED })
                     .execute();
 
-                // Mark quotes as processed in bulk
+                // Second, mark the quotes as processed so this job doesn't run on them again (bulk operation)
                 const quoteIds = orderQuotes.map(q => q.id);
                 await orderQuoteRepo.createQueryBuilder()
                     .update()
@@ -49,12 +63,14 @@ export function initExpireAcceptedQuotesWorker() {
                     .execute();
             }
 
-            logger.info(`Frozen ${orderQuotes.length} accepted quotes at ${new Date().toISOString()}`);
+            logger.info(`Expired ${orderQuotes.length} accepted quotes at ${new Date().toISOString()}`);
         } catch (error) {
             logger.error(`Expire accepted quotes processing failed: ${error.message}`, {
                 error,
                 jobId: job.id
             })
+            // Let BullMQ handle the retry based on job options
+            throw error;
         }
         
         },
