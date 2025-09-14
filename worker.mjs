@@ -30,7 +30,7 @@ import { AppDataSource } from "./config/data-source.mjs";
 import { initChatWorker } from "./queues/chat/chatWorker.mjs";
 import { initPushWorker } from "./queues/notification/push/pushWorker.mjs";
 import { initEmailWorker } from "./queues/notification/email/emailWorker.mjs";
-import { initPhoneWorker } from "./queues/notification/phone/phoneWorker.mjs";
+import { initSmsWorker } from "./queues/notification/sms/smsWorker.mjs";
 import { initOutboxWorker } from "./queues/outbox/outboxWorker.mjs";
 import { initResetDailyLeadershipWorker } from "./queues/cron/leadership/daily/resetDailyLeadershipWorker.mjs";
 import { initResetMonthlyLeadershipBoardWorker } from "./queues/cron/leadership/monthly/resetMonthlyLeadershipBoardWorker.mjs";
@@ -41,7 +41,7 @@ import { initNotificationHistoryWorker } from "./queues/notification/notificatio
 let chatWorker;
 let pushWorker;
 let emailWorker;
-let phoneWorker;
+let smsWorker;
 let outboxWorker;
 let resetDailyLeadershipWorker;
 let resetMonthlyLeadershipBoardWorker;
@@ -61,8 +61,8 @@ async function startWorker() {
         console.log("Push worker started");
         emailWorker = initEmailWorker();
         console.log("Email worker started");
-        phoneWorker = initPhoneWorker();
-        console.log("Phone worker started");
+        smsWorker = initSmsWorker();
+        console.log("SMS worker started");
         outboxWorker = initOutboxWorker();
         console.log("Outbox worker started")
         resetDailyLeadershipWorker = initResetDailyLeadershipWorker();
@@ -101,7 +101,7 @@ function setupGracefulShutdown() {
                 chatWorker.close(),
                 pushWorker.close(),
                 emailWorker.close(),
-                phoneWorker.close(),
+                smsWorker.close(),
                 outboxWorker.close(),
                 resetDailyLeadershipWorker.close(),
                 resetMonthlyLeadershipBoardWorker.close(),

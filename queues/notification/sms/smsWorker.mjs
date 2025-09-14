@@ -1,29 +1,28 @@
 import { Worker } from "bullmq";
 import { bullRedis } from "../../../config/redis-config.mjs";
-// import { sendEmail } from "../../../services/notificationService.mjs";
+import { sendSms } from "../../../services/notificationService.mjs";
 import { AppDataSource } from "../../../config/data-source.mjs";
 import { QueueLogs } from "../../../entities/queueLogs.mjs";
 import { logger } from "../../../utils/logger-utils.mjs";
 
-let phoneWorker;
+let smsWorker;
 
-export function initPhoneWorker() {
-    phoneWorker = new Worker("phoneQueue", async (job) => {
+export function initSmsWorker() {
+    smsWorker = new Worker("smsQueue", async (job) => {
 
-        // const { email, name, template_id, variables } = job.data;
-        // if (!email || !name || !template_id || !variables) {
-        //     throw new Error("Invalid data in job");
-        // }
+        const { phoneNumber, template_id, variables } = job.data;
+        if (!phoneNumber || !template_id || !variables) {
+            throw new Error("Invalid data in job");
+        }
 
         try {
-            console.log("Sending phone notification to", job.data);
-            // await sendEmail(email, name, template_id, variables);
+            await sendSms(phoneNumber, template_id, variables);
         } catch (error) {
-            // logger.error(`Failed to send email to ${email}: ${error.message}`, {
-            //     error,
-            //     jobId: job.id,
-            //     email
-            // });
+            logger.error(`Failed to send SMS to ${phoneNumber}: ${error.message}`, {
+                error,
+                jobId: job.id,
+                phoneNumber
+            });
             throw error;
         }
         },
@@ -41,17 +40,17 @@ export function initPhoneWorker() {
         }
     );
 
-    phoneWorker.on("error", (error) => {
-        logger.error("Error in phone worker:", error);
+    smsWorker.on("error", (error) => {
+        logger.error("Error in sms worker:", error);
     });
 
-    phoneWorker.on("completed", (job) => {
+    smsWorker.on("completed", (job) => {
         logger.info(`Job ${job.id} completed`, {
             duration: job.finishedOn - job.processedOn,
         });
     });
 
-    phoneWorker.on("failed", (job, error) => {
+    smsWorker.on("failed", (job, error) => {
         logger.error(`Job ${job.id} failed: ${error.message}`);
         if(job.attemptsMade >= job.opts.attempts) {
             (async () => {
@@ -67,9 +66,9 @@ export function initPhoneWorker() {
         }
     });
 
-    phoneWorker.on('drained', () => {
-        logger.info('All jobs in phoneQueue have been processed.');
+    smsWorker.on('drained', () => {
+        logger.info('All jobs in smsQueue have been processed.');
     });
       
-    return phoneWorker;
+    return smsWorker;
 }

@@ -12,7 +12,7 @@ import { User } from "../entities/User.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { OtpEmail } from "../entities/OtpEmail.mjs";
 import { OtpPhone } from "../entities/OtpPhone.mjs";
-import { emailQueue, phoneQueue } from "../queues/index.mjs";
+import { emailQueue, smsQueue } from "../queues/index.mjs";
 import { redis } from "../config/redis-config.mjs";
 import { ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET, OTP_TOKEN_SECRET } from '../config/auth-config.mjs';
 
@@ -797,9 +797,10 @@ export const sendPhoneOtp = async (data) => {
             });
         }
 
-        phoneQueue.add('sendPhoneOtp', {
+        smsQueue.add('sendPhoneOtp', {
             phoneNumber,
-            otp
+            template_id: "global_otp",
+            variables: { otp: otp }
         });
 
         return {

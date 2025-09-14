@@ -1,7 +1,7 @@
 import { Queue } from "bullmq";
 import { bullRedis } from "../../../config/redis-config.mjs";
 
-export const phoneQueue = new Queue("phoneQueue", {
+export const smsQueue = new Queue("smsQueue", {
     connection: bullRedis,
     streams: {
         events: {
@@ -17,5 +17,5 @@ export const phoneQueue = new Queue("phoneQueue", {
     }
 });
 
-await phoneQueue.clean(1000 * 60 * 60 * 24, "completed");
-await phoneQueue.clean(1000 * 60 * 60 * 24, "failed");
+await smsQueue.clean(1000 * 60 * 60 * 24, "completed");
+await smsQueue.clean(1000 * 60 * 60 * 24, "failed");
