@@ -237,6 +237,61 @@ export const sendEmail = async (email, name, template_id, variables) => {
     }
 }
 
+/**
+ * @description An internal service function to send an SMS via MSG91.
+ * @param {string} phoneNumber - The recipient's phone number.
+ * @param {string} template_id - The MSG91 template ID.
+ * @param {object} variables - Key-value pairs for template variables.
+ * @returns {Promise<object>} The response from the SMS provider.
+ */
+export const sendSms = async (phoneNumber, template_id, variables) => {
+    if (!phoneNumber || !template_id || !variables) {
+        throw sendError("Phone number, template_id, and variables are required", 400);
+    }
+    try {
+        const url = new URL(
+            'https://control.msg91.com/api/v5/flow'
+        );
+
+        const headers = {
+            'accept': 'application/json',
+            'authkey': process.env.MSG91_AUTH_KEY,
+            'content-type': 'application/json'
+        };
+
+        const body = {
+            'template_id': template_id,
+            'short_url': 0, // 0 for off, 1 for on
+            // 'short_url_expiry': short_url_expiry, // Optional
+            // 'realTimeResponse': realTimeResponse, // Optional
+            'recipients': [
+                {
+                    'mobiles': phoneNumber,
+                    ...variables
+                }
+            ]
+        };
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify(body)
+        });
+
+        const json = await response.json();
+        if (json.status === "success") {
+        return json;
+        }
+        logger.error("Failed to send SMS", json);
+        return {
+            success: false,
+            message: "Failed to send SMS"
+        }
+    } catch (error) {
+        logger.error("Error sending SMS", error);
+        throw error;
+    }
+}
+
 // /**
 //  * Broadcasts an email to all users of a role in batches
 //  * 
