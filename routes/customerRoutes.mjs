@@ -20,5 +20,6 @@ router.get("/getAcceptedQuoteById/:orderVendorId", verifyAccessToken, controller
 router.post("/addComplaint/:orderId", verifyAccessToken, controllerWrapper(customerController.addComplaint, { logRequest: true, logResponse: true }));
 router.get("/getCustomerPayments/:page/:limit", verifyAccessToken, controllerWrapper(customerController.getCustomerPayments, { logRequest: true, logResponse: true }));
 router.get("/getVendorReviews/:vendorId/:page/:limit", verifyAccessToken, controllerWrapper(customerController.getVendorReviews, { logRequest: true, logResponse: true }));
+router.get("/getAdBanner", verifyAccessToken, controllerWrapper(customerController.getAdBanner, { logRequest: true, logResponse: true }));
 
 export default router;

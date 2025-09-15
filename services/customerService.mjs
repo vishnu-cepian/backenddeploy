@@ -17,6 +17,8 @@ import { Complaints } from "../entities/Complaints.mjs";
 import { Payments } from "../entities/Payments.mjs";
 import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { Rating } from "../entities/Rating.mjs";
+import { Settings } from "../entities/Settings.mjs";
+import { In } from "typeorm";
 
 const customerRepo = AppDataSource.getRepository(Customers);
 const customerAddressRepo = AppDataSource.getRepository(CustomerAddress);
@@ -1142,6 +1144,47 @@ export const getVendorReviews = async (data) => {
             throw sendError("Invalid parameters provided.", 400, error.flatten().fieldErrors);
         }
         logger.error("getVendorReviews error", error);
+        throw error;
+    }
+}
+
+/**
+ * @api {get} /api/customer/getAdBanner Get Ad Banner
+ * @apiName GetAdBanner
+ * @apiGroup Customer
+ * @apiDescription Retrieves the ad banner for the customer.
+ * 
+ * @param {object} data - The ad banner data.
+ * @param {string} data.userId - The UUID of the user.
+ * 
+ * @apiSuccess {Object[]} response.adBanner - The ad banner.
+ * 
+ * @apiSuccess {string} response.adBanner.key - The key of the ad banner.
+ * @apiSuccess {string} response.adBanner.value - The value of the ad banner.
+ * 
+ * @apiError {Error} 404 - If the customer or ad banner are not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
+ * @throws {Error} 404 - If the customer is not found.
+ */
+export const getAdBanner = async (data) => {
+    try {
+        const { userId } = data;
+
+        const customerExists = await customerRepo.exists({ where: { userId: userId } });
+        if (!customerExists) throw sendError("Customer not found", 404);
+
+        const adOptions = ["ad_banner_01", "ad_banner_02", "ad_banner_03", "ad_banner_04"];
+
+        const adBanner = await AppDataSource.getRepository(Settings).find({ where: { key: In(adOptions) }, select: { key: true, value: true } });
+
+        return {
+            adBanner: adBanner.map((ad) => ({
+                key: ad.key,
+                value: ad.value
+            }))
+        };
+    } catch (error) {
+        logger.error("Error getting ad banner", error);
         throw error;
     }
 }
