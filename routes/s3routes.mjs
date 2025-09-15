@@ -36,4 +36,6 @@ router.post("/s3-presigned-view-url", controllerWrapper(s3Controller.getPresigne
 
 router.delete("/s3-delete-file/:fileName", controllerWrapper(s3Controller.deleteFile, { logRequest: true, logResponse: true }));
 
+router.post("/s3-presigned-url-public-bucket", controllerWrapper(s3Controller.getPresignedUrlPublicBucket, { logRequest: true, logResponse: true }));
+
 export default router;

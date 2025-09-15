@@ -1,5 +1,6 @@
 import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { logger } from "../utils/logger-utils.mjs";
 
 const s3Client = new S3Client({
     region: process.env.AWS_REGION,
@@ -89,4 +90,32 @@ export const deleteFile = async (fileName) => {
     return {
         message: "File deleted successfully"
     };
+};
+
+/**
+ * @api {post} /api/s3/s3-presigned-url-public-bucket Generate Upload URL
+ * @apiName GetPresignedUploadUrlPublicBucket
+ * @apiGroup S3
+ * @apiDescription Creates a temporary, secure URL that a client can use to upload a file directly to the public S3 bucket, bypassing our server. This is ideal for large files. Expires in 3600.
+ *
+ * @apiBody {string} fileName The desired key (full path and name) for the object in the public S3 bucket.
+ * @apiBody {string} fileType The MIME type of the file to be uploaded (e.g., 'image/jpeg', 'application/pdf').
+ *
+ * @param {string} fileName
+ * @param {string} fileType
+ * 
+ * @apiSuccess {string} presignedUrl The generated URL to which the client should send a PUT request with the file body.
+ *
+ * @apiError {Error} 500 - Internal Server Error if the AWS SDK fails to generate the URL (e.g., due to invalid credentials or bucket policies).
+ */
+export const getPresignedUrlPublicBucket = async (fileName, fileType) => {
+    const command = new PutObjectCommand({
+        Bucket: process.env.AWS_PUBLIC_BUCKET_NAME,
+        Key: fileName,
+        ContentType: fileType
+    });
+    const presignedUrl = await getSignedUrl(s3Client, command, {
+        expiresIn: 3600 // 1 hour
+    });
+    return { presignedUrl, command };
 };

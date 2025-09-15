@@ -53,3 +53,20 @@ export const deleteFile = async (req, res) => {
         // next(error);
     }
 }   
+
+export const getPresignedUrlPublicBucket = async (req, res) => {
+    try {
+        const { fileName, fileType } = req.body;
+        if (!fileName) {
+            throw new Error(formatError("File name and file type are required", null));
+        }
+        const response = await s3Service.getPresignedUrlPublicBucket(fileName, fileType);
+        if (!response) {
+            throw new Error(formatError("Failed to generate presigned url", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        // next(error);
+    }
+}   
