@@ -17,7 +17,28 @@ export const seedSettings = async () => {
                 key: "vendor_fee_percent",
                 value: "20",
                 type: "number"
-            }
+            },
+            {
+                key: "ad_banner_01",
+                value: null,
+                type: "string"
+            },
+            {
+                key: "ad_banner_02",
+                value: null,
+                type: "string"
+            },
+            {
+                key: "ad_banner_03",
+                value: null,
+                type: "string"
+            },
+            
+            {
+                key: "ad_banner_04",
+                value: null,
+                type: "string"
+            },
         ];
 
         for (const setting of defaultSettings) {
