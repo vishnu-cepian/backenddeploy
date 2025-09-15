@@ -384,6 +384,22 @@ export const updateSettings = async (req, res, next) => {
     }
 };
 
+export const updateAdBannerSettings = async (req, res, next) => {
+    try {
+        const adminUserId = req.user.id;
+        const key = Object.keys(req.body)[0];
+        const value = Object.values(req.body)[0];
+        const response = await adminService.updateAdBannerSettings(key, value, adminUserId);
+        if (!response) {
+            throw new Error(formatError("No response", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (error) {
+        logger.error(error);
+        next(error);
+    }
+};
+
 export const reports = async (req, res, next) => {
     try {
         const data = {

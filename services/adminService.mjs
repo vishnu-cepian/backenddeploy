@@ -54,6 +54,17 @@ const getMonthlyLeaderboardSchema = z.object({
   limit: z.number().int().positive().default(25),
 });
 
+//===================================== HELPER FUNCTION ================================================
+
+/**
+ *  Helper function to check if the admin is blocked or not, if admin exist or not
+ */
+// export const verifyAdmin = async (adminUserId) => {
+//   const admin = await AppDataSource.getRepository(User).findOne({ where: { id: adminUserId }, select: ["isBlocked"] });
+//   if (!admin) throw sendError("Admin not found", 404);
+//   if (admin.isBlocked) throw sendError("Admin is blocked", 403);
+// }
+
 export const generateAccessToken = (payload) => {
     return jwt.sign(payload, ADMIN_ACCESS_TOKEN_SECRET, { expiresIn: '1d' }); 
   };
@@ -1008,18 +1019,42 @@ export const getOrSetSettings = async (key) => {
     const settings = await AppDataSource.getRepository(Settings).findOne({ where: { key } });
     let value;
     if (!settings) {
-      if (key === "platform_fee_percent") {
-        await delCache("platform_fee_percent");
-        value = DEFAULT_PLATFORM_FEE_PERCENT;
-      } else if (key === "vendor_fee_percent") {
-        await delCache("vendor_fee_percent");
-        value = DEFAULT_VENDOR_FEE_PERCENT;
+      switch (key) {
+        case "platform_fee_percent":
+          if (DEFAULT_PLATFORM_FEE_PERCENT === null) throw sendError("Default Platform fee percent not set", 400);
+          value = DEFAULT_PLATFORM_FEE_PERCENT;
+          await AppDataSource.getRepository(Settings).save({ key, value, type: "number" });
+          break;
+        case "vendor_fee_percent":
+          if (DEFAULT_VENDOR_FEE_PERCENT === null) throw sendError("Default Vendor fee percent not set", 400);
+          value = DEFAULT_VENDOR_FEE_PERCENT;
+          await AppDataSource.getRepository(Settings).save({ key, value, type: "number" });
+          break;
+        case "ad_banner_01":
+          value = null;
+          await AppDataSource.getRepository(Settings).save({ key, value, type: "string" });
+          break;
+        case "ad_banner_02":
+          value = null;
+          await AppDataSource.getRepository(Settings).save({ key, value, type: "string" });
+          break;
+        case "ad_banner_03":
+          value = null;
+          await AppDataSource.getRepository(Settings).save({ key, value, type: "string" });
+          break;
+        case "ad_banner_04":
+          value = null;
+          await AppDataSource.getRepository(Settings).save({ key, value, type: "string" });
+          break;
+        default:
+          throw sendError("Invalid key", 400);
       }
-      await AppDataSource.getRepository(Settings).save({ key, value, type: "number" });
+
+      await delCache(key);
       logger.info(`Settings ${key} set to ${value}`);
-      return value;
+      return {message: "success", value: value};
     }
-    return settings.value;
+    return {message: "success", value: settings.value};
   } catch (error) {
     logger.error("Error getting settings", error);
     throw error;
@@ -1059,6 +1094,37 @@ export const updateSettings = async (key, value, userId, adminUserId) => {
     throw error;
   } finally {
     await queryRunner.release(); 
+  }
+}
+
+export const updateAdBannerSettings = async (key, value, adminUserId) => {
+  try {
+    if (value === null) {
+      await AppDataSource.getRepository(Settings).update({ key }, { value: null });
+      await delCache(key);
+      return { message: "Ad banner settings updated successfully" };
+    }
+    const settings = await AppDataSource.getRepository(Settings).findOne({ where: { key } });
+    if (!settings) throw sendError("Settings not found", 404);
+    // https://seu-india-public.s3.ap-south-1.amazonaws.com/ad_banners/ad_banner_01_0ae67724-3dff-4eb3-89f8-1f010c339b72.jpeg
+    settings.value = `https://${process.env.AWS_PUBLIC_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${value}`;
+    settings.updatedBy = adminUserId;
+    settings.updatedAt = new Date();
+    await AppDataSource.getRepository(Settings).save(settings);
+    const adminAction = AppDataSource.getRepository(AdminActions).create({
+      adminUserId: adminUserId,
+      action: "updateAdBannerSettings",
+      actionData: {
+        key: key,
+        value: value
+      }
+    });
+    await AppDataSource.getRepository(AdminActions).save(adminAction);
+    await delCache(key);
+    return { message: "Ad banner settings updated successfully" };
+  } catch (error) {
+    logger.error("Error updating ad banner settings", error);
+    throw error;
   }
 }
 
