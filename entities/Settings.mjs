@@ -15,7 +15,7 @@ export const Settings = new EntitySchema({
         },
         value: {
             type: "varchar",
-            nullable: false
+            nullable: true
         },
         type: {
             type: "varchar",
