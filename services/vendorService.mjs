@@ -20,6 +20,7 @@ import { Complaints } from "../entities/Complaints.mjs";
 import { Payouts } from "../entities/Payouts.mjs";
 import { In } from "typeorm";
 import { Rating } from "../entities/Rating.mjs";
+import { Settings } from "../entities/Settings.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const vendorImagesRepo = AppDataSource.getRepository(VendorImages);
@@ -1364,6 +1365,47 @@ export const getReviews = async (data) => {
           throw sendError("Invalid parameters provided.", 400, error.flatten().fieldErrors);
       }
       logger.error("getReviews error", error);
+      throw error;
+  }
+}
+
+/**
+ * @api {get} /api/vendor/getAdBanner Get Ad Banner
+ * @apiName GetAdBanner
+ * @apiGroup Vendor
+ * @apiDescription Retrieves the ad banner for the vendor.
+ * 
+ * @param {object} data - The ad banner data.
+ * @param {string} data.userId - The UUID of the user.
+ * 
+ * @apiSuccess {Object[]} response.adBanner - The ad banner.
+ * 
+ * @apiSuccess {string} response.adBanner.key - The key of the ad banner.
+ * @apiSuccess {string} response.adBanner.value - The value of the ad banner.
+ * 
+ * @apiError {Error} 404 - If the vendor or ad banner are not found.
+ * @apiError {Error} 500 - If an internal server error occurs.
+ * @throws {Error} 404 - If the vendor is not found.
+ */
+export const getAdBanner = async (data) => {
+  try {
+      const { userId } = data;
+
+      const vendorExists = await vendorRepo.exists({ where: { userId: userId } });
+      if (!vendorExists) throw sendError("Vendor not found", 404);
+
+      const adOptions = ["ad_banner_01", "ad_banner_02", "ad_banner_03", "ad_banner_04"];
+
+      const adBanner = await AppDataSource.getRepository(Settings).find({ where: { key: In(adOptions) }, select: { key: true, value: true } });
+
+      return {
+          adBanner: adBanner.map((ad) => ({
+              key: ad.key,
+              value: ad.value
+          }))
+      };
+  } catch (error) {
+      logger.error("Error getting ad banner", error);
       throw error;
   }
 }
