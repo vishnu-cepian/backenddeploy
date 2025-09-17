@@ -142,11 +142,13 @@ export const getChatRoomsForUser = async (userId) => {
             .leftJoinAndSelect("vendor.user", "vendorUser")
             .select([
                 "room.id",
-                "room.updatedAt",
             ])
             .addSelect(subQuery => {
                 return subQuery.select("msg.content").from(ChatMessage, "msg").where("msg.chatRoomId = room.id").orderBy("msg.createdAt", "DESC").limit(1);
             }, "lastMessageContent")
+            .addSelect(subQuery => {
+                return subQuery.select("msg.createdAt").from(ChatMessage, "msg").where("msg.chatRoomId = room.id").orderBy("msg.createdAt", "DESC").limit(1);
+            }, "lastMessageTimestamp")
             .addSelect(subQuery => {
                 return subQuery
                     .select("COUNT(msg.id)")
@@ -159,26 +161,11 @@ export const getChatRoomsForUser = async (userId) => {
                             WHERE "chatRoomId" = room.id AND "userId" = :userId
                         ), '1970-01-01 00:00:00')`);
             }, "unreadCount")
-            .addSelect(`CASE 
-                            WHEN customerUser.id = :userId  THEN 
-                                vendor."shopName"
-                            ELSE 
-                                customerUser.name 
-                        END`, "receiverName")
-            .addSelect(`CASE 
-                            WHEN customerUser.id = :userId  THEN 
-                                vendor."shopImageUrlPath"
-                            ELSE 
-                                customer."profilePicture"
-                        END`, "receiverImage")
-            .addSelect(`CASE    
-                            WHEN customerUser.id = :userId  THEN 
-                                vendor."userId"
-                            ELSE 
-                                customer."userId"
-                        END`, "receiverUserId")
+            .addSelect(`CASE WHEN customerUser.id = :userId THEN vendor."shopName" ELSE customerUser.name END`, "receiverName")
+            .addSelect(`CASE WHEN customerUser.id = :userId THEN vendor."shopImageUrlPath" ELSE customer."profilePicture" END`, "receiverImage")
+            .addSelect(`CASE WHEN customerUser.id = :userId THEN vendor."userId" ELSE customer."userId" END`, "receiverUserId")
             .where("customerUser.id = :userId OR vendorUser.id = :userId", { userId })
-            .orderBy("room.updatedAt", "DESC")
+            .orderBy(`(SELECT msg."createdAt" FROM chat_messages msg WHERE msg."chatRoomId" = room.id ORDER BY msg."createdAt" DESC LIMIT 1)`, "DESC", "NULLS LAST")
             .getRawAndEntities();
 
         // The query returns both raw data (for our custom fields) and entities. We need to merge them.
@@ -191,7 +178,7 @@ export const getChatRoomsForUser = async (userId) => {
                 receiverImage: raw.receiverImage ? await getPresignedViewUrl(raw.receiverImage) : null,
                 receiverUserId: raw.receiverUserId,
                 status: await pubClient.hget("online_users", raw.receiverUserId) ? "online" : "offline",
-                updatedAt: raw.room_updatedAt,
+                updatedAt: raw.lastMessageTimestamp,
                 lastMessage: raw.lastMessageContent,
                 unreadCount: parseInt(raw.unreadCount, 10) || 0,
             };
