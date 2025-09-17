@@ -18,7 +18,6 @@ import { Payments } from "../entities/Payments.mjs";
 import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { Rating } from "../entities/Rating.mjs";
 import { Settings } from "../entities/Settings.mjs";
-import { In } from "typeorm";
 
 const customerRepo = AppDataSource.getRepository(Customers);
 const customerAddressRepo = AppDataSource.getRepository(CustomerAddress);
@@ -1152,7 +1151,7 @@ export const getVendorReviews = async (data) => {
  * @api {get} /api/customer/getAdBanner Get Ad Banner
  * @apiName GetAdBanner
  * @apiGroup Customer
- * @apiDescription Retrieves the ad banner for the customer.
+ * @apiDescription Retrieves the ad banner for the customer.Caches for 1 day.
  * 
  * @param {object} data - The ad banner data.
  * @param {string} data.userId - The UUID of the user.
@@ -1175,14 +1174,20 @@ export const getAdBanner = async (data) => {
 
         const adOptions = ["ad_banner_01", "ad_banner_02", "ad_banner_03", "ad_banner_04"];
 
-        const adBanner = await AppDataSource.getRepository(Settings).find({ where: { key: In(adOptions) }, select: { key: true, value: true } });
+        const result = [];
 
-        return {
-            adBanner: adBanner.map((ad) => ({
-                key: ad.key,
-                value: ad.value
-            }))
-        };
+        for (const option of adOptions) {
+            const adBanner = await cacheOrFetch(`${option}`, async () => {
+                const adBanner = await AppDataSource.getRepository(Settings).findOne({ where: { key: option }, select: { key: true, value: true } });
+                return {
+                    key: adBanner.key,
+                    value: adBanner.value
+                };
+            }, 60 * 60 * 24);
+            result.push(adBanner);
+        }
+
+        return result;
     } catch (error) {
         logger.error("Error getting ad banner", error);
         throw error;
