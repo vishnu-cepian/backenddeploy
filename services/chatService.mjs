@@ -161,7 +161,7 @@ export const getChatRoomsForUser = async (userId) => {
             }, "unreadCount")
             .addSelect(`CASE 
                             WHEN customerUser.id = :userId  THEN 
-                                vendorUser.name 
+                                vendor."shopName"
                             ELSE 
                                 customerUser.name 
                         END`, "receiverName")
