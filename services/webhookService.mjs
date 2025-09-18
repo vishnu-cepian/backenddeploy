@@ -11,7 +11,7 @@ import { Customers } from "../entities/Customers.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { Payments } from "../entities/Payments.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs";
-import { ORDER_VENDOR_STATUS, ORDER_STATUS, ROLE, MISC } from "../types/enums/index.mjs";
+import { ORDER_VENDOR_STATUS, ORDER_STATUS, ROLE, MISC, PAYMENT_ATTEMPT } from "../types/enums/index.mjs";
 import { PaymentFailures } from "../entities/PaymentFailures.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
@@ -20,6 +20,7 @@ import { Refunds } from "../entities/Refunds.mjs";
 import { VendorStats } from "../entities/VendorStats.mjs";
 import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
 import { Payouts } from "../entities/Payouts.mjs";
+import { PaymentAttempts } from "../entities/PaymentAttempts.mjs";
 
 const refundRepo = AppDataSource.getRepository(Refunds);
 
@@ -164,6 +165,12 @@ export const handleRazorpayPaymentWebhook = async(req, res) => {
             order.finalQuoteId = quoteId;
             order.paymentId = payment.id;
             order.isPaid = true;
+
+            // IDEMPOTENCY UPDATE: Update the payment attempt to PAID which is having PENDING status. This is to ensure that the payment attempt is not created again.
+            const paymentAttempt = await queryRunner.manager.findOne(PaymentAttempts, { where: { quoteId, status: PAYMENT_ATTEMPT.PENDING } });
+            if (paymentAttempt) {
+                await queryRunner.manager.update(PaymentAttempts, paymentAttempt.id, { status: PAYMENT_ATTEMPT.PAID });
+            }
 
             await createTimelineEntry(queryRunner, orderId, order.orderStatus, ORDER_STATUS.IN_PROGRESS, MISC.PAYMENT_GATEWAY, ROLE.SYSTEM, `Payment successful. Razorpay ID: ${paymentId}`);
 
