@@ -83,3 +83,9 @@ export const PAYMENT_STATUS = {
   CAPTURED: "captured",
   FAILED: "failed"
 }
+
+export const PAYMENT_ATTEMPT = {
+  PENDING: "PENDING",
+  PAID: "PAID",
+  EXPIRED: "EXPIRED"
+}
