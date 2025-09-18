@@ -54,6 +54,8 @@ router.post("/processPayout", verifyAdminAccessToken, controllerWrapper(adminCon
 router.post("/retryPayout", verifyAdminAccessToken, controllerWrapper(adminController.retryPayout, {logRequest, logResponse}))
 router.post("/cancelPayout", verifyAdminAccessToken, controllerWrapper(adminController.cancelPayout, {logRequest, logResponse}))
 router.post("/refundRazorpayPaymentByAdmin", verifyAdminAccessToken, controllerWrapper(adminController.refundRazorpayPaymentByAdmin, {logRequest, logResponse}))
-router.post("/getMonthlyLeadershipBoard", verifyAdminAccessToken, controllerWrapper(adminController.getMonthlyLeadershipBoard, {logRequest, logResponse}))
+router.get("/getLeadershipBoard", verifyAdminAccessToken, controllerWrapper(adminController.getLeadershipBoard, {logRequest, logResponse}))
+router.post("/sendIndividualEmail", verifyAdminAccessToken, controllerWrapper(adminController.sendIndividualEmail, {logRequest, logResponse}))
+router.post("/broadcastPushNotificationByRole", verifyAdminAccessToken, controllerWrapper(adminController.broadcastPushNotificationByRole, {logRequest, logResponse}))
 
 export default router;

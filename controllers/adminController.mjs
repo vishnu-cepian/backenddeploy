@@ -627,16 +627,47 @@ export const refundRazorpayPaymentByAdmin = async (req, res, next) => {
     }
 };
 
-export const getMonthlyLeadershipBoard = async (req, res, next) => {
+export const getLeadershipBoard = async (req, res, next) => {
     try {
-      const data = req.body;
-      const response = await adminService.getMonthlyLeadershipBoard(data);
+        let response;
+      if (req.query.timeframe === "daily") {
+        response = await adminService.getDailyLeadershipBoard();
+      } else {
+        response = await adminService.getMonthlyLeadershipBoard(req.query.monthYear);
+      }
       if (!response) {
-        throw new Error(formatError("Monthly leadership board not found", response));
+        throw new Error(formatError("Leadership board not found", response));
       }
       res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
     } catch (err) {
       logger.error(err);
       next(err);
+    }
+  };
+
+  export const sendIndividualEmail = async (req, res, next) => {
+    try {
+      const response = await adminService.sendIndividualEmail(req.body);
+      
+      if (!response) {
+        throw new Error(formatError("Email not sent", response));
+      }
+      res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (err) {
+      logger.error(err);
+      next(err);
+    }
+  };
+
+  export const broadcastPushNotificationByRole = async (req, res, next) => {
+    try {
+        const response = await adminService.broadcastPushNotificationByRole(req.body);
+        if (!response) {
+            throw new Error(formatError("Push notification not sent", response));
+        }
+        res.status(200).json(formatResponse(MESSAGE.SUCCESS, true, response));
+    } catch (err) {
+        logger.error(err);
+        next(err);
     }
   };

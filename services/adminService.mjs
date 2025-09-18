@@ -35,6 +35,7 @@ import { createRazorpayContact, createFundAccount, createPayout, refundRazorpayP
 import { Payouts } from "../entities/Payouts.mjs";
 
 import { LeaderboardHistory } from "../entities/LeaderboardHistory.mjs";
+import { broadcastPushNotification } from "../services/notificationService.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderVendorRepo = AppDataSource.getRepository(OrderVendors);
@@ -46,13 +47,6 @@ const paymentRepo = AppDataSource.getRepository(Payments);
 const vendorStatsRepo = AppDataSource.getRepository(VendorStats);
 const adminActionsRepo = AppDataSource.getRepository(AdminActions);
 const leaderBoardHistoryRepo = AppDataSource.getRepository(LeaderboardHistory);
-//===================JWT UTILS====================
-
-const getMonthlyLeaderboardSchema = z.object({
-  serviceType: z.enum([SERVICE_TYPE.TAILORS, SERVICE_TYPE.LAUNDRY]),
-  monthYear: z.string().regex(/^\d{4}-\d{2}$/, { message: "Month/Year must be in YYYY-MM format" }),
-  limit: z.number().int().positive().default(25),
-});
 
 //===================================== HELPER FUNCTION ================================================
 
@@ -2012,33 +2006,120 @@ export const refundRazorpayPaymentByAdmin = async (data, adminUserId) => {
   }
 }
 
-/**
- * @api {post} /api/rating/getMonthlyLeadershipBoard Get Monthly Leaderboard
- * @apiName GetMonthlyLeadershipBoard
- * @apiGroup Rating
- * @apiDescription Fetches the historical monthly leaderboard for a given service type and month.
- *
- * @apiParam {object} data - The leaderboard query data.
- * @apiParam {string} data.serviceType - The service type ('tailors' or 'laundry').
- * @apiParam {string} data.monthYear - The month and year in YYYY-MM format.
- * @apiParam {number} [data.limit=25] - The number of top vendors to return.
- *
- * @apiSuccess {Object[]} history - An array of historical leaderboard entry objects, sorted by rank.
- *
- * @apiError {Error} 400 - If the input data fails validation.
- * @apiError {Error} 500 - Internal Server Error.
- */
-export const getMonthlyLeadershipBoard = async (data) => {
+export const getMonthlyLeadershipBoard = async (monthYear) => {
   try {
-      const { serviceType, monthYear, limit = 25 } = getMonthlyLeaderboardSchema.parse(data);
+    const history = await leaderBoardHistoryRepo.createQueryBuilder("history")
+    .leftJoinAndSelect("history.vendor", "vendor")
+    .select([
+      "history.id",
+      "vendor.id",
+      "vendor.shopName",
+      "vendor.serviceType",
+      "history.currentMonthRating",
+      "history.bayesianScore",
+      "history.currentMonthReviewCount",
+      "history.rank"
+    ])
+    .where("history.monthYear = :monthYear", { monthYear })
+    .orderBy("history.rank", "ASC")
+    .take(25)
+    .getMany();
 
-      const history = await leaderBoardHistoryRepo.find({ where: { serviceType, monthYear }, order: { rank: "ASC" }, take: limit });
-      return history;
+    const response = history.map((item) => ({
+      id: item.id,
+      vendorId: item.vendor.id,
+      shopName: item.vendor.shopName,
+      serviceType: item.vendor.serviceType,
+      currentMonthRating: item.currentMonthRating,
+      currentMonthBayesianScore: item.bayesianScore,
+      currentMonthReviewCount: item.currentMonthReviewCount,
+      rank: item.rank
+    }));
+
+    return response;
   } catch (error) {
       logger.error("Error in getMonthlyLeadershipBoard", error);
-      if (error instanceof z.ZodError) {
-          throw sendError("Invalid parameters.", 400, error.flatten().fieldErrors);
-      }
       throw error;
+  }
+}
+
+export const getDailyLeadershipBoard = async () => {
+  try {
+      const limit = 25;
+
+      const vendors = await vendorRepo.find({ 
+          where: {
+              status: "VERIFIED",
+              currentMonthRating: Not(0),
+          },
+          order: { currentMonthBayesianScore: "DESC" },
+          take: limit,
+          select: {
+              id: true,
+              shopName: true,
+              currentMonthRating: true,
+              currentMonthReviewCount: true,
+              currentMonthBayesianScore: true,
+              serviceType: true,
+              vendorAvatarUrlPath: true,
+          }
+        });
+
+      const standings = await Promise.all(
+          vendors.map(async vendor => ({
+              id: vendor.id,
+              vendorId: vendor.id,
+              shopName: vendor.shopName,
+              currentMonthRating: vendor.currentMonthRating,
+              currentMonthReviewCount: vendor.currentMonthReviewCount,
+              currentMonthBayesianScore: vendor.currentMonthBayesianScore,
+              serviceType: vendor.serviceType,
+      })));
+
+      return standings;
+  } catch (error) {
+      logger.error("Error in getDailyLeadershipBoard", error);
+      throw error;
+  }
+}
+
+export const sendIndividualEmail = async (data) => {
+  try {
+    const { email, name, template_id, variables } = data;
+    if (!email || !name || !template_id || !variables) {
+      throw sendError("Email, name, template_id, and variables are required", 400);
+    }
+    
+    await emailQueue.add('sendEmail', {
+      email,
+      name,
+      template_id,
+      variables
+    });
+    
+    return {
+      success: true,
+      message: "Email sent successfully"
+    }
+  } catch (error) {
+    logger.error("Error in sendIndividualEmail", error);
+    throw error;
+  }
+}
+
+export const broadcastPushNotificationByRole = async (data) => {
+  try {
+    const { role, title, body } = data;
+    if (!role || !title || !body) {
+      throw sendError("Role, title, and body are required", 400);
+    }
+    await broadcastPushNotification(role, title, body);
+    return {
+      success: true,
+      message: "Push notification sent successfully"
+    }
+  } catch (error) {
+    logger.error("Error in broadcastPushNotificationByRole", error);
+    throw error;
   }
 }
