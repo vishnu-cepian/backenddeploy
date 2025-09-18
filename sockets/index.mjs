@@ -10,7 +10,7 @@ import { AppDataSource } from "../config/data-source.mjs";
 import { User } from "../entities/User.mjs";
 import { ChatMessage } from "../entities/ChatMessage.mjs";
 import { sendError } from "../utils/core-utils.mjs";
-import { Not } from "typeorm";
+import { ROLE } from "../types/enums/index.mjs";
 
 //=================== ZOD VALIDATION SCHEMAS ====================
 
@@ -141,14 +141,23 @@ export const initializeSocket = (io) => {
             }
 
             if (!isReceiverOnline && receiverUserId) {
-                const receiverUser = await AppDataSource.getRepository(User).findOne({ where: { id: receiverUserId }, select: ['pushToken'] });
+                const receiverUser = await AppDataSource.getRepository(User).findOne({ where: { id: receiverUserId }, select: ['pushToken', 'role'] });
                 if (receiverUser?.pushToken) {
-                    await pushQueue.add('sendChatMessageNotification', {
-                        token: receiverUser.pushToken,
-                        title: "New Message",
-                        message: content,
-                        data: { roomId, type: 'NEW_CHAT_MESSAGE' }
-                    });
+                    if (receiverUser.role === ROLE.CUSTOMER) {
+                        await pushQueue.add('sendChatMessageNotification', {
+                            token: receiverUser.pushToken,
+                            title: "New Message",
+                            message: content,
+                            data: { url: '/(customer)/(portal)/chat' }
+                        });
+                    } else if (receiverUser.role === ROLE.VENDOR) {
+                        await pushQueue.add('sendChatMessageNotification', {
+                            token: receiverUser.pushToken,
+                            title: "New Message",
+                            message: content,
+                            data: { url: '/(vendor)/(portal)/chat' }
+                        });
+                    }
                 }
             }
 
