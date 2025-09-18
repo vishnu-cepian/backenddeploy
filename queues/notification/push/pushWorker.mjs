@@ -10,13 +10,13 @@ let pushWorker;
 export function initPushWorker() {
     pushWorker = new Worker("pushQueue", async (job) => {
 
-        const { token, title, message, url="" } = job.data;
+        const { token, title, message, data={} } = job.data;
         if (!token || !title || !message) {
             throw new Error("Invalid message data in job");
         }
 
         try {
-            await sendPushNotification(token, title, message, url);
+            await sendPushNotification(token, title, message, data.url);
         } catch (error) {
             logger.error(`Failed to process push notification for token ${token}: ${error.message}`, {
                 error,
