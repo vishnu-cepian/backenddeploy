@@ -1069,6 +1069,7 @@ export const getVendorOrderById = async (data) => {
  * @apiSuccess {string} quote.vendorPayoutAfterCommission - The vendor payout after commission of the quote.
  * @apiSuccess {string} quote.deliveryCharge - The delivery charge of the quote.
  * @apiSuccess {string} quote.finalPrice - The final price of the quote.
+ * @apiSuccess {string} quote.notes - The notes of the quote.
  * @apiSuccess {string} quote.createdAt - The timestamp of the quote.
  * 
  * @apiError {Error} 404 - If the vendor, order vendor or quote is not found.
@@ -1089,7 +1090,7 @@ export const getVendorQuote = async (data) => {
     if(orderVendor.status === ORDER_VENDOR_STATUS.EXPIRED) throw sendError('The order has expired', 400);
     if(orderVendor.status === ORDER_VENDOR_STATUS.FROZEN) throw sendError('The order has been frozen', 400);
 
-    const quote = await quoteRepo.findOne({ where: { orderVendorId: orderVendorId }, select: {id: true, quotedDays: true, quotedPrice: true, vendorPayoutAfterCommission: true, deliveryCharge: true, finalPrice: true, createdAt: true}});
+    const quote = await quoteRepo.findOne({ where: { orderVendorId: orderVendorId }, select: {id: true, quotedDays: true, quotedPrice: true, vendorPayoutAfterCommission: true, deliveryCharge: true, finalPrice: true, notes: true, createdAt: true}});
     if (!quote) throw sendError('Quote not found', 404);
 
     return {
