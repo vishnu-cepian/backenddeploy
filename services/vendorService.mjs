@@ -1260,7 +1260,9 @@ export const getVendorPayouts = async (data) => {
     if (!vendor) throw sendError("Vendor not found", 404);
 
     const statusFilters = {
-      pending: ["queued", "pending", "rejected"],
+      action_required: ["action_required"],
+      pending: ["queued", "pending", "processing"],
+      processed: ["processed"],
       cancelled: ["rejected", "cancelled"],
       all: ["action_required", "queued", "pending", "rejected","processing", "processed", "cancelled"],
     }
