@@ -21,6 +21,7 @@ import { Payouts } from "../entities/Payouts.mjs";
 import { In } from "typeorm";
 import { Rating } from "../entities/Rating.mjs";
 import { Settings } from "../entities/Settings.mjs";
+import { Customers } from "../entities/Customers.mjs";
 
 const vendorRepo = AppDataSource.getRepository(Vendors);
 const vendorImagesRepo = AppDataSource.getRepository(VendorImages);
@@ -999,6 +1000,8 @@ export const getVendorOrders = async (data) => {
  * @apiSuccess {string} order.requiredByDate - The date by which the order must be required.
  * @apiSuccess {string} order.createdAt - The timestamp of the order.
  * 
+ * @apiSuccess {string} customerName - The name of the customer.
+ * 
  * @apiSuccess {Object[]} orderItems - The order items.
  * @apiSuccess {string} orderItems.id - The UUID of the order item.
  * @apiSuccess {string} orderItems.orderId - The UUID of the order.
@@ -1025,6 +1028,17 @@ export const getVendorOrderById = async (data) => {
     });
     if (!order) throw sendError('Order not found', 404);
 
+      const customerUser = await AppDataSource.getRepository(Customers).createQueryBuilder("customers")
+      .leftJoinAndSelect("customers.user", "user")
+      .select([
+        "customers.id",
+        "user.name",
+      ])
+      .where("customers.id = :customerId", { customerId: order.customerId })
+      .getOne();
+ 
+    const customerName = customerUser.user.name;
+
     const orderItems = await orderItemsRepo.find({ where: { orderId: order.id } });
     if (!orderItems) throw sendError("Order items not found", 404);
 
@@ -1041,6 +1055,7 @@ export const getVendorOrderById = async (data) => {
     }));
     return {
       order,
+      customerName,
       orderItems: processedOrderItems
     };  
   } catch (error) {
