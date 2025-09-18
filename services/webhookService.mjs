@@ -310,7 +310,7 @@ export const handleRazorpayPaymentWebhook = async(req, res) => {
                 if (vendorDetails.user.pushToken) {
                     pushQueue.add('newOrderForVendor', {
                         token: vendorDetails.user.pushToken,
-                        title: "You Have a New Order!",
+                        title: "Order Confirmed !!!",
                         message: `You have received a new paid order: #${orderId.substring(0, 8)}.`,
                         url: "/orders",
                         data: { orderId, type: 'NEW_PAID_ORDER' }
