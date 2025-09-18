@@ -434,7 +434,7 @@ export const sendOrderToVendor = async (data) => {
                     token: vendor.user_pushToken,
                     title: "New Order Request",
                     message: `You have a new order to quote. Please respond within 24 hours.`,
-                    url: "",
+                    data: { url: '/(vendor)/(portal)/orders'}
                 });
                 }
                 notificationHistoryQueue.add("saveNotificationHistory", {
@@ -565,7 +565,7 @@ export const vendorOrderResponse = async (data) => {
                     ? `${vendor.shopName} has sent you a quote for your order. Please respond within 24 hours.`
                     : `${vendor.shopName} is unable to take your order at this time.`,
                 orderId: orderVendor.order.id,
-                url: "",
+                data: { url: '/(customer)/(portal)/orders'}
             };
         }
 

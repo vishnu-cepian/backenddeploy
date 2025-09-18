@@ -286,8 +286,7 @@ export const handleRazorpayPaymentWebhook = async(req, res) => {
                         token: customerDetails.user.pushToken,
                         title: "Order Confirmed!",
                         message: `Your payment for order #${orderId.substring(0, 8)} was successful.`,
-                        url: "/orders",
-                        data: { orderId, type: 'PAYMENT_SUCCESS' }
+                        data: { url: '/(customer)/(portal)/orders' }
                     });
                 }
                 emailQueue.add('paymentSuccessCustomerEmail', {
@@ -312,8 +311,7 @@ export const handleRazorpayPaymentWebhook = async(req, res) => {
                         token: vendorDetails.user.pushToken,
                         title: "Order Confirmed !!!",
                         message: `You have received a new paid order: #${orderId.substring(0, 8)}.`,
-                        url: "/orders",
-                        data: { orderId, type: 'NEW_PAID_ORDER' }
+                        data: { url: '/(vendor)/(portal)/orders' }
                     });
                 }
                 emailQueue.add('newOrderForVendorEmail', {
