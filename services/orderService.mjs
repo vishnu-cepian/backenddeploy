@@ -12,12 +12,13 @@ import { OrderVendors } from "../entities/OrderVendors.mjs";
 import { Customers } from "../entities/Customers.mjs";
 import { Vendors } from "../entities/Vendors.mjs";
 import { OrderQuotes } from "../entities/OrderQuote.mjs";
-import { ORDER_VENDOR_STATUS, ORDER_STATUS, SERVICE_TYPE, ROLE } from "../types/enums/index.mjs";
+import { ORDER_VENDOR_STATUS, ORDER_STATUS, SERVICE_TYPE, ROLE, PAYMENT_ATTEMPT } from "../types/enums/index.mjs";
 import { calculateVendorPayoutAmount, calculateOrderAmount } from "../utils/pricing_utils.mjs";
 import { Outbox } from "../entities/Outbox.mjs";
 import { DeliveryTracking } from "../entities/DeliveryTracking.mjs";
 import { pushQueue, emailQueue, notificationHistoryQueue } from "../queues/index.mjs";
 import { OrderStatusTimeline } from "../entities/orderStatusTimeline.mjs";
+import { PaymentAttempts } from "../entities/PaymentAttempts.mjs";
 
 const orderRepo = AppDataSource.getRepository(Orders);
 const orderStatusTimelineRepo = AppDataSource.getRepository(OrderStatusTimeline);
@@ -611,6 +612,7 @@ export const vendorOrderResponse = async (data) => {
  * @apiName CreateRazorpayOrder
  * @apiGroup Order
  * @apiDescription After a customer chooses an accepted quote, this function creates a server-side order with Razorpay. The returned `razorpayOrderId` is then used by the client-side Razorpay checkout SDK to initiate payment.
+ * @apiDescription (idempotency check) The payment attempt is created and saved to the database. If an existing payment attempt is found, it is reused if it is not expired(60 mins).
  *
  * @apiBody {string} orderId - The UUID of the main order.
  * @apiBody {string} quoteId - The UUID of the accepted quote the customer wants to pay for.
@@ -655,6 +657,27 @@ export const createRazorpayOrder = async (data) => {
 
         if (!quote) throw sendError("This quote is not valid for payment. It may be expired, or the order may no longer be pending.", 400);
 
+        // IDEMPOTENCY CHECK: Look for an existing, active payment attempt for this quote.
+        const existingAttempt = await queryRunner.manager.findOne(PaymentAttempts, { where: { quoteId: quoteId, status: PAYMENT_ATTEMPT.PENDING } });
+
+        // REUSE existing Razorpay order if it's not expired.
+        if (existingAttempt && new Date() < new Date(existingAttempt.expiresAt)) {
+            await queryRunner.commitTransaction(); // No changes needed, so commit immediately.
+            logger.info(`Reusing existing Razorpay Order ID: ${existingAttempt.razorpayOrderId} for Quote ID: ${quote.id}`);
+            return {
+                message: "Existing Razorpay order found.",
+                razorpayOrderId: existingAttempt.razorpayOrderId,
+                amount: Math.round(existingAttempt.amount * 100),
+                currency: "INR",
+                key_id: process.env.RAZORPAY_KEY_ID,
+            };
+        }
+
+        // EXPIRE old attempt if it exists and is now past its expiration.
+        if (existingAttempt) {
+            await queryRunner.manager.update(PaymentAttempts, existingAttempt.id, { status: PAYMENT_ATTEMPT.EXPIRED });
+        }
+
         const razorpay = new Razorpay({
             key_id: process.env.RAZORPAY_KEY_ID,
             key_secret: process.env.RAZORPAY_KEY_SECRET
@@ -674,6 +697,17 @@ export const createRazorpayOrder = async (data) => {
         })
 
         if (!razorpayOrder) throw sendError("Failed to create payment order with Razorpay", 500);
+
+        // SAVE the new payment attempt to our database.
+        // Razorpay orders typically expire in 60 minutes.
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); 
+        await queryRunner.manager.save( PaymentAttempts, {
+            quoteId: quote.id,
+            razorpayOrderId: razorpayOrder.id,
+            amount: quote.finalPrice,
+            status: PAYMENT_ATTEMPT.PENDING,
+            expiresAt
+        });
 
         await queryRunner.commitTransaction();
 
